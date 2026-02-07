@@ -1,5 +1,9 @@
 //=============================================================================
+<<<<<<< HEAD
 // © 2004 Matt 'SquirrelZero' Farber
+=======
+// ï¿½ 2004 Matt 'SquirrelZero' Farber
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 //=============================================================================
 // Similar to ShadowProjector, just a lot better.  This shadow projector, while
 // always in the same relative location to the player model, will dynamically
@@ -192,6 +196,12 @@ function UpdateShadow(float dt, int LN, Effect_ShadowController ShadowController
 
     // determine correct direction of light
     LightDirection = -vector(rotator(Instigator.Location-ShadowLight.Location))*LightDistance;
+<<<<<<< HEAD
+=======
+
+    //if(LightDirection.Z < 3)
+    LightDirection.Z = 3;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     
     // set light direction
     ShadowTexture.LightDirection = Normal(LightDirection);
@@ -225,6 +235,10 @@ function UpdateShadow(float dt, int LN, Effect_ShadowController ShadowController
 
     // reattach projector
     AttachProjector();
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function Destroyed()
@@ -246,6 +260,7 @@ function Destroyed()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	InterpolationRate=2.500000
 	MaxFOV=80.000000
 	FadeSpeed=550.000000
@@ -259,4 +274,20 @@ defaultproperties
 	bAlwaysRelevant=True
 	RemoteRole=ROLE_SimulatedProxy
 	bOwnerNoSee=True
+=======
+     InterpolationRate=2.500000
+     MaxFOV=80.000000
+     FadeSpeed=550.000000
+     MaxTraceDistance=275
+     bClipBSP=True
+     bProjectOnParallelBSP=True
+     bDynamicAttach=True
+     bNoProjectOnOwner=True
+     CullDistance=1200.000000
+     bStatic=False
+     bAlwaysRelevant=True
+     RemoteRole=ROLE_SimulatedProxy
+     bOwnerNoSee=True
+     bNotOnDedServer=False
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

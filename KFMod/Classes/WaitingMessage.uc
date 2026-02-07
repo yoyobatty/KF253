@@ -28,7 +28,13 @@ static function ClientReceive(
 
 defaultproperties
 {
+<<<<<<< HEAD
 	WarningMessage(0)="HereTheyCome5"
 	WarningMessage(1)="HereTheyCome2"
 	DrawColor=(G=0)
+=======
+     WarningMessage(0)="HereTheyCome5"
+     WarningMessage(1)="HereTheyCome2"
+     DrawColor=(G=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

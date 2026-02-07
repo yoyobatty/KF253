@@ -101,6 +101,10 @@ function SpawnPickup()
 	{
 		myPickUp.PickUpBase = self;
 		myPickup.Event = event;
+<<<<<<< HEAD
+=======
+		mypickup.RespawnTime = 0;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 
 	if (myMarker != None)
@@ -140,6 +144,7 @@ function bool PlayersCanSeeMe()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bForceDefault=True
 	InitialWaitTime=20.000000
 	ReTryWaitTime=5.000000
@@ -150,4 +155,16 @@ defaultproperties
 	DrawScale=0.500000
 	CollisionRadius=60.000000
 	CollisionHeight=6.000000
+=======
+     bForceDefault=True
+     InitialWaitTime=20.000000
+     ReTryWaitTime=5.000000
+     SpawnHeight=0.000000
+     DrawType=DT_Sprite
+     bStatic=False
+     bHidden=True
+     DrawScale=0.500000
+     CollisionRadius=60.000000
+     CollisionHeight=6.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -24,8 +24,15 @@ static function string GetString(
 
 defaultproperties
 {
+<<<<<<< HEAD
 	EarnedString="You have qualified for %v !"
 	DrawColor=(B=50,G=50,R=255)
 	PosY=0.200000
 	FontSize=3
+=======
+     EarnedString="You have qualified for %v !"
+     DrawColor=(B=50,G=50,R=255)
+     PosY=0.200000
+     FontSize=3
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

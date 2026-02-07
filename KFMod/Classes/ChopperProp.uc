@@ -35,12 +35,21 @@ simulated function PostBeginPlay()
 	// decide which type of shadow to spawn
 	if( !Class'KFPawn'.Default.bRealtimeShadows )
 	{
+<<<<<<< HEAD
 		PlayerShadow = Spawn(class'ShadowProjector',Self,'',Location);
 		PlayerShadow.ShadowActor = self;
 		PlayerShadow.bBlobShadow = bBlobShadow;
 		PlayerShadow.LightDirection = Normal(vect(1,1,3));
 		PlayerShadow.LightDistance = 320;
 		PlayerShadow.MaxTraceDistance = 350;
+=======
+		PlayerShadow = Spawn(class'ShadowProjectorMid',Self,'',Location);
+		PlayerShadow.ShadowActor = self;
+		PlayerShadow.bBlobShadow = bBlobShadow;
+		PlayerShadow.LightDirection = Normal(vect(1,1,3));
+		PlayerShadow.LightDistance = 500;
+		PlayerShadow.MaxTraceDistance = 500;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		PlayerShadow.InitShadow();
 	}
 	else
@@ -138,6 +147,7 @@ function Reset()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bStatic=False
 	bNoDelete=True
 	bStasis=False
@@ -147,4 +157,15 @@ defaultproperties
 	NetUpdateFrequency=0.500000
 	Mesh=SkeletalMesh'KFMapObjects.Chopper'
 	DrawScale=2.500000
+=======
+     bStatic=False
+     bNoDelete=True
+     bStasis=False
+     bAlwaysRelevant=True
+     bSkipActorPropertyReplication=True
+     RemoteRole=ROLE_SimulatedProxy
+     NetUpdateFrequency=0.500000
+     Mesh=SkeletalMesh'KFMapObjects.Chopper'
+     DrawScale=2.500000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

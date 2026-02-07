@@ -163,10 +163,17 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 	BoxXPos = 0.5 * (Canvas.ClipX - BoxWidth);
 	BoxWidth = Canvas.ClipX - 2*BoxXPos;
 	NameXPos = BoxXPos + 0.0625 * BoxWidth;
+<<<<<<< HEAD
 	KillsXPos = BoxXPos + 0.25 * BoxWidth;
 	ScoreXPos = BoxXPos + 0.4 * BoxWidth;
 	HealthXpos = BoxXPos + 0.6 * BoxWidth;
 	NetXPos = BoxXPos + 0.8125 * BoxWidth;
+=======
+	KillsXPos = BoxXPos + 0.3 * BoxWidth;
+	ScoreXPos = BoxXPos + 0.45 * BoxWidth;
+	HealthXpos = BoxXPos + 0.65 * BoxWidth;
+	NetXPos = BoxXPos + 0.8625 * BoxWidth;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		
 	// draw background boxes
 	Canvas.Style = ERenderStyle.STY_Alpha;
@@ -259,7 +266,11 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 		if( bDisplayWithKills )
 		{
 			Canvas.SetPos(KillsXPos, (PlayerBoxSizeY + BoxSpaceY)*i + BoxTextOffsetY);
+<<<<<<< HEAD
 			Canvas.DrawText(KFPlayerReplicationInfo(GRI.PRIArray[i]).ThreeSecondScore,true);
+=======
+			Canvas.DrawText(KFPlayerReplicationInfo(GRI.PRIArray[i]).Kills$"/"$int(KFPlayerReplicationInfo(GRI.PRIArray[i]).Deaths),true);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 
 		// draw cash
@@ -309,6 +320,7 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	TeamScoreString="Cash Bonus:"
 	WaveString="Wave"
 	HealthText="Status"
@@ -324,4 +336,21 @@ defaultproperties
 	Restart="   You were killed..."
 	Ended="The game has ended."
 	BoxMaterial=Texture'2K4Menus.NewControls.Display1'
+=======
+     TeamScoreString="Cash Bonus:"
+     WaveString="Wave"
+     HealthText="Status"
+     KillsText="Kills/Deaths"
+     PointsText="Cash"
+     OutText="DEAD"
+     OutFireText="   You are dead. Fire to view other players."
+     SkillLevel(1)="Easy"
+     SkillLevel(3)="Normal"
+     SkillLevel(4)="Skilled"
+     SkillLevel(5)="Elite"
+     SkillLevel(7)="Suicidal"
+     Restart="   You were killed..."
+     Ended="The game has ended."
+     BoxMaterial=Texture'2K4Menus.NewControls.Display1'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

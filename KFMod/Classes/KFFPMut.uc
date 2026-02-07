@@ -28,7 +28,13 @@ function Timer()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	GroupName="KF-MonsterMut"
 	FriendlyName="Poundamonium!"
 	Description="Only Fleshpounds will appear during the game. Bring a big gun."
+=======
+     GroupName="KF-MonsterMut"
+     FriendlyName="Poundamonium!"
+     Description="Only Fleshpounds will appear during the game. Bring a big gun."
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -44,6 +44,7 @@ function CauseKnockOut()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	DrawType=DT_StaticMesh
 	bStatic=False
 	bStasis=False
@@ -56,4 +57,18 @@ defaultproperties
 	bCollideActors=True
 	bBlockActors=True
 	bBlockKarma=True
+=======
+     DrawType=DT_StaticMesh
+     bStatic=False
+     bStasis=False
+     bReplicateAnimations=True
+     RemoteRole=ROLE_None
+     Mesh=SkeletalMesh'KFCharactersB.Injection'
+     bMovable=False
+     bCanBeDamaged=False
+     bShouldBaseAtStartup=False
+     bCollideActors=True
+     bBlockActors=True
+     bBlockKarma=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

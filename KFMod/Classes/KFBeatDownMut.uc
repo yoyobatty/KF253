@@ -31,6 +31,11 @@ return true;
 
 defaultproperties
 {
+<<<<<<< HEAD
 	FriendlyName="BeatDown"
 	Description="Melee Weapons only. For ye hard'uns."
+=======
+     FriendlyName="BeatDown"
+     Description="Melee Weapons only. For ye hard'uns."
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

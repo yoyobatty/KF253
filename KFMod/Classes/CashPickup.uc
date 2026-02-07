@@ -78,6 +78,7 @@ static function string GetLocalString(
 
 defaultproperties
 {
+<<<<<<< HEAD
 	CashAmount=40
 	RespawnTime=60.000000
 	PickupMessage="You found a wad of cash"
@@ -92,4 +93,20 @@ defaultproperties
 	CollisionRadius=20.000000
 	CollisionHeight=5.000000
 	MessageClass=Class'UnrealGame.PickupMessagePlus'
+=======
+     CashAmount=40
+     RespawnTime=60.000000
+     PickupMessage="You found a wad of cash"
+     PickupSound=Sound'PatchSounds.SellItem'
+     DrawType=DT_StaticMesh
+     StaticMesh=StaticMesh'22Patch.BankNote'
+     Physics=PHYS_Falling
+     DrawScale=0.400000
+     AmbientGlow=40
+     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
+     TransientSoundVolume=150.000000
+     CollisionRadius=25.000000
+     CollisionHeight=5.000000
+     MessageClass=Class'UnrealGame.PickupMessagePlus'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

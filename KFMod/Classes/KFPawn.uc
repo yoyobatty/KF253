@@ -39,10 +39,23 @@ var Emitter ItBUURRNNNS;
 var bool bBurnified;
 var bool bBurnApplied;
 
+<<<<<<< HEAD
+=======
+var float StunTime, StunnedTime;
+var bool bStunned;
+
+var() float  CurMusicVolume;
+var() float  CurSoundVolume;	
+var() float  CurAmbientVolume;	
+var() float  CurVoiceVolume;							
+var   float  TimePassed;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 var pawn LastDamagedBy,BurnInstigator;
 
 var() globalconfig bool bRealtimeShadows,bRealDeathType; // Advanced Shadows care of Squirrelzero's code. (This is only place to rate this!)
 
+<<<<<<< HEAD
 var KFLevelRules LevRls;
 var PlayerReplicationInfo OwnerPRI;
 
@@ -56,6 +69,40 @@ replication
 
 	reliable if(Role < ROLE_Authority)
 		SecondaryItem,TossCash;
+=======
+var Effect_ShadowController RealtimeShadow;
+
+var KFLevelRules LevRls;
+var PlayerReplicationInfo OwnerPRI;
+
+var byte bIsQuickHealing;
+
+var bool bDestroyNextTick; // Destroy this pawn next tick because destroying it now will cause problems
+var float TimeSetDestroyNextTickTime; // The time we set the bDestroyNextTick flag
+
+var bool    bDestroyAfterRagDollTick;   // Wait until the ragdoll tick has happened and then destroy. Prevents crashes where we try and destroy the actor right after initializing ragdoll
+var bool    bProcessedRagTickDestroy;   // Already called destroy for a bDestroyAfterRagDollTick setting
+
+var vector SmoothedLightDir;          // Smoothed result we apply to the shadow
+var Light  CurrentShadowLight;        // The light we're currently following
+var() float LightDirSmoothSpeed;      // Blend speed per second (higher = faster, 5.0 is a good start)
+var() float LightSwitchHysteresis;    // Keep current light unless it's this much worse than a new candidate (e.g., 1.25)
+var() float LightSearchRadius;        // Max distance to consider lights (default 500)
+
+var             bool            bMovementDisabled;      // The player can't move right now
+var             float           StopDisabledTime;       // When the player can move again;
+
+replication
+{
+	reliable if(Role == ROLE_Authority)
+		bBurnified, bStunned, QuickHeal;
+
+	reliable if(Role < ROLE_Authority)
+		ServerBuyWeapon,ServerSellWeapon,ServerBuyKevlar,ServerBuyFirstAid,ServerBuyAmmo,ServerSellAmmo,SecondaryItem,TossCash;
+
+    reliable if ( bNetDirty && (Role == Role_Authority) && bNetOwner )
+        bMovementDisabled;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function PossessedBy(Controller C)
@@ -69,6 +116,16 @@ simulated Function PostNetBeginPlay()
 {
 	EnableChannelNotify(1,1);
 	EnableChannelNotify(2,1);
+<<<<<<< HEAD
+=======
+	if(Controller != none)
+	{
+		CurSoundVolume = float(Controller.ConsoleCommand("get ini:Engine.Engine.AudioDevice SoundVolume"));
+		CurMusicVolume = float(Controller.ConsoleCommand("get ini:Engine.Engine.AudioDevice MusicVolume"));
+		CurAmbientVolume = float(Controller.ConsoleCommand("get ini:Engine.Engine.AudioDevice AmbientVolume"));
+		CurVoiceVolume = float(Controller.ConsoleCommand("get ini:Engine.Engine.AudioDevice VoiceVolume"));
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	super.PostNetBeginPlay();
 }
 
@@ -77,6 +134,123 @@ simulated function string GetDefaultCharacter()
 	Return "Jacob";
 }
 
+<<<<<<< HEAD
+=======
+simulated function PostBeginPlay()
+{
+    Super(UnrealPawn).PostBeginPlay();
+	AssignInitialPose();
+
+	if (bActorShadows && bPlayerShadows && (Level.NetMode != NM_DedicatedServer))
+	{
+		// decide which type of shadow to spawn
+		if (!bRealtimeShadows)
+		{
+			PlayerShadow = Spawn(class'ShadowProjector',Self,'',Location);
+			PlayerShadow.ShadowActor = self;
+			PlayerShadow.bBlobShadow = bBlobShadow;
+			PlayerShadow.LightDirection = Normal(vect(1,1,3));//CalcTargetLightDir();
+			PlayerShadow.LightDistance = 500;
+			PlayerShadow.MaxTraceDistance = 500;
+			PlayerShadow.InitShadow();
+		}
+		else
+		{
+			RealtimeShadow = Spawn(class'Effect_ShadowController',self,'',Location);
+			RealtimeShadow.Instigator = self;
+			RealtimeShadow.Initialize();
+		}
+	}
+}
+
+simulated function Light FindBestNearbyLight()
+{
+    local Light L, Best;
+    local float BestScore, Score, Dist;
+
+    foreach RadiusActors(class'Light', L, LightSearchRadius)
+    {
+		if(!FastTrace(Location, L.Location))
+			continue;
+        Dist = VSize(L.Location - Location) + 1.0; // avoid div by zero
+        // In UE2, Light.LightBrightness is a float. Weight by brightness and distance.
+        Score = L.LightBrightness / Dist;
+        if (Score > BestScore)
+        {
+            BestScore = Score;
+            Best = L;
+        }
+    }
+    return Best;
+}
+
+// Compute the target direction and which light to track, with hysteresis.
+simulated function vector CalcTargetLightDir(optional out Light OutChosenLight)
+{
+    local Light Best, Chosen;
+    local float BestScore, CurrScore, DistBest, DistCurr;
+
+    Best = FindBestNearbyLight();
+
+    if (CurrentShadowLight != None)
+    {
+        DistCurr = VSize(CurrentShadowLight.Location - Location) + 1.0;
+        CurrScore = CurrentShadowLight.LightBrightness / DistCurr;
+    }
+
+    if (Best != None)
+    {
+        DistBest = VSize(Best.Location - Location) + 1.0;
+        BestScore = Best.LightBrightness / DistBest;
+
+        // Hysteresis: keep current light unless the new one is sufficiently better
+        if (CurrentShadowLight != None && CurrScore * LightSwitchHysteresis >= BestScore)
+            Chosen = CurrentShadowLight;
+        else
+            Chosen = Best;
+    }
+    else
+    {
+        // Nothing found; keep current if we have one
+        Chosen = CurrentShadowLight;
+    }
+
+    if (Chosen != None)
+    {
+        OutChosenLight = Chosen;
+        return Normal(Chosen.Location - Location);
+    }
+
+    OutChosenLight = None;
+    return Normal(vect(1,1,3));
+}
+
+// Smoothly update the light direction; call this each tick.
+simulated function UpdateShadowLightDirection(float DeltaTime)
+{
+    local vector Target;
+    local float Alpha;
+    local Light Chosen;
+
+    // Compute desired direction with hysteresis
+    Target = CalcTargetLightDir(Chosen);
+
+    // Initialize if needed
+    if (SmoothedLightDir == vect(0,0,0))
+        SmoothedLightDir = Target;
+
+    // Low-pass filter toward target
+    Alpha = FClamp(DeltaTime * LightDirSmoothSpeed, 0.0, 1.0);
+    SmoothedLightDir = Normal(SmoothedLightDir + (Target - SmoothedLightDir) * Alpha);
+
+    CurrentShadowLight = Chosen;
+
+    // Apply only if the projected shadow controller exists
+    if (PlayerShadow != None)
+        PlayerShadow.LightDirection = SmoothedLightDir;
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function Setup(xUtil.PlayerRecord rec, optional bool bLoadNow)
 {
 	Species = rec.Species;
@@ -104,6 +278,44 @@ simulated event PostNetReceive()
         bNetNotify = false;
     }
 }
+<<<<<<< HEAD
+=======
+
+// Don't let this pawn move for a certain amount of time
+function DisableMovement(float DisableDuration)
+{
+    StopDisabledTime = Level.TimeSeconds + DisableDuration;
+    bMovementDisabled = true;
+}
+
+// Modify the velocity of the pawn
+simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
+{
+    if( Role == ROLE_Authority )
+    {
+        if( bMovementDisabled )
+        {
+            if( Level.TimeSeconds > StopDisabledTime )
+            {
+                bMovementDisabled = false;
+            }
+        }
+    }
+
+    if( bMovementDisabled && Physics == PHYS_Walking )
+    {
+        Velocity.X = 0;
+        Velocity.Y = 0;
+        Velocity.Z = 0;
+    }
+
+    if ( KFGameReplicationInfo(Level.GRI).BaseDifficulty >= 5 && bMovementDisabled && Velocity.Z > 0 )
+    {
+        Velocity.Z = 0;
+    }
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Rotator r )
 {
 	local float DismemberProbability;
@@ -118,6 +330,7 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 			switch( boneName )
 			{
 				case 'Bip01 L Foot':
+<<<<<<< HEAD
 					boneName = 'Bip01 L Thigh';
 					break;
 
@@ -137,6 +350,27 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 				case 'Bip01 L Clavicle':
 					boneName = 'Bip01 Spine';
 					break;
+=======
+				boneName = 'Bip01 L Thigh';
+				break;
+
+				case 'Bip01 R Foot':
+				boneName = 'Bip01 R Thigh';
+				break;
+
+				case 'Bip01 R Hand':
+				boneName = 'rfarm';
+				break;
+
+				case 'Bip01 L Hand':
+				boneName = 'Bip01 L Forearm';
+				break;
+
+				case 'Bip01 R Clavicle':
+				case 'Bip01 L Clavicle':
+				boneName = 'Bip01 Spine';
+				break;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			}
 
 			if( DamageType.default.bAlwaysSevers || (Damage == 1000) )
@@ -148,7 +382,11 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 					bExtraGib = true;
 				}
 			}
+<<<<<<< HEAD
 				  else if( (Damage*DamageType.Default.GibModifier > 50+120*FRand()-9999999999) && (Damage >= 0) ) // total gib prob
+=======
+			else if( (Damage*DamageType.Default.GibModifier > 50+120*FRand()-9999999999) && (Damage >= 0) ) // total gib prob
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			{
 				HitFX[HitFxTicker].bSever = true;
 				boneName = 'Bip01 R Forearm';
@@ -164,6 +402,7 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 					case 'Bip01 R Forearm':
 					case 'Bip01 L Forearm':
 					case 'Bip01 Head':
+<<<<<<< HEAD
 						if( FRand() < DismemberProbability )
 							HitFX[HitFxTicker].bSever = true;
 						break;
@@ -204,13 +443,56 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 
 		else
 		 DoDamageFX('Bip01 Head',1000,DamageType,r);
+=======
+					if( FRand() < DismemberProbability )
+					HitFX[HitFxTicker].bSever = true;
+					break;
+
+					case 'Bip01 Head':
+					boneName = 'Bip01 Head';
+					case 'Bip01 Head':
+					if( FRand() < DismemberProbability * 0.3 )
+					{
+						HitFX[HitFxTicker].bSever = true;
+						if ( FRand() < 0.65 )
+						bExtraGib = true;
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	HitFX[HitFxTicker].bone = boneName;
+	HitFX[HitFxTicker].rotDir = r;
+	HitFxTicker = HitFxTicker + 1;
+	if( HitFxTicker > ArrayCount(HitFX)-1 )
+	HitFxTicker = 0;
+	if ( bExtraGib )
+	{
+		if ( FRand() < 0.25 )
+		{
+		DoDamageFX('Bip01 L Forearm',1000,DamageType,r);
+		DoDamageFX('Bip01 R Forearm',1000,DamageType,r);
+		}
+		else if ( FRand() < 0.35 )
+		DoDamageFX('Bip01 L Thigh',1000,DamageType,r);
+		else if ( FRand() < 0.5 )
+		DoDamageFX('Bip01 Head',1000,DamageType,r);
+
+		else
+		DoDamageFX('Bip01 Head',1000,DamageType,r);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 
 }
 
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 //Stops the green shit when a player dies.
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 {
@@ -470,6 +752,7 @@ simulated function ProcessHitFX()
 		if ( !Level.bDropDetail && !bSkeletized )
 		{
 			
+<<<<<<< HEAD
                         if (BurnDown > 0)
                         {
 	                 AttachEmitterEffect( BurnEffect, 'Bip01', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir );
@@ -477,6 +760,14 @@ simulated function ProcessHitFX()
 
 
                         AttachEffect( GibGroupClass.static.GetBloodEmitClass(), HitFX[SimHitFxTicker].bone, boneCoords.Origin, HitFX[SimHitFxTicker].rotDir );
+=======
+			if (BurnDown > 0)
+			{
+				AttachEmitterEffect( BurnEffect, 'Bip01', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir );
+			}
+
+            AttachEffect( GibGroupClass.static.GetBloodEmitClass(), HitFX[SimHitFxTicker].bone, boneCoords.Origin, HitFX[SimHitFxTicker].rotDir );
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 			HitFX[SimHitFxTicker].damtype.static.GetHitEffects( HitEffects, Health );
 
@@ -541,6 +832,18 @@ simulated function ProcessHitFX()
 						SpawnGiblet( GetGibClass(EGT_UpperArm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						SpawnGiblet( GetGibClass(EGT_Forearm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						Spawn(Class'BodySplashFX');
+<<<<<<< HEAD
+=======
+						if( Level.NetMode == NM_ListenServer )
+						{
+                			bDestroyNextTick = true;
+                		TimeSetDestroyNextTickTime = Level.TimeSeconds;
+            			}
+            			else
+            			{
+                			Destroy();
+						}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 					}
 					break;
 			}
@@ -588,6 +891,14 @@ function int ShieldAbsorb( int dam )
 	if ( ShieldStrength == 0 )
 		return damage;
 
+<<<<<<< HEAD
+=======
+	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
+    {
+        damage *= KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetBodyArmorDamageModifier();
+    }
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
       // Super.ShieldAbsorb(dam);
 	//SetOverlayMaterial( ShieldHitMat, ShieldHitMatTime, false );
 
@@ -766,6 +1077,7 @@ simulated function AddHealth()
 
 function bool GiveHealth(int HealAmount, int HealMax)
 {
+<<<<<<< HEAD
 	if(healAmount >= 50)
 		healAmount = 50;
 	if( Health<HealMax )
@@ -775,6 +1087,37 @@ function bool GiveHealth(int HealAmount, int HealMax)
 		return true;
 	}
 	Return False;
+=======
+    // If someone gets healed while burning, reduce the burn length/damage
+    if( BurnDown > 0 )
+    {
+        if( BurnDown > 1 )
+        {
+            BurnDown *= 0.5;
+        }
+
+        LastBurnDamage *= 0.5;
+    }
+
+    // Don't let them heal more than the max health
+    if( (healAmount + HealthToGive + Health) > HealthMax)
+    {
+        healAmount = HealthMax - (Health + HealthToGive);
+
+        if( healAmount == 0 )
+        {
+            return false;
+        }
+    }
+
+    if( Health<HealMax )
+    {
+        HealthToGive+=HealAmount;
+        lastHealTime = level.timeSeconds;
+        return true;
+    }
+    Return False;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function ThrowGrenade()
@@ -782,22 +1125,37 @@ function ThrowGrenade()
   local inventory inv;
   local Frag aFrag;
 
+<<<<<<< HEAD
 
   for(inv=inventory; inv!=none; inv=inv.Inventory)
   {
 
+=======
+  for(inv=inventory; inv!=none; inv=inv.Inventory)
+  {
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     aFrag=Frag(inv);
 
     if(aFrag!=none && aFrag.HasAmmo() && !bThrowingNade )
     {
+<<<<<<< HEAD
      if(Weapon != none && Weapon.GetFireMode(0).NextFireTime - Level.TimeSeconds > 0.1 ||
      KFWeapon(Weapon).bIsReloading)
+=======
+     if(KFWeapon(Weapon) == none || Weapon.GetFireMode(0).NextFireTime - Level.TimeSeconds > 0.1 || (KFWeapon(Weapon).bIsReloading && !KFWeapon(Weapon).InterruptReload()))
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
       return;
       
       //TODO: cache this without setting SecItem yet
       //SecondaryItem = aFrag;
+<<<<<<< HEAD
       Weapon.PutDown();
       //aFrag.StartThrow();
+=======
+	  KFWeapon(Weapon).ClientGrenadeState = GN_TempDown;
+      Weapon.PutDown();
+	  break;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     }
   }
 }
@@ -823,10 +1181,17 @@ function WeaponDown()
 
 simulated function ThrowGrenadeFinished()
 {
+<<<<<<< HEAD
   SecondaryItem = none;
   Weapon.BringUp();
   bThrowingNade = false;
 
+=======
+ 	SecondaryItem = none;
+	KFWeapon(Weapon).ClientGrenadeState = GN_BringUp;
+  	Weapon.BringUp();
+  	bThrowingNade = false;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 
@@ -835,6 +1200,7 @@ function bool DoJump( bool bUpdating )
 {
 	if ( Super.DoJump(bUpdating) )
 	{
+<<<<<<< HEAD
            // If non berserk class, jumps slow us down.
            if (GetVeteran().default.VeterancyName != "Berserker")
            {
@@ -857,6 +1223,78 @@ simulated function Tick(float DeltaTime)
 		else if(!bBurnified && bBurnApplied)
 			StopBurnFX();
 	}
+=======
+        // If non berserk class, jumps slow us down.
+        if (GetVeteran().default.VeterancyName != "Berserker")
+        {
+            Velocity.X*=0.5;
+	    	Velocity.Y*=0.5;
+        }
+        Return True;
+    }
+	Return False;
+}
+
+simulated event Tick(float DeltaTime)
+{
+	local float ratio;
+	local PlayerController	PC;
+	local float tempSoundVolume;
+	local float tempMusicVolume;
+	local float tempAmbientVolume;
+	local float tempVoiceVolume;
+
+	if( ratio > 1.0 ) 
+		ratio = 1.0;
+
+	if(StunTime <= 0) 
+		StunTime = 0;
+
+	// Fog & Field of view
+	PC = PlayerController(Controller);
+	if( PC != None )
+	{
+		if (StunTime > 0)
+		{
+			if (bStunned)
+			{
+				//log("Stunned"@bStunned);
+				bStunned = false;
+				CurSoundVolume = float(PC.ConsoleCommand("get ini:Engine.Engine.AudioDevice SoundVolume"));
+				CurMusicVolume = float(PC.ConsoleCommand("get ini:Engine.Engine.AudioDevice MusicVolume"));
+				CurAmbientVolume = float(PC.ConsoleCommand("get ini:Engine.Engine.AudioDevice AmbientVolume"));
+				CurVoiceVolume = float(PC.ConsoleCommand("get ini:Engine.Engine.AudioDevice VoiceVolume"));
+			}
+			TimePassed+=DeltaTime;
+			ratio = TimePassed/StunnedTime;
+			StunTime-=DeltaTime;
+			if(ratio < 0.05) //play this ringing a few times to get it going
+				PlayOwnedSound(sound'KFPlayerSound.ringing',SLOT_NONE,StunnedTime*2);
+			tempSoundVolume = (ratio*CurSoundVolume);
+			tempMusicVolume = (ratio*CurMusicVolume);
+			tempAmbientVolume = (ratio*CurAmbientVolume);
+			tempVoiceVolume = (ratio*CurVoiceVolume);
+			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice SoundVolume"@tempSoundVolume);
+			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice MusicVolume"@tempMusicVolume);
+			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice AmbientVolume"@tempAmbientVolume);
+			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice VoiceVolume"@tempVoiceVolume);
+		}
+
+	}
+	// IN other words - we're moving, we've got a piece, but we're not firing or reloading, or jumping / falling Faust:Perhaps we need that later: VSize(Acceleration) != 0 &&
+    if (level.NetMode != NM_DEDICATEDSERVER)
+    {
+        if(bBurnified && !bBurnApplied)
+        {
+            if ( !bGibbed )
+            {
+                StartBurnFX();
+            }
+        }
+        else if(!bBurnified && bBurnApplied)
+            StopBurnFX();
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
        // CheckFlashLightAnims();
 
@@ -876,6 +1314,26 @@ simulated function Tick(float DeltaTime)
 		NextBileTime+=BileFrequency;
 		TakeBileDamage();
 	}
+<<<<<<< HEAD
+=======
+
+
+    if( Physics == PHYS_KarmaRagdoll && bDestroyAfterRagDollTick &&
+        !bProcessedRagTickDestroy )
+    {
+        bProcessedRagTickDestroy = true;
+        Destroy();
+    }
+    // If we've flagged this character to be destroyed next tick, handle that
+    else if( bDestroyNextTick && TimeSetDestroyNextTickTime < Level.TimeSeconds )
+    {
+        Destroy();
+    }
+    if (PlayerShadow != None)
+    {
+        //UpdateShadowLightDirection(DeltaTime);
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	Super.Tick(deltaTime);
 }
 
@@ -1050,6 +1508,11 @@ simulated function StopBurnFX()
 
 function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
 {
+<<<<<<< HEAD
+=======
+    local KFPlayerReplicationInfo KFPRI;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	LastHitDamType = damageType;
 	LastDamagedBy = instigatedBy;
 
@@ -1057,6 +1520,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 	healthtoGive-=5;
 
+<<<<<<< HEAD
 	if (class<Burned>(damageType)!=none || class<DamTypeFlamethrower>(damageType)!=none)
 	{
 		if( TeamGame(Level.Game)!=None && TeamGame(Level.Game).FriendlyFireScale==0 && instigatedBy!=None && instigatedBy!=Self
@@ -1067,6 +1531,30 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
                 
 
                 if (BurnDown <= 0 )
+=======
+    KFPRI = KFPlayerReplicationInfo(PlayerReplicationInfo);
+
+    // Just return if this wouldn't even damage us. Prevents us from catching on fire for high level perks that dont take fire damage
+    if( KFPRI != none &&  KFPRI.ClientVeteranSkill != none )
+    {
+		if( KFPRI.ClientVeteranSkill.Static.ReduceDamage(self, instigatedBy, Damage, DamageType) <= 0 )
+		{
+			return;
+		}
+    }
+
+	if (class<Burned>(damageType)!=none || class<DamTypeFlamethrower>(damageType)!=none)
+	{
+		// Prevent AI from burning themselves because they are too stupid to run away from fire 
+    	if (!IsHumanControlled() && instigatedBy == self)
+        	return;
+
+		if( TeamGame(Level.Game)!=None && TeamGame(Level.Game).FriendlyFireScale==0 && instigatedBy!=None && instigatedBy!=Self && instigatedBy.GetTeamNum()==GetTeamNum() )
+			Return;
+
+		LastBurnDamage = Damage;        
+        if (BurnDown <= 0 )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		{
 			bBurnified = true;
 			BurnDown = 5;
@@ -1074,8 +1562,27 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			SetTimer(1.5,true);
 		}
 	}
+<<<<<<< HEAD
 
 
+=======
+	/* This is annoying tbh
+	if(class<DamTypeFrag>(DamageType)!=none )
+	{
+		if(TeamGame(Level.Game)!=None && TeamGame(Level.Game).FriendlyFireScale>0 && instigatedBy.GetTeamNum()!=GetTeamNum() || instigatedBy==Self)
+		{
+			if(!bStunned && StunTime == 0)
+				bStunned=True;
+			TimePassed=0.0;
+			if(Damage <= (HealthMax * 0.3))
+				StunTime=StunnedTime;
+			else
+				StunTime=(StunnedTime+(Damage/HealthMax)*3);
+		}
+			
+	}
+	*/
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if(class<DamTypeVomit>(DamageType)!=none)
 	{
 		BileCount=7;
@@ -1083,10 +1590,19 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 		if(NextBileTime< Level.TimeSeconds )
 			NextBileTime = Level.TimeSeconds+BileFrequency;
 	}
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function TakeBileDamage()
 {
+<<<<<<< HEAD
+=======
+    if (bDeleteMe || Health <= 0)
+        return;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	Super.TakeDamage(2+Rand(3), BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
 	healthtoGive-=5;
 }
@@ -1104,18 +1620,28 @@ function bool AddShieldStrength(int ShieldAmount)
 
 function TakeFireDamage(int Damage,pawn BInstigator)
 {
+<<<<<<< HEAD
          if(!GetVeteran().Static.FlamingNades())
           TakeDamage(Damage,BInstigator,Location,vect(0,0,0),class 'Burned');
 
 
         if (BurnDown > 0)
+=======
+    if(!GetVeteran().Static.FlamingNades())
+    	TakeDamage(Damage,BInstigator,Location,vect(0,0,0),class 'Burned');
+
+    if (BurnDown > 0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		BurnDown --; // Decrement the number of FireDamage calls left before our Zombie is extinguished :)
 
 	if(BurnDown==0)
 		bBurnified = false;
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // This may help show the hit effects when zombies hit players
 
 function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> damageType, vector Momentum)
@@ -1133,13 +1659,17 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
     if ( Damage <= 0 )
         return;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     PC = PlayerController(Controller);
     bShowEffects = ( (Level.NetMode != NM_Standalone) || (Level.TimeSeconds - LastRenderTime < 2.5)
                     || ((InstigatedBy != None)) );
     if ( !bShowEffects )
         return;
         
+<<<<<<< HEAD
      if (BurnDown > 0)
      {
 	                 AttachEmitterEffect( BurnEffect, 'Bip01',HitLocation, Rotation);
@@ -1147,6 +1677,13 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
         
 
 
+=======
+	if (BurnDown > 0)
+	{
+	AttachEmitterEffect( BurnEffect, 'Bip01',HitLocation, Rotation);
+	}
+        
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     HitRay = vect(0,0,0);
     if( InstigatedBy != None )
         HitRay = Normal(HitLocation-(InstigatedBy.Location+(vect(0,0,1)*InstigatedBy.EyeHeight)));
@@ -1213,12 +1750,19 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
         DoDamageFX( HitBone, Damage, DamageType, Rotator(HitNormal) );
 
     if (DamageType.default.DamageOverlayMaterial != None && Damage > 0 ) // additional check in case shield absorbed
+<<<<<<< HEAD
                 SetOverlayMaterial( DamageType.default.DamageOverlayMaterial, DamageType.default.DamageOverlayTime, false );
 
 
 }
 
 
+=======
+        SetOverlayMaterial( DamageType.default.DamageOverlayMaterial, DamageType.default.DamageOverlayTime, false );
+
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function AttachEffect( class<xEmitter> EmitterClass, Name BoneName, Vector Location, Rotator Rotation )
 {
     local Actor a;
@@ -1340,7 +1884,18 @@ State Dying
 
 			SpawnGiblet(class 'ClotGibLeg',HitLocation, self.Rotation, 0.06 ) ;
 			SpawnGiblet(class 'ClotGibLeg',HitLocation, self.Rotation, 0.06 ) ;
+<<<<<<< HEAD
 			Destroy();
+=======
+			if( Physics == PHYS_KarmaRagdoll )
+            {
+                bDestroyAfterRagDollTick = true;
+            }
+            else
+            {
+                Destroy();
+            }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 
@@ -1411,6 +1966,14 @@ function Died(Controller Killer, class<DamageType> damageType, vector HitLocatio
 	local Projectile PP;
 	local FakePlayerPawn FP;
 
+<<<<<<< HEAD
+=======
+	//log(GetHumanReadableName()$ "Bot was killed by " $Killer$ " of damagetype " $damageType$ " at HitLocation " $HitLocation);
+
+	if(Controller.bGodMode)
+		return; // can't die in godmode
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if ( bDeleteMe || Level.bLevelChange || Level.Game == None )
 		return; // already destroyed, or level is being cleaned up
 
@@ -1499,6 +2062,7 @@ function Died(Controller Killer, class<DamageType> damageType, vector HitLocatio
 		ClientDying(DamageType, HitLocation);
 }
 
+<<<<<<< HEAD
 simulated function ChunkUp( Rotator HitRotation, float ChunkPerterbation )
 {
   /*
@@ -1528,6 +2092,9 @@ simulated function ChunkUp( Rotator HitRotation, float ChunkPerterbation )
         */
 }
 
+=======
+simulated function ChunkUp( Rotator HitRotation, float ChunkPerterbation );
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 // toss some of your cash away. (to help a cash-strapped ally or perhaps just to party like its 1994)
 exec function TossCash( int Amount )
@@ -1680,6 +2247,7 @@ function ServerBuyWeapon( Class<Weapon> WClass )
 	}
 	if( !CanCarry(Class<KFWeapon>(WClass).Default.Weight) || !ItemIsBuyable(WClass.Default.PickupClass) )
 		Return;
+<<<<<<< HEAD
 	PlayerReplicationInfo.Score-=Price;
 	I = Spawn(WClass);
 	if( I!=None )
@@ -1687,6 +2255,16 @@ function ServerBuyWeapon( Class<Weapon> WClass )
 	        KFWeapon(I).FillToInitialAmmo();
                 I.GiveTo(self);
         }
+=======
+	I = Spawn(WClass);
+	if( I!=None )
+	{
+		KFWeapon(I).UpdateMagCapacity(PlayerReplicationInfo);
+	    KFWeapon(I).FillToInitialAmmo();
+        I.GiveTo(self);
+		PlayerReplicationInfo.Score-=Price;
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 function ServerSellWeapon( Class<Weapon> WClass )
 {
@@ -1705,12 +2283,20 @@ function ServerSellWeapon( Class<Weapon> WClass )
 				J = Spawn(Class'Single');
 				J.GiveTo(Self);
 			}
+<<<<<<< HEAD
+=======
+			I.Destroyed();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			I.Destroy();
 			Return;
 		}
 	}
 }
+<<<<<<< HEAD
 
+=======
+/*
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function ServerBuyKevlar()
 {
 	local float Cost;
@@ -1723,6 +2309,49 @@ function ServerBuyKevlar()
 	PlayerReplicationInfo.Score-=Cost;
 	ShieldStrength = 100;
 }
+<<<<<<< HEAD
+=======
+*/
+function ServerBuyKevlar()
+{
+    local float Cost;
+    local int UnitsAffordable;
+
+    Cost = class'Vest'.default.ItemCost * ((100.0 - ShieldStrength) / 100.0);
+
+    if ( KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none)
+    {
+        Cost *= GetCostScaling(Level.Game.GameDifficulty);
+    }
+
+    if ( !CanBuyNow() || ShieldStrength==100 )
+    {
+        Return;
+    }
+
+    if ( PlayerReplicationInfo.Score >= Cost )
+    {
+        PlayerReplicationInfo.Score -= Cost;
+        ShieldStrength = 100;
+    }
+    else if ( ShieldStrength > 0 )
+    {
+        Cost = class'Vest'.default.ItemCost;
+        if ( KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none)
+        {
+            Cost *= GetCostScaling(Level.Game.GameDifficulty);
+        }
+
+        Cost /= 100.0;
+
+        UnitsAffordable = int(PlayerReplicationInfo.Score / Cost);
+
+        PlayerReplicationInfo.Score -= int(Cost * UnitsAffordable);
+
+        ShieldStrength += UnitsAffordable;
+    }
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 function ServerBuyFirstAid()
 {
@@ -1754,16 +2383,42 @@ function ServerBuyAmmo( Class<Ammunition> AClass, bool bOnlyClip )
 		else if( KW==None && KFWeapon(I)!=None && (Weapon(I).AmmoClass[0]==AClass || Weapon(I).AmmoClass[1]==AClass) )
 			KW = KFWeapon(I);
 	}
+<<<<<<< HEAD
 	AM.MaxAmmo = AM.Default.MaxAmmo*GetVeteran().Static.AddExtraAmmoFor(AClass);
 	if( (AM==None && KW==None) || AM.AmmoAmount>=AM.MaxAmmo )
+=======
+	if( AM==None && KW==None )
+		return;
+    AM.MaxAmmo = AM.default.MaxAmmo;
+    if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
+    {
+        AM.MaxAmmo = int(float(AM.MaxAmmo) * KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.AddExtraAmmoFor(AClass));
+    }
+	if( AM.AmmoAmount>=AM.MaxAmmo )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		Return;
 	Price = int(Class<KFWeaponPickup>(KW.PickupClass).Default.AmmoCost*GetCostScaling(Level.Game.GameDifficulty)); // Clip price.
 	if( bOnlyClip )
 		c = KW.Default.ClipCount;
 	else c = (AM.MaxAmmo-AM.AmmoAmount);
 	Price = float(c)/float(KW.Default.ClipCount)*Price;
+<<<<<<< HEAD
 	if( PlayerReplicationInfo.Score<Price )
 		Return; // Not enough CASH.
+=======
+    if ( PlayerReplicationInfo.Score < Price ) 
+    {
+        c *= (PlayerReplicationInfo.Score/Price);
+
+        if ( c == 0 )
+        {
+            return; // Couldn't even afford 1 bullet.
+        }
+        AM.AddAmmo(c);
+        PlayerReplicationInfo.Score = Max(PlayerReplicationInfo.Score - (float(c) / KW.Default.ClipCount * Price), 0);
+        return;
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	PlayerReplicationInfo.Score-=Price;
 	AM.AddAmmo(c);
 }
@@ -1818,11 +2473,67 @@ event EncroachedBy( actor Other )
 		gibbedBy(Other);
 }
 
+<<<<<<< HEAD
+=======
+/* Quickly select syring, alt fire once, select old weapon again */
+simulated exec function QuickHeal()
+{
+    local Syringe S;
+    local Inventory I;
+    local byte C;
+
+    if ( Health>=HealthMax )
+        return;
+    for( I=Inventory; (I!=None && C++<250); I=I.Inventory )
+    {
+        S = Syringe(I);
+        if( S!=None )
+            break;
+    }
+    if ( S == none )
+        return;
+
+    if ( S.ChargeBar() < 0.95 )
+        return; // No can heal.
+
+    bIsQuickHealing = 1;
+    if ( Weapon==None )
+    {
+        PendingWeapon = S;
+        ChangedWeapon();
+    }
+    else if ( Weapon!=S )
+    {
+        PendingWeapon = S;
+        Weapon.PutDown();
+    }
+    else // Syringe already selected, just start healing.
+    {
+        bIsQuickHealing = 0;
+        S.HackClientStartFire();
+    }
+}
+
+function string GetPlayerName()
+{
+    if( PlayerReplicationInfo != none )
+    {
+        return PlayerReplicationInfo.PlayerName;
+    }
+
+    return "";
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 defaultproperties
 {
 	BileFrequency=0.500000
 	BurnEffect=Class'KFMod.KFMonsterFlame'
+<<<<<<< HEAD
 	bRealDeathType=True
+=======
+	StunnedTime=7.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	ShieldStrengthMax=100.000000
 	ShieldHitMat=None
 	FootstepVolume=1.000000
@@ -1861,8 +2572,20 @@ defaultproperties
 	SwimAnims(3)="WalkR"
 	AmbientGlow=0
 	bClientAnim=True
+<<<<<<< HEAD
 	CollisionRadius=26.000000
 	CollisionHeight=40.000000
 	bBlockKarma=True
 	Mass=400.000000
+=======
+	CollisionRadius=20.000000
+	CollisionHeight=40.000000
+	CrouchRadius=20.0
+	bBlockKarma=True
+	Mass=400.000000
+	Buoyancy=399.000000
+    LightDirSmoothSpeed=5.000000          // increase for faster response, decrease for smoother/slower
+    LightSwitchHysteresis=1.250000        // increase to reduce light switching; 1.1–1.5 is typical
+    LightSearchRadius=500.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -2,16 +2,26 @@
 // Shotgun Bullet
 //=============================================================================
 class ShotgunBullet extends Projectile;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 var xEmitter Trail;
 var float DamageAtten;
 var sound ImpactSounds[6];
 var () int MaxPenetrations; // Yeah, Hardy har har. It refers in fact to the number of times the bolt can pass through someone and keep going.
 var () float PenDamageReduction; // how much damage does it lose with each person it passes through?
+<<<<<<< HEAD
 var() float HeadShotDamageMult;
 
 
 var Vector tempStartLoc;
 
+=======
+var () float PenDamageReductionPerked;
+var() float HeadShotDamageMult;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated event PreBeginPlay()
 {
     Super.PreBeginPlay();
@@ -26,9 +36,13 @@ simulated function PostBeginPlay()
 
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 
+<<<<<<< HEAD
     SetTimer(0.4, false);
     tempStartLoc = Location;
 
+=======
+    //SetTimer(0.4, false);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     if ( Level.NetMode != NM_DedicatedServer )
     {
@@ -66,10 +80,22 @@ simulated function PostNetBeginPlay()
 	}
 }
 
+<<<<<<< HEAD
+=======
+simulated function Tick( float DeltaTime )
+{
+	Super.Tick(DeltaTime);
+
+    if( Physics==PHYS_Projectile )
+		Velocity.Z -= DeltaTime * 100.0; // gravity	
+}
+/*
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function Timer()
 {
     SetCollisionSize(20, 20);
 }
+<<<<<<< HEAD
 
 simulated function Destroyed()
 {
@@ -113,6 +139,17 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 	 if(Level.NetMode != NM_DedicatedServer)
         Spawn(class'KFHitEffectLarge');
         Spawn(class'InvisBullet',,, Location);
+=======
+*/
+simulated function Destroyed()
+{
+	if (Trail !=None) Trail.mRegen=False;
+        Super.Destroyed();
+}
+
+simulated singular function HitWall(vector HitNormal, actor Wall)
+{
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     if ( Role == ROLE_Authority )
 	{
 		if ( !Wall.bStatic && !Wall.bWorldGeometry )
@@ -127,6 +164,7 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 		MakeNoise(1.0);
 	}
 	Explode(Location + ExploWallOut * HitNormal, HitNormal);
+<<<<<<< HEAD
 	if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer)  )
 	{
 		if ( ExplosionDecal.Default.CullDistance != 0 )
@@ -144,6 +182,15 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 	HurtWall = None;
 
 
+=======
+
+	if(Level.NetMode != NM_DedicatedServer)
+    {
+        Spawn(class'KFHitEffect',Wall,,Location, rotator(HitNormal));
+        Spawn(class'InvisBullet',,, Location);
+    }
+	HurtWall = None;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     if (Trail != None)
     {
         Trail.mRegen=False;
@@ -153,15 +200,19 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
     }
 }
 
+<<<<<<< HEAD
 
 
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function ProcessTouch (Actor Other, vector HitLocation)
 {
     local vector X;
 
     X = Vector(Rotation);
+<<<<<<< HEAD
 
 
     if ( Other != none && Other != Instigator) // dont want to hit ourself :)
@@ -187,10 +238,33 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 
 
    }
+=======
+    if ( Other == none || Other == Instigator || Other.Base == Instigator) // dont want to hit ourself :)
+        return;
+
+    // Don't allow hits on people on the same team
+    if (KFHumanPawn(Other) != none)
+        return;
+
+    if (Pawn(Other) != none && Pawn(Other).IsHeadShot(HitLocation, X, 1.0))
+        Pawn(Other).TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
+    else
+        Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
+    if(KFPawn(Instigator).GetVeteran().default.VeterancyName == "Support Specialist")
+        PenDamageReduction = PenDamageReductionPerked; //80% better shotty penetration
+    else PenDamageReduction = default.PenDamageReduction;
+    Damage *= PenDamageReduction; // Keep going, but lose effectiveness each time.
+    // if we've struck through more than the max number of foes, destroy.
+    Speed = VSize(Velocity);
+    if ( (Damage / default.Damage <= PenDamageReduction / MaxPenetrations) || Speed < (default.Speed * 0.25))
+        Destroy();
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
+<<<<<<< HEAD
 	DamageAtten=5.000000
 	MaxPenetrations=2
 	PenDamageReduction=0.500000
@@ -209,4 +283,25 @@ defaultproperties
 	LifeSpan=3.000000
 	DrawScale=5.000000
 	Style=STY_Alpha
+=======
+    DamageAtten=5.000000
+    MaxPenetrations=2
+    PenDamageReduction=0.500000
+    PenDamageReductionPerked=0.900000
+    HeadShotDamageMult=1.500000
+    Speed=5500.000000
+    MaxSpeed=6000.000000
+    bSwitchToZeroCollision=True
+    Damage=21.000000
+    DamageRadius=0.000000
+    MomentumTransfer=50000.000000
+    MyDamageType=Class'KFMod.DamTypeShotgun'
+    ExplosionDecal=Class'KFMod.ShotgunDecal'
+    DrawType=DT_StaticMesh
+    StaticMesh=StaticMesh'WeaponStaticMesh.FlakChunk'
+    CullDistance=3000.000000
+    LifeSpan=3.000000
+    DrawScale=5.000000
+    Style=STY_Alpha
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

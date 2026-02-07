@@ -85,9 +85,17 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bFullVolume=True
 	SoundVolume=255
 	SoundRadius=2000.000000
 	TransientSoundVolume=255.000000
 	TransientSoundRadius=2000.000000
+=======
+     bFullVolume=True
+     SoundVolume=255
+     SoundRadius=2000.000000
+     TransientSoundVolume=255.000000
+     TransientSoundRadius=2000.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -16,11 +16,22 @@ var int CashThrowAmount; // Amount of cash a player throws per keypress.   Set i
 
 var FakePlayerPawn BlamePawn;
 
+<<<<<<< HEAD
+=======
+var int KillAssists;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	// Things the server should send to the client.
 	reliable if ( bNetDirty && (Role == Role_Authority) )
+<<<<<<< HEAD
 		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff,bStartingEquipmentChosen,ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill;
+=======
+		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff,bStartingEquipmentChosen,
+		ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill,
+		KillAssists;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function PostNetBeginPlay()
@@ -92,6 +103,11 @@ function FakePlayerPawn GetBlamePawn()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	PlayerHealth=100
 	VoiceTypeName="KFCoreVoice.AussieVoice"
+=======
+     PlayerHealth=100
+     VoiceTypeName="KFCoreVoice.AussieVoice"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -22,6 +22,7 @@ static function string GetString(
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ShopBootMsg="You can't stay in this shop after closing"
 	HasWeaponMsg="You already have this weapon"
 	NoCarryMoreMsg="You can not carry this weapon"
@@ -32,4 +33,15 @@ defaultproperties
 	StackMode=SM_Down
 	PosY=0.800000
 	FontSize=2
+=======
+     ShopBootMsg="You can't stay in this shop after closing"
+     HasWeaponMsg="You already have this weapon"
+     NoCarryMoreMsg="You can not carry this weapon"
+     ShopItBase="Press 'USE' key to TRADE"
+     bIsConsoleMessage=False
+     DrawColor=(B=10,G=10,R=140)
+     StackMode=SM_Down
+     PosY=0.800000
+     FontSize=2
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

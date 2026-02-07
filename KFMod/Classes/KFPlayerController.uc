@@ -17,6 +17,11 @@ var KFMusicInteraction KFInterAct;
 var string DelayedSongToPlay;
 var bool bHasDelayedSong,bHasChosenSkill;
 
+<<<<<<< HEAD
+=======
+var array<Actor> LightSources;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 var KFPlayerStats MyActiveStats;
 
 var array<KFPlayerStats.ActStats> ActStats;
@@ -24,8 +29,37 @@ var byte ClientStatsState;
 var float StatsUdpTimer;
 var int CLStats[11];
 
+<<<<<<< HEAD
 var KFSPNoteMessage ActiveNote;
 
+=======
+// Smooth FOV Management
+var()   float       TargetFOV;                      // The FOV that the Camera is trying to acheive
+var		float		TransitionStartFOV;             // The FOV that was being used at the start of the FOV Transition
+var		float		TransitionTimeElapsed;          // How long (in seconds) the camera has been transitioning to TargetFOV
+var		float		TransitionTimeTotal;            // How long it should take to transition to the target FOV
+
+//var     config  bool    bUseTrueWideScreenFOV; 
+
+var KFSPNoteMessage ActiveNote;
+
+var Rotator								BehindViewAimRotator;
+
+var array<rotator> CameraKeyframes; // Keyframes for the animation
+var array<float> KeyframeDurations; // Duration for each keyframe transition
+var int CurrentKeyframeIndex;       // Current keyframe index
+var float KeyframeElapsedTime;      // Time elapsed in the current keyframe
+var bool bIsAnimatingCamera;        // Whether the camera is animating
+
+var rotator BezierControlPoint1;    // First control point for the Bezier curve
+var rotator BezierControlPoint2;    // Second control point for the Bezier curve
+
+var() float FlySpeedMulti;
+
+// Fractional Parts of Pitch/Yaw Input
+var transient float PitchFraction, YawFraction;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	reliable if(REMOTEROLE == ROLE_AUTONOMOUSPROXY)
@@ -39,6 +73,119 @@ replication
 		KFClientNetWorkMsg;
 }
 
+<<<<<<< HEAD
+=======
+simulated function InitInputSystem()
+{
+    Super.InitInputSystem();
+
+    InitFOV();
+}
+
+// Set up the widescreen FOV values for this player
+simulated final function InitFOV()
+{
+	local float ResX, ResY;
+	local float AspectRatio;
+	local float OriginalAspectRatio;
+	local float NewFOV;
+
+    ResX = float(GUIController(Player.GUIController).ResX);
+    ResY = float(GUIController(Player.GUIController).ResY);
+    AspectRatio = ResX / ResY;
+
+	if ( AspectRatio >= 1.60 ) //1.6 = 16/10 which is 16:10 ratio and 16:9 comes to 1.77
+	{
+        OriginalAspectRatio = 4/3;
+
+        NewFOV = (ATan((Tan((90.0*Pi)/360.0)*(AspectRatio/OriginalAspectRatio)),1)*360.0)/Pi;
+
+        default.DefaultFOV = NewFOV;
+        DefaultFOV = NewFOV;
+
+        // 16X9
+        if( AspectRatio >= 1.70 )
+        {
+            //log("Detected 16X9: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
+        }
+        else
+        {
+            //log("Detected 16X10: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
+        }
+    }
+	else
+	{
+            //log("Detected 4X3: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
+            default.DefaultFOV = 90.0;
+            DefaultFOV = 90.0;
+	}
+
+	// Set the FOV to the default FOV
+	TransitionFOV(DefaultFOV,0.);
+}
+
+function AdjustView(float DeltaTime )
+{
+    local bool bReachedTargetFOV;
+
+	// Updating the FOV
+	if( TransitionTimeTotal > 0.0f && FOVAngle != TargetFOV )
+	{
+		TransitionTimeElapsed += DeltaTime;
+		if( TransitionTimeElapsed > TransitionTimeTotal )
+		{
+			TransitionTimeElapsed = TransitionTimeTotal;
+			bReachedTargetFOV = true;
+		}
+
+        FOVAngle = Lerp( (TransitionTimeElapsed / TransitionTimeTotal), TransitionStartFOV, TargetFOV );
+        DesiredFOV = FOVAngle;
+
+        if( bReachedTargetFOV )
+        {
+            TransitionTimeTotal = 0;
+        }
+	}
+
+    super.AdjustView(DeltaTime);
+}
+
+function TransitionFOV(float NewFOV, float TransitionTime)
+{
+	if( TransitionTime > 0.0f )
+	{
+		TargetFOV = NewFOV;
+		TransitionTimeTotal = TransitionTime;
+		TransitionStartFOV = FOVAngle;
+		TransitionTimeElapsed = 0.0f;
+	}
+	else
+	{
+		FOVAngle = NewFOV;
+		TargetFOV = NewFOV;
+		DesiredFOV = FOVAngle;
+		TransitionTimeTotal = 0.0f; // The system won't attempt an FOV transition if TimeTotal is 0.
+	}
+}
+
+function StartCameraAnimation(array<rotator> Keyframes, array<float> Durations, rotator ControlPoint1, rotator ControlPoint2)
+{
+	// Check if the keyframes and durations are valid
+    if (Keyframes.Length != Durations.Length || Keyframes.Length < 2)
+    {
+        Log("Invalid keyframe or duration data for camera animation.");
+        return;
+    }
+
+    CameraKeyframes = Keyframes;
+    KeyframeDurations = Durations;
+    BezierControlPoint1 = ControlPoint1;
+    BezierControlPoint2 = ControlPoint2;
+    CurrentKeyframeIndex = 0;
+    KeyframeElapsedTime = 0.0;
+    bIsAnimatingCamera = true;
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function bool FindStatsObject()
 {
 	local string ID;
@@ -63,10 +210,13 @@ event ClientOpenMenu (string Menu, optional bool bDisconnect,optional string Msg
 	else Super.ClientOpenMenu(Menu,bDisconnect,Msg1,Msg2);
 }
 
+<<<<<<< HEAD
 
 
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // TODO : Why are we not in state PlayerWaiting, where this was cut n' pasted
 //        from in the first place?
 function ServerReStartPlayer()
@@ -81,13 +231,21 @@ function ServerReStartPlayer()
 	else Level.Game.RestartPlayer(self);
 }
 
+<<<<<<< HEAD
 
+=======
+/* 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 exec function FreeCamera( bool B )
 {
     bFreeCamera = B;
     bBehindView = B;
 }
+<<<<<<< HEAD
 
+=======
+*/
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Toggle the Flashlight on or off via an exec call.
 exec function ToggleTorch()
 {
@@ -95,6 +253,107 @@ exec function ToggleTorch()
 		KFWeapon(pawn.Weapon).LightFire();
 }
 
+<<<<<<< HEAD
+=======
+function int FractionCorrection(float in, out float fraction) {
+    local int result;
+    local float tmp;
+
+    tmp = in + fraction;
+    result = int(tmp);
+    fraction = tmp - result;
+
+    return result;
+}
+
+function UpdateRotation(float DeltaTime, float maxPitch)
+{
+    local rotator newRotation, ViewRotation;
+
+    if ( bInterpolating || ((Pawn != None) && Pawn.bInterpolating) )
+    {
+        ViewShake(deltaTime);
+        return;
+    }
+
+    // Added FreeCam control for better view control
+    if (bFreeCam == True)
+    {
+        if (bFreeCamZoom == True)
+        {
+            CameraDeltaRad += FractionCorrection(DeltaTime * 0.25 * aLookUp, PitchFraction);
+        }
+        else if (bFreeCamSwivel == True)
+        {
+            CameraSwivel.Yaw += FractionCorrection(16.0 * DeltaTime * aTurn, YawFraction);
+            CameraSwivel.Pitch += FractionCorrection(16.0 * DeltaTime * aLookUp, PitchFraction);
+        }
+        else
+        {
+            CameraDeltaRotation.Yaw += FractionCorrection(32.0 * DeltaTime * aTurn, YawFraction);
+            CameraDeltaRotation.Pitch += FractionCorrection(32.0 * DeltaTime * aLookUp, PitchFraction);
+        }
+    }
+    else
+    {
+        ViewRotation = Rotation;
+
+        if(Pawn != None && Pawn.Physics != PHYS_Flying) // mmmmm
+        {
+            // Ensure we are not setting the pawn to a rotation beyond its desired
+            if( Pawn.DesiredRotation.Roll < 65535 &&
+                (ViewRotation.Roll < Pawn.DesiredRotation.Roll || ViewRotation.Roll > 0))
+                ViewRotation.Roll = 0;
+            else if( Pawn.DesiredRotation.Roll > 0 &&
+                (ViewRotation.Roll > Pawn.DesiredRotation.Roll || ViewRotation.Roll < 65535))
+                ViewRotation.Roll = 0;
+        }
+
+        DesiredRotation = ViewRotation; //save old rotation
+
+        if ( bTurnToNearest != 0 )
+            TurnTowardNearestEnemy();
+        else if ( bTurn180 != 0 )
+            TurnAround();
+        else
+        {
+            TurnTarget = None;
+            bRotateToDesired = false;
+            bSetTurnRot = false;
+            ViewRotation.Yaw += FractionCorrection(32.0 * DeltaTime * aTurn, YawFraction);
+            ViewRotation.Pitch += FractionCorrection(32.0 * DeltaTime * aLookUp, PitchFraction);
+        }
+        if (Pawn != None)
+            ViewRotation.Pitch = Pawn.LimitPitch(ViewRotation.Pitch);
+
+        SetRotation(ViewRotation);
+
+        ViewShake(deltaTime);
+        ViewFlash(deltaTime);
+
+        NewRotation = ViewRotation;
+        //NewRotation.Roll = Rotation.Roll;
+
+        if ( !bRotateToDesired && (Pawn != None) && (!bFreeCamera || !bBehindView) )
+            Pawn.FaceRotation(NewRotation, deltatime);
+    }
+}
+
+function ViewShake(float DeltaTime)
+{
+	if(bGodMode || Pawn == None || Pawn.Health <= 0)
+		return;
+	Super.ViewShake(DeltaTime);
+}
+
+function ViewFlash(float DeltaTime)
+{
+	if(bGodMode || Pawn == None || Pawn.Health <= 0)
+		return;
+	Super.ViewFlash(DeltaTime);
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function GRIKillBotCall(int NumBotsToKill)
 {
 	if (KFGameType(Level.Game) != none && NumBotsToKill > 0)
@@ -150,6 +409,10 @@ function ServerSetTempBotName(string KFBotName)
 exec function ThrowGrenade()
 {
 	KFPawn(Pawn).ThrowGrenade();
+<<<<<<< HEAD
+=======
+	//Level.Game.Broadcast(Pawn, Pawn.GetHumanReadableName()$" bot threw nade via quick throw");
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 exec function ShoutSupport()
@@ -265,6 +528,10 @@ simulated function bool FindInterAction()
 	Player.InteractionMaster.GlobalInteractions.Length = i+1;
 	Player.InteractionMaster.GlobalInteractions[i] = KFInterAct;
 	KFInterAct.Initialize();
+<<<<<<< HEAD
+=======
+	Return True;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function ClientSetMusic( string NewSong, EMusicTransition NewTransition )
@@ -323,16 +590,294 @@ function NetStopMusic(float FadeOutTime)
 
 event PlayerTick( float DeltaTime )
 {
+<<<<<<< HEAD
 	if( bHasDelayedSong && Player!=None )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
 	Super.PlayerTick(DeltaTime);
+=======
+	local float T;
+	local rotator StartRot;
+	local rotator EndRot;
+	local rotator InterpolatedRot;
+	if( bHasDelayedSong && Player!=None )
+		NetPlayMusic(DelayedSongToPlay,0.5,0);
+    Super.PlayerTick(DeltaTime);
+
+    if (bIsAnimatingCamera)
+    {
+        // Update the elapsed time for the current keyframe
+        KeyframeElapsedTime += DeltaTime;
+
+        // Check if we need to move to the next keyframe
+        if (KeyframeElapsedTime >= KeyframeDurations[CurrentKeyframeIndex])
+        {
+            KeyframeElapsedTime -= KeyframeDurations[CurrentKeyframeIndex];
+            CurrentKeyframeIndex++;
+
+            // If we've reached the end of the keyframes, stop animating
+            if (CurrentKeyframeIndex >= CameraKeyframes.Length - 1)
+            {
+                bIsAnimatingCamera = false;
+                return;
+            }
+        }
+
+        // Interpolate between the current and next keyframe
+		T = KeyframeElapsedTime / KeyframeDurations[CurrentKeyframeIndex];
+		StartRot = CameraKeyframes[CurrentKeyframeIndex];
+		EndRot = CameraKeyframes[CurrentKeyframeIndex + 1];
+		InterpolatedRot = BezierInterpolate(StartRot, BezierControlPoint1, BezierControlPoint2, EndRot, T);
+        // Apply the interpolated rotation to the player's view
+        SetRotation(GetViewRotation() + InterpolatedRot);
+    }
+}
+
+//===========================================================================
+// Behind View support
+// Credit: Ballistic Weapons, implemented by YoYoBatty
+// Over the shoulder
+//===========================================================================
+function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, float Dist)
+{
+    local vector View,HitLocation,HitNormal;
+    local float ViewDist,RealDist;
+    local vector globalX,globalY,globalZ;
+    local vector localX,localY,localZ;
+
+	if (ViewTarget != Pawn || !Pawn.bProjTarget)
+	{
+		Super.CalcBehindView(CameraLocation, CameraRotation, Dist);
+		return;
+	}
+
+    CameraRotation = Rotation;
+    CameraRotation.Roll = 0;
+	
+	GetAxes(CameraRotation, localX, localY, localZ);
+	
+	CameraLocation.Z += 22;
+	CameraLocation += localY * 1.8 * CameraDist;
+	CameraLocation += localZ * 3.4 * CameraDist;
+
+    // add view rotation offset to cameraview (amb)
+    CameraRotation += CameraDeltaRotation;
+
+    View = vect(1,0,0) >> CameraRotation;
+
+    // add view radius offset to camera location and move viewpoint up from origin (amb)
+    RealDist = Dist;
+    Dist += CameraDeltaRad;
+
+    if( Trace( HitLocation, HitNormal, CameraLocation - Dist * vector(CameraRotation), CameraLocation,false,vect(10,10,10) ) != None )
+        ViewDist = FMin( (CameraLocation - HitLocation) Dot View, Dist );
+    else
+        ViewDist = Dist;
+
+    if ( !bBlockCloseCamera || !bValidBehindCamera || (ViewDist > 10 + FMax(ViewTarget.CollisionRadius, ViewTarget.CollisionHeight)) )
+	{
+		bValidBehindCamera = true;
+		OldCameraLoc = CameraLocation - ViewDist * View;
+		OldCameraRot = CameraRotation;
+	}
+	else
+		SetRotation(OldCameraRot);
+
+    CameraLocation = OldCameraLoc;
+    CameraRotation = OldCameraRot;
+
+    // add view swivel rotation to cameraview (amb)
+    GetAxes(CameraSwivel,globalX,globalY,globalZ);
+    localX = globalX >> CameraRotation;
+    localY = globalY >> CameraRotation;
+    localZ = globalZ >> CameraRotation;
+    CameraRotation = OrthoRotation(localX,localY,localZ);
+}
+
+//Free aim in behind view.
+simulated function rotator GetViewRotation()
+{
+	if (Pawn != None)
+	{	
+		if ( bBehindView )
+		{
+			return TraceView();
+			//return Rotation;	
+		}
+	}
+    return Rotation;
+}
+
+simulated function rotator TraceView()
+{
+	local Vector HitLocation, HitNormal;
+	
+	if ( LastPlayerCalcView == Level.TimeSeconds && CalcViewActor != None && CalcViewActor.Location == CalcViewActorLocation )
+		return BehindViewAimRotator;
+	if (Trace( HitLocation, HitNormal, 15000 * vector(OldCameraRot) + OldCameraLoc, OldCameraLoc,false) != None)
+		BehindViewAimRotator = Rotator(HitLocation - (Pawn.Location + Pawn.EyePosition()));
+	else BehindViewAimRotator = Rotator(15000 * vector(OldCameraRot) + OldCameraLoc - (Pawn.Location + Pawn.EyePosition()));
+	return BehindViewAimRotator;
+}
+
+function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int aimerror)
+{
+    local vector FireDir, AimSpot, HitNormal, HitLocation, OldAim, AimOffset;
+    local actor BestTarget;
+    local float bestAim, bestDist, projspeed;
+    local actor HitActor;
+    local bool bNoZAdjust, bLeading;
+    local rotator AimRot;
+
+    FireDir = vector(GetViewRotation());
+    if ( FiredAmmunition.bInstantHit )
+        HitActor = Trace(HitLocation, HitNormal, projStart + 10000 * FireDir, projStart, true);
+    else
+        HitActor = Trace(HitLocation, HitNormal, projStart + 4000 * FireDir, projStart, true);
+    if ( (HitActor != None) && HitActor.bProjTarget )
+    {
+        BestTarget = HitActor;
+        bNoZAdjust = true;
+        OldAim = HitLocation;
+        BestDist = VSize(BestTarget.Location - Pawn.Location);
+    }
+    else
+    {
+        // adjust aim based on FOV
+        bestAim = 0.90;
+        if ( (Level.NetMode == NM_Standalone) && bAimingHelp )
+        {
+            bestAim = 0.93;
+            if ( FiredAmmunition.bInstantHit )
+                bestAim = 0.97;
+            if ( FOVAngle < DefaultFOV - 8 )
+                bestAim = 0.99;
+        }
+        else if ( FiredAmmunition.bInstantHit )
+                bestAim = 1.0;
+        BestTarget = PickTarget(bestAim, bestDist, FireDir, projStart, FiredAmmunition.MaxRange);
+        if ( BestTarget == None )
+        {
+            return GetViewRotation();
+        }
+        OldAim = projStart + FireDir * bestDist;
+    }
+	InstantWarnTarget(BestTarget,FiredAmmunition,FireDir);
+	ShotTarget = Pawn(BestTarget);
+    if ( !bAimingHelp || (Level.NetMode != NM_Standalone) )
+    {
+        return GetViewRotation();
+    }
+
+    // aim at target - help with leading also
+    if ( !FiredAmmunition.bInstantHit )
+    {
+        projspeed = FiredAmmunition.ProjectileClass.default.speed;
+        BestDist = vsize(BestTarget.Location + BestTarget.Velocity * FMin(1, 0.02 + BestDist/projSpeed) - projStart);
+        bLeading = true;
+        FireDir = BestTarget.Location + BestTarget.Velocity * FMin(1, 0.02 + BestDist/projSpeed) - projStart;
+        AimSpot = projStart + bestDist * Normal(FireDir);
+        // if splash damage weapon, try aiming at feet - trace down to find floor
+        if ( FiredAmmunition.bTrySplash
+            && ((BestTarget.Velocity != vect(0,0,0)) || (BestDist > 1500)) )
+        {
+            HitActor = Trace(HitLocation, HitNormal, AimSpot - BestTarget.CollisionHeight * vect(0,0,2), AimSpot, false);
+            if ( (HitActor != None)
+                && FastTrace(HitLocation + vect(0,0,4),projstart) )
+                return rotator(HitLocation + vect(0,0,6) - projStart);
+        }
+    }
+    else
+    {
+        FireDir = BestTarget.Location - projStart;
+        AimSpot = projStart + bestDist * Normal(FireDir);
+    }
+    AimOffset = AimSpot - OldAim;
+
+    // adjust Z of shooter if necessary
+    if ( bNoZAdjust || (bLeading && (Abs(AimOffset.Z) < BestTarget.CollisionHeight)) )
+        AimSpot.Z = OldAim.Z;
+    else if ( AimOffset.Z < 0 )
+        AimSpot.Z = BestTarget.Location.Z + 0.4 * BestTarget.CollisionHeight;
+    else
+        AimSpot.Z = BestTarget.Location.Z - 0.7 * BestTarget.CollisionHeight;
+
+    if ( !bLeading )
+    {
+        // if not leading, add slight random error ( significant at long distances )
+        if ( !bNoZAdjust )
+        {
+            AimRot = rotator(AimSpot - projStart);
+            if ( FOVAngle < DefaultFOV - 8 )
+                AimRot.Yaw = AimRot.Yaw + 200 - Rand(400);
+            else
+                AimRot.Yaw = AimRot.Yaw + 375 - Rand(750);
+            return AimRot;
+        }
+    }
+    else if ( !FastTrace(projStart + 0.9 * bestDist * Normal(FireDir), projStart) )
+    {
+        FireDir = BestTarget.Location - projStart;
+        AimSpot = projStart + bestDist * Normal(FireDir);
+    }
+
+    return rotator(AimSpot - projStart);
+}
+
+
+static final function Rotator RLerp (float Alpha, Rotator A, Rotator B, optional bool bClampRange)
+{
+	local Rotator R;
+	R.Yaw	= Lerp(Alpha, A.Yaw, B.Yaw, bClampRange);
+	R.Pitch	= Lerp(Alpha, A.Pitch, B.Pitch, bClampRange);
+	R.Roll	= Lerp(Alpha, A.Roll, B.Roll, bClampRange);
+	return R;
+}
+
+function rotator BezierInterpolate(rotator Start, rotator Control1, rotator Control2, rotator End, float T)
+{
+    local rotator A, B, C, D;
+
+    // Bezier curve formula: B(t) = (1-t)^3 * Start + 3(1-t)^2 * t * Control1 + 3(1-t) * t^2 * Control2 + t^3 * End
+    A = RLerp(T, Start, Control1);  // Interpolate between Start and Control1
+    B = RLerp(T, Control1, Control2);  // Interpolate between Control1 and Control2
+    C = RLerp(T, Control2, End);  // Interpolate between Control2 and End
+    D = RLerp(T, A, B);  // Interpolate between A and B
+    return RLerp(T, D, C);  // Final interpolation between D and C
+}
+
+exec function PlayCameraAnimation()
+{
+    local array<rotator> Keyframes;
+    local array<float> Durations;
+    local rotator ControlPoint1, ControlPoint2;
+
+    // Define keyframes (rotations) and durations
+	Keyframes[0] = rot(-1500, 500, 0);    // Slight downward and right tilt
+	Keyframes[1] = rot(-3000, -1000, 0);  // Further downward and left tilt
+	Keyframes[2] = rot(0, 0, 0);          // Return to neutral position
+
+	Durations[0] = 0.9; // 0.3 seconds to transition to the first tilt
+	Durations[1] = 0.3; // 0.4 seconds to transition to the second tilt
+	Durations[2] = 0.6; // 0.3 seconds to return to the neutral position
+
+	// Define Bezier control points for smoother motion
+	ControlPoint1 = rot(-2000, 250, 0);   // Control point for the first curve
+	ControlPoint2 = rot(-2500, -500, 0);  // Control point for the second curve
+
+    // Start the animation
+    StartCameraAnimation(Keyframes, Durations, ControlPoint1, ControlPoint2);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 //  enforce Lobby menu appearance here - there were all sorts of conditions attached,
 //  but none of them should occur in KF. This simplifies matters ;)
 simulated function ShowLoginMenu()
 {
+<<<<<<< HEAD
 	if( (Pawn != None && Pawn.Health > 0) )
+=======
+	if( (Pawn != none && Pawn.Health > 0) || (Pawn.PlayerReplicationInfo != none && Pawn.PlayerReplicationInfo.bReadyToPlay) )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		return;
 	ClientReplaceMenu("KFGUI.LobbyMenu");
 }
@@ -353,6 +898,10 @@ auto state PlayerWaiting
 	}
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // unpossessed a pawn (because pawn was killed)
 function PawnDied(Pawn P)
 {
@@ -365,13 +914,19 @@ function PawnDied(Pawn P)
 	Super.PawnDied(P);
 }
  
+<<<<<<< HEAD
  
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function ZoneInfo GetCurrentZone()
 {
   return Region.Zone;
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function PlayBeepSound()
 {
     if ( ViewTarget != None )
@@ -436,6 +991,10 @@ exec function SwitchToBestMeleeWeapon()
 function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 {
 	local int i,j;
+<<<<<<< HEAD
+=======
+	local Inventory Inv;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if( VetSkill==None || MyActiveStats==None )
 		Return;
@@ -449,6 +1008,14 @@ function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 		ClientMessage("You are already a '"$VetSkill.Default.VeterancyName$"'");
 		Return;
 	}
+<<<<<<< HEAD
+=======
+	for(inv=Pawn.Inventory; inv!=None; inv=inv.Inventory)
+	{
+		if(KFWeapon(inv)!=None)
+			KFWeapon(inv).ChangedPerk(VetSkill.Default.VeterancyName);
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	j = MyActiveStats.ActiveStats.Length;
 	for( i=0; i<j; i++ )
 	{
@@ -458,7 +1025,11 @@ function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 				Return; // Can't get that, dude.
 			MyActiveStats.ApplyVeterancy(VetSkill);
 			ClientMessage("You have chosen to be a '"$VetSkill.Default.VeterancyName$"'");
+<<<<<<< HEAD
 			bHasChosenSkill = True;
+=======
+			//bHasChosenSkill = True;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			Return;
 		}
 	}
@@ -604,6 +1175,97 @@ state Dead
 	}
 }
 
+<<<<<<< HEAD
+=======
+simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
+{
+	Super.DisplayDebug(Canvas, YL, YPos);
+
+	if( Pawn != None )
+	{
+		Canvas.SetDrawColor(255, 255, 255);
+		Canvas.DrawText("Rotation:"@Rotation@"Pawn Rotation:"@Pawn.Rotation@"Smooth View Yaw:"@Pawn.SmoothViewYaw@"Aim rotator:"@BehindViewAimRotator);
+		YPos += YL;
+		Canvas.SetPos(4, YPos);
+	}
+}
+
+//Ignoring ServerSpectate in movement state code
+state PlayerWalking
+{
+	ignores SeePlayer, HearNoise, Bump, ServerSpectate;
+	function ProcessMove(float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot)
+    {
+        local vector OldAccel;
+        local bool OldCrouch;
+		
+		if ( Pawn == None )
+			return;
+		if ( (DoubleClickMove == DCLICK_Active) && (Pawn.Physics == PHYS_Falling) )
+			DoubleClickDir = DCLICK_Active;
+		else if ( (DoubleClickMove != DCLICK_None) && (DoubleClickMove < DCLICK_Active) )
+		{
+			if ( UnrealPawn(Pawn).Dodge(DoubleClickMove) )
+				DoubleClickDir = DCLICK_Active;
+		}
+        OldAccel = Pawn.Acceleration;
+        if ( Pawn.Acceleration != NewAccel )
+			Pawn.Acceleration = NewAccel;
+		if ( bDoubleJump && (bUpdating || Pawn.CanDoubleJump()) )
+			Pawn.DoDoubleJump(bUpdating);
+        else if ( bPressedJump )
+			Pawn.DoJump(bUpdating);
+
+		if (!bBehindView)
+			Pawn.SetViewPitch(Rotation.Pitch);
+		else
+			Pawn.SetViewPitch(BehindViewAimRotator.Pitch);
+
+        if ( Pawn.Physics != PHYS_Falling )
+        {
+            OldCrouch = Pawn.bWantsToCrouch;
+            if (bDuck == 0)
+                Pawn.ShouldCrouch(false);
+            else if ( Pawn.bCanCrouch )
+                Pawn.ShouldCrouch(true);
+        }
+    }
+}
+
+state PlayerFlying
+{
+ignores SeePlayer, HearNoise, Bump, ServerSpectate;
+
+	//copied from PlayerSwimming, updated
+    function PlayerMove(float DeltaTime)
+    {
+        local vector X,Y,Z, NewAccel;
+
+        GetAxes(Rotation, X, Y, Z);
+
+        NewAccel = aForward*X + aStrafe*Y + aUp*vect(0,0,1);
+		
+        if ( VSize(NewAccel) < 1.0 )
+            NewAccel = vect(0,0,0); 
+		if ( bCheatFlying && (Pawn.Acceleration == vect(0,0,0)) )
+            Pawn.Velocity = vect(0,0,0);
+        if (KFHumanPawn(Pawn) != None && KFHumanPawn(Pawn).bIsSprinting)
+            Pawn.AirSpeed = Pawn.default.AirSpeed * FlySpeedMulti;
+		else Pawn.AirSpeed = Pawn.default.AirSpeed;
+		Pawn.AccelRate = 4096.0;
+        // --- End sprinting boost ---
+
+        // Update rotation.
+        UpdateRotation(DeltaTime, 2);
+
+        if ( Role < ROLE_Authority ) // then save this move and replicate it
+            ReplicateMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+        else
+            ProcessMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+    }
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 defaultproperties
 {
 	BuyListHeaders(0)="My Inventory"
@@ -616,9 +1278,18 @@ defaultproperties
 	LibraryListHeaders(0)="BackStory"
 	LibraryListHeaders(1)="Equipment"
 	LibraryListHeaders(2)="Enemies"
+<<<<<<< HEAD
 	bBehindView=True
+=======
+	//bUseTrueWideScreenFOV=True
+	//bBehindView=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	CheatClass=Class'KFMod.KFCheatManager'
 	TeamBeaconTexture=Texture'ONSInterface-TX.HealthBar'
 	MidGameMenuClass="KFGUI.KFInvasionLoginMenu"
 	PlayerReplicationInfoClass=Class'KFMod.KFPlayerReplicationInfo'
+<<<<<<< HEAD
+=======
+	FlySpeedMulti=2.500000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

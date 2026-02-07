@@ -13,6 +13,7 @@ static function GetHitEffects(out class<xEmitter> HitEffects[4], int VictimHealt
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bIsPowerWeapon=True
 	WeaponClass=Class'KFMod.Frag'
 	DeathString="%o filled %k's body with shrapnel."
@@ -23,4 +24,20 @@ defaultproperties
 	KDamageImpulse=15000.000000
 	KDeathVel=800.000000
 	KDeathUpKick=800.000000
+=======
+    bIsPowerWeapon=True
+    WeaponClass=Class'KFMod.Frag'
+    DeathString="%o filled %k's body with shrapnel."
+    FemaleSuicide="%o blew up."
+    MaleSuicide="%o blew up."
+    bLocationalHit=False
+    bKUseOwnDeathVel=True
+    DamageThreshold=1
+    KDamageImpulse=15000.000000
+    KDeathVel=1200.000000
+    KDeathUpKick=1200.000000
+    bThrowRagdoll=True
+    //bAlwaysSevers=True
+    bFlaming=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

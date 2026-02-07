@@ -76,14 +76,21 @@ simulated function ReturnToIdle()
 }
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function projectile SpawnProjectile(Vector Start, Rotator Dir)
 {
     local Grenade g;
     local vector X, Y, Z;
     local float pawnSpeed;
 
+<<<<<<< HEAD
     g = Weapon.Spawn(class'NadeFixed', instigator,, Start, Dir);
+=======
+    g = Weapon.Spawn(class'Nade', instigator,, Start, Dir);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     if (g != None)
     {
         Weapon.GetViewAxes(X,Y,Z);
@@ -103,11 +110,16 @@ function projectile SpawnProjectile(Vector Start, Rotator Dir)
 }
 
 
+<<<<<<< HEAD
 
 function InitEffects()
 {
 
 
+=======
+function InitEffects()
+{
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function DoFireEffect()
@@ -116,7 +128,11 @@ function DoFireEffect()
     local Rotator Aim;
     local Vector HitLocation, HitNormal;
     local Actor Other;
+<<<<<<< HEAD
 
+=======
+	local int Hand;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     Instigator.MakeNoise(1.0);
     Weapon.GetViewAxes(X,Y,Z);
@@ -124,8 +140,17 @@ function DoFireEffect()
     StartTrace = Instigator.Location + Instigator.EyePosition();// + X*Instigator.CollisionRadius;
     StartProj = StartTrace + X*ProjSpawnOffset.X;
 
+<<<<<<< HEAD
     if ( !Weapon.WeaponCentered() )
         StartProj = StartProj + Weapon.Hand * Y*ProjSpawnOffset.Y + Z*ProjSpawnOffset.Z;
+=======
+	if( PlayerController(Instigator.Controller)!=None )
+	{ // We must do this as server dosen't get a chance to set weapon handedness.
+		Hand = int(PlayerController(Instigator.Controller).Handedness);
+		if( Hand==-1 || Hand==1 )
+			StartProj = StartProj + Hand * Y*ProjSpawnOffset.Y + Z*ProjSpawnOffset.Z;
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     // check if projectile would spawn through a wall and adjust start location accordingly
     Other = Weapon.Trace(HitLocation, HitNormal, StartProj, StartTrace, false);
@@ -135,8 +160,11 @@ function DoFireEffect()
     }
 
     Aim = AdjustAim(StartProj, AimError);
+<<<<<<< HEAD
     
     //log(StartProj);
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     SpawnProjectile(StartProj, Aim);
      
@@ -205,9 +233,12 @@ event ModeDoFire()
     }
 }
 
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 state Wait
 {
     function BeginState()
@@ -247,6 +278,7 @@ function PlayFireEnd()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	mBlend=1.000000
 	mDrumRotationsPerSec=0.400000
 	mScale=1.000000
@@ -271,4 +303,30 @@ defaultproperties
 	BotRefireRate=2.500000
 	FlashEmitterClass=None
 	SpreadStyle=SS_Random
+=======
+     mBlend=1.000000
+     mDrumRotationsPerSec=0.400000
+     mScale=1.000000
+     mScaleMultiplier=0.900000
+     mSpeedMin=150.000000
+     mSpeedMax=1000.000000
+     mHoldSpeedMin=850.000000
+     mHoldSpeedMax=1600.000000
+     mHoldSpeedGainPerSec=750.000000
+     mWaitTime=0.500000
+     ProjSpawnOffset=(Y=-20.000000,Z=-7.000000)
+     bFireOnRelease=True
+     bWaitForRelease=True
+     PreFireTime=0.500000
+     FireLoopAnim="LoopThrow"
+     FireSound=Sound'KFWeaponSound.axe-swish'
+     FireRate=1.500000
+     AmmoClass=Class'KFMod.FragAmmo'
+     ShakeOffsetMag=(X=25.000000,Y=25.000000,Z=25.000000)
+     ShakeOffsetRate=(X=0.000000)
+     ProjectileClass=Class'KFMod.Nade'
+     BotRefireRate=0.500000
+     FlashEmitterClass=None
+     SpreadStyle=SS_Random
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

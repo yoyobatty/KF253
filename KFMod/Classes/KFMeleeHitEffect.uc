@@ -1,5 +1,6 @@
 class KFMeleeHitEffect extends KFHitEffect;
 
+<<<<<<< HEAD
 simulated function SpawnEffects()
 {
 	local Material SurfaceMat;
@@ -47,4 +48,12 @@ defaultproperties
 	HitEffectClasses(1)=Class'KFMod.MeleeRockHitEmitter'
 	HitEffectClasses(2)=Class'KFMod.MeleeDirtHitEmitter'
 	HitEffectClasses(3)=Class'KFMod.MeleeMetalHitEmitter'
+=======
+defaultproperties
+{
+	 HitEffects(0)=(HitDecal=class'DefaultBulletDecal',HitEffect=class'MeleeDirtHitEmitter')       	
+	 HitEffects(1)=(HitDecal=class'DefaultBulletDecal',HitEffect=class'MeleeRockHitEmitter')      	
+	 HitEffects(2)=(HitDecal=class'SnowBulletDecal',HitEffect=class'MeleeDirtHitEmitter')       	
+	 HitEffects(3)=(HitDecal=class'MetalBulletDecal',HitEffect=class'MeleeMetalHitEmitter')    
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

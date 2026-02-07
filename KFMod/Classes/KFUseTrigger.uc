@@ -192,6 +192,7 @@ function DamageWeld(float WeldDamage,pawn instigatedBy, Vector hitlocation,Vecto
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ReFireDelay=2
 	MaxWeldStrength=400.000000
 	CombatSealReduction=0.500000
@@ -200,4 +201,14 @@ defaultproperties
 	WeldedShutMessage="This door is welded shut..."
 	LockedSound=Sound'PatchSounds.LockedDoorSound'
 	UnLockedSound=Sound'PatchSounds.DoorUnlockSound'
+=======
+     ReFireDelay=2
+     MaxWeldStrength=400.000000
+     CombatSealReduction=0.500000
+     LockedMessage="This door is locked. Looks like it needs a key.."
+     UnLockedMessage="Your Key unlocked the door."
+     WeldedShutMessage="This door is welded shut..."
+     LockedSound=Sound'PatchSounds.LockedDoorSound'
+     UnLockedSound=Sound'PatchSounds.DoorUnlockSound'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

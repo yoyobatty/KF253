@@ -30,7 +30,11 @@ function WeaponTick(float dt)
 		{
 			StartTrace = Instigator.Location;
 			Aim = FireMode[0].AdjustAim(StartTrace, FireMode[0].AimError);
+<<<<<<< HEAD
 			EndTrace = StartTrace + weaponRange * Vector(Aim);
+=======
+			EndTrace = StartTrace + MeleeWeaponRange * Vector(Aim);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			Other = Trace(HitLocation, HitNormal, EndTrace, StartTrace, true);
 
 			if(HitObject == Other && HitObject != none)
@@ -81,6 +85,7 @@ function WeaponTick(float dt)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	weaponRange=150.000000
 	MeleeHitSounds(0)=Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh'
 	bDoCombos=True
@@ -105,4 +110,27 @@ defaultproperties
 	Mesh=SkeletalMesh'KFWeaponModels.Chainsaw'
 	Skins(0)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
 	Skins(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+=======
+     MeleeHitSounds(0)=Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh'
+     bDoCombos=True
+     Weight=8.000000
+     FireModeClass(0)=Class'KFMod.ChainsawFire'
+     FireModeClass(1)=Class'KFMod.ChainsawAltFire'
+     Description="A gas powered industrial strength chainsaw. "
+     DisplayFOV=60.000000
+     Priority=5
+     SmallViewOffset=(X=5.000000,Y=14.000000,Z=-6.000000)
+     CenteredOffsetY=-4.000000
+     GroupOffset=4
+     PickupClass=Class'KFMod.ChainsawPickup'
+     PlayerViewOffset=(X=-7.000000,Y=8.000000,Z=0.000000)
+     PlayerViewPivot=(Yaw=16884,Roll=200)
+     BobDamping=6.000000
+     AttachmentClass=Class'KFMod.ChainsawAttachment'
+     IconCoords=(X1=169,Y1=39,X2=241,Y2=77)
+     ItemName="Chainsaw"
+     Mesh=SkeletalMesh'KFWeaponModels.Chainsaw'
+     Skins(0)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+     Skins(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

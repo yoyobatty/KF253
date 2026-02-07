@@ -8,8 +8,15 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bStatic=False
 	bNoDelete=True
 	RemoteRole=ROLE_None
 	Mesh=SkeletalMesh'KFMapObjects.BloodySheet'
+=======
+     bStatic=False
+     bNoDelete=True
+     RemoteRole=ROLE_None
+     Mesh=SkeletalMesh'KFMapObjects.BloodySheet'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -50,10 +50,19 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Splats(0)=Texture'KFX.BloodStreak'
 	Splats(1)=Texture'KFX.BloodStreak'
 	Splats(2)=Texture'KFX.BloodStreak'
 	PushBack=5.000000
 	RandomOrient=False
 	ProjTexture=Texture'KFX.BloodStreak'
+=======
+     Splats(0)=Texture'KFX.BloodStreak'
+     Splats(1)=Texture'KFX.BloodStreak'
+     Splats(2)=Texture'KFX.BloodStreak'
+     PushBack=5.000000
+     RandomOrient=False
+     ProjTexture=Texture'KFX.BloodStreak'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

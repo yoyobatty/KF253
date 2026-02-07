@@ -31,5 +31,9 @@ simulated function Render(Canvas C)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bHidden=False
+=======
+     bHidden=False
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

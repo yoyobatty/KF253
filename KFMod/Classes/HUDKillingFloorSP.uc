@@ -8,6 +8,11 @@ simulated function DrawKFHUDTextElements(Canvas Canvas )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	YouveWonTheMatch="Mission Complete."
 	YouveLostTheMatch="Mission Failed."
+=======
+     YouveWonTheMatch="Mission Complete."
+     YouveLostTheMatch="Mission Failed."
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

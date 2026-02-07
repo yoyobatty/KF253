@@ -35,6 +35,7 @@ function Destroyed()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Physics=PHYS_Falling
 	LifeSpan=14.000000
 	bCollideWhenPlacing=True
@@ -42,4 +43,13 @@ defaultproperties
 	CollisionHeight=40.000000
 	bCollideActors=True
 	bCollideWorld=True
+=======
+     Physics=PHYS_Falling
+     LifeSpan=14.000000
+     bCollideWhenPlacing=True
+     CollisionRadius=26.000000
+     CollisionHeight=40.000000
+     bCollideActors=True
+     bCollideWorld=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -57,7 +57,13 @@ function Class<Monster> GetReplaceClass( Class<Monster> MC )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	GroupName="KF-MonsterMut"
 	FriendlyName="Marco Mode!"
 	Description="omgwtflolol"
+=======
+     GroupName="KF-MonsterMut"
+     FriendlyName="Marco Mode!"
+     Description="omgwtflolol"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

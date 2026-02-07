@@ -211,6 +211,7 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bImperviusToPlayer=True
 	bDamageable=True
 	CullDistance=4500.000000
@@ -227,4 +228,22 @@ defaultproperties
 	bNetNotify=True
 	bFixedRotationDir=True
 	bEdShouldSnap=True
+=======
+     bImperviusToPlayer=True
+     bDamageable=True
+     CullDistance=4500.000000
+     bStatic=False
+     bNoDelete=True
+     bStasis=False
+     bNetInitialRotation=True
+     RemoteRole=ROLE_SimulatedProxy
+     NetUpdateFrequency=1.000000
+     bCollideActors=True
+     bCollideWorld=True
+     bBlockActors=True
+     bBlockKarma=True
+     bNetNotify=True
+     bFixedRotationDir=True
+     bEdShouldSnap=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

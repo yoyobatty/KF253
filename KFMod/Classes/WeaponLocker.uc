@@ -1,6 +1,7 @@
 class WeaponLocker extends Actor
 	placeable;
 
+<<<<<<< HEAD
 var() float TriggerRadius, TriggerHeight;
 var bool bActive, bOpen;
 var int OpenRefs;
@@ -18,6 +19,62 @@ simulated event PostBeginPlay()
 
 	if( Level.NetMode!=NM_DedicatedServer )
 		LoopAnim('Idle');
+=======
+//var() float TriggerRadius, TriggerHeight;
+var bool bActive, bOpen;
+var int OpenRefs;
+var ShopVolume Shop;
+var ShadowProjector PlayerShadow;
+var float NextLightUpdateTime; // throttle scripted updates
+
+simulated event PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	if( Level.NetMode!=NM_DedicatedServer )
+		LoopAnim('Idle',,,0);
+
+	foreach VisibleCollidingActors(class'ShopVolume', Shop, 1000)
+	{
+		Shop.MyTrader = self;
+	}
+
+	if (bActorShadows &&(Level.NetMode != NM_DedicatedServer))
+	{
+		PlayerShadow = Spawn(class'ShadowProjectorMid',Self,'',Location);
+		PlayerShadow.ShadowActor = self;
+		PlayerShadow.LightDirection = GetNearbyLightDirection();
+		PlayerShadow.LightDistance = VSize(Location - (Location - PlayerShadow.LightDirection * 500));
+		PlayerShadow.MaxTraceDistance = 500;
+		PlayerShadow.InitShadow();
+		PlayerShadow.bShadowActive = true;
+	}
+}
+
+function Vector GetNearbyLightDirection()
+{
+	local Light NearbyLight;
+	local vector LightDir;
+	local float ClosestDist, Dist;
+
+	ClosestDist = 500.f;
+	foreach RadiusActors(class'Light', NearbyLight, 500.f)
+	{
+		if(!FastTrace(Location, NearbyLight.Location))
+			continue;
+		Dist = VSize(NearbyLight.Location - Location);
+		if (Dist < ClosestDist)
+		{
+			ClosestDist = Dist;
+			LightDir = Normal(NearbyLight.Location - Location);
+		}
+	}
+	if(LightDir.Z < 0.3)
+		LightDir.Z = 0.3;
+	if (ClosestDist < 500.f)
+		return LightDir;
+	else
+		return Normal(vect(1,1,3));
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function SetOpen(bool bToOpen)
@@ -29,7 +86,11 @@ function SetOpen(bool bToOpen)
 		if(bOpen && OpenRefs == 0)
 		{
 			if( Level.NetMode!=NM_DedicatedServer )
+<<<<<<< HEAD
 				LoopAnim('Idle');
+=======
+				LoopAnim('Idle',,,0);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			bOpen=false;
 		}
 		break;
@@ -46,6 +107,7 @@ function SetOpen(bool bToOpen)
 		break;
 	}
 }
+<<<<<<< HEAD
 simulated function AnimEnd( int Channel )
 {
 	if( Level.NetMode!=NM_DedicatedServer )
@@ -54,12 +116,28 @@ simulated function AnimEnd( int Channel )
 simulated event ClientTrigger()
 {
 	PlayAnim('Gesture');
+=======
+
+simulated function AnimEnd( int Channel )
+{
+	if( Level.NetMode!=NM_DedicatedServer )
+		LoopAnim('Idle',,,0);
+}
+simulated event ClientTrigger()
+{
+	PlayAnim('Gesture',,,1);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
+<<<<<<< HEAD
 	TriggerRadius=150.000000
 	TriggerHeight=100.000000
+=======
+	//TriggerRadius=150.000000
+	//TriggerHeight=100.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	bActive=True
 	DrawType=DT_Mesh
 	bAlwaysRelevant=True
@@ -74,4 +152,8 @@ defaultproperties
 	bCollideWorld=True
 	bBlockActors=True
 	bBlockKarma=True
+<<<<<<< HEAD
+=======
+	bActorShadows=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -28,6 +28,13 @@ var globalconfig bool bBlobShadow;
 
 var () bool bNoShadows; // check if you dont want pickup to have projector shadows.
 
+<<<<<<< HEAD
+=======
+var() string CorrespondingVeterancyName;
+
+var float PickupRating;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function PostNetBeginPlay()
 {
 	// decide which type of shadow to spawn
@@ -44,13 +51,17 @@ simulated function PostNetBeginPlay()
 	}
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // cut n pasted to remove uneeded stuff and generally tweak+modify
 function float BotDesireability( pawn Bot )
 {
 	local Weapon AlreadyHas;
 	local float desire;
 
+<<<<<<< HEAD
 	// Check weight, and make too-heavy items completely unwantable
 	// TODO: Check if there's something worth ditching
 	if(KFHumanPawn(Bot)!=none)
@@ -61,12 +72,27 @@ function float BotDesireability( pawn Bot )
 
 	// bots adjust their desire for their favorite weapons
 	desire = MaxDesireability + Bot.Controller.AdjustDesireFor(self);
+=======
+	desire = MaxDesireability + Bot.Controller.AdjustDesireFor(self); 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	// see if bot already has a weapon of this type
 	AlreadyHas = Weapon(Bot.FindInventoryType(InventoryType));
 	if ( AlreadyHas != None )
+<<<<<<< HEAD
 		return -10;
 
+=======
+		return 0;
+
+	// Check weight, and make too-heavy items completely unwantable
+	if ( KFHumanPawn(Bot)!=none && !CheckCanCarry(KFHumanPawn(Bot)) )
+		return 0;
+
+    if( bDropped && AmmoAmount[0] <= 0 ) //Don't make it worthless if no ammo
+		desire *= 0.1;
+		
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if ( Bot.Controller.bHuntPlayer && (MaxDesireability * 0.833 < Bot.Weapon.AIRating - 0.1) )
 		return 0;
 
@@ -76,10 +102,14 @@ function float BotDesireability( pawn Bot )
 	return desire;
 }
 
+<<<<<<< HEAD
 function RespawnEffect()
 {
 
 }
+=======
+function RespawnEffect(){}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 function InitDroppedPickupFor(Inventory Inv)
 {
@@ -186,6 +216,7 @@ simulated event ClientTrigger()
 	bHidden = true;
 }
 
+<<<<<<< HEAD
 function bool CheckCanCarry( KFHumanPawn Hm )
 {
 	if( !Hm.CanCarry(Class<KFWeapon>(InventoryType).Default.Weight) )
@@ -194,6 +225,16 @@ function bool CheckCanCarry( KFHumanPawn Hm )
 		{
 			LastCantCarryTime = Level.TimeSeconds+0.5;
 			PlayerController(Hm.Controller).ReceiveLocalizedMessage(Class'KFMainMessages',2);
+=======
+function bool CheckCanCarry( KFHumanPawn HM )
+{
+	if( !HM.CanCarry(Class<KFWeapon>(InventoryType).Default.Weight) )
+	{
+		if( LastCantCarryTime<Level.TimeSeconds && PlayerController(HM.Controller)!=none )
+		{
+			LastCantCarryTime = Level.TimeSeconds+0.5;
+			PlayerController(HM.Controller).ReceiveLocalizedMessage(Class'KFMainMessages',2);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 		Return False;
 	}
@@ -208,10 +249,19 @@ auto state pickup
 		if ( bDropped )
 		{
 			AddToNavigation();
+<<<<<<< HEAD
 			SetTimer(20, false);
 		}
 	}
 
+=======
+			//SetTimer(20, false);
+		}
+	}
+	function EndState()
+	{
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	// When touched by an actor.  Let's mod this to account for Weights. (Player can't pickup items)
 	// IF he's exceeding his max carry weight.
 	function Touch( actor Other )
@@ -242,22 +292,46 @@ state FallingPickup
 
 State FadeOut
 {
+<<<<<<< HEAD
 	function Tick(float DeltaTime)
 	{
 	}
 	function BeginState()
 	{
 	}
+=======
+	// When touched by an actor.  Let's mod this to account for Weights. (Player can't pickup items)
+	// IF he's exceeding his max carry weight.
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	function Touch( actor Other )
 	{
 		if ( KFHumanPawn(Other)!=none && !CheckCanCarry(KFHumanPawn(Other)) )
 			Return;
 		Super.Touch(Other);
 	}
+<<<<<<< HEAD
+=======
+	function Tick(float DeltaTime)
+	{
+	}
+	function BeginState()
+	{
+	}
+}
+
+function AnnouncePickup(Pawn Receiver)
+{
+	Super.AnnouncePickup(Receiver);
+	if (Receiver != None && Receiver.Controller != None)
+	{
+		log("KFWeaponPickup: AnnouncePickup called for " @ Receiver.Controller.PlayerReplicationInfo.PlayerName @ " with " @GetHumanReadableName());
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Weight=10.000000
 	cost=2000
 	AmmoCost=20
@@ -283,4 +357,31 @@ defaultproperties
 	bFixedRotationDir=False
 	RotationRate=(Yaw=0)
 	DesiredRotation=(Yaw=0)
+=======
+     Weight=10.000000
+     cost=2000
+     AmmoCost=20
+     Description="I AM A DEFAULT DESCRIPTION! KILL ME NOW!"
+     ItemName="DULL ITEMNAME!!!! KILL KILL KILL!!!!"
+     AmmoItemName="SHOOT THE DEVS! LAZY SODS DESERVE TO DIE!!!!!"
+     bNoShadows=True
+     StandUp=(Z=0.000000)
+     bWeaponStay=False
+     MaxDesireability=0.780000
+     bOnlyReplicateHidden=False
+     bAmbientGlow=False
+     RespawnTime=100.000000
+     PickupSound=Sound'KFWeaponSound.GunPickupKF'
+     DrawType=DT_StaticMesh
+     Physics=PHYS_Falling
+     DrawScale=0.500000
+     AmbientGlow=40
+     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
+     TransientSoundVolume=100.000000
+     CollisionRadius=30.000000
+     CollisionHeight=15.000000
+     bFixedRotationDir=False
+     RotationRate=(Yaw=0)
+     DesiredRotation=(Yaw=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

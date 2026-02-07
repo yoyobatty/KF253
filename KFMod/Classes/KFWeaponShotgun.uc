@@ -1,8 +1,11 @@
 class KFWeaponShotgun extends KFWeapon
     abstract;
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 exec function ReloadMeNow()
 {
     if(!AllowReload())
@@ -16,6 +19,7 @@ exec function ReloadMeNow()
 
 simulated function InsertBullet()
 {
+<<<<<<< HEAD
     ++ClipLeft;
 }
 
@@ -60,6 +64,29 @@ function float GetAIRating()
 	else if ( EnemyDist < 400 )
 		return (AIRating + 0.2);
 	return FMax(AIRating + 0.2 - (EnemyDist - 400) * 0.0008, 0.2);
+=======
+	if(AmmoAmount(0) > 0)
+    	++ClipLeft;
+    if( !bHoldToReload )
+    {
+        ClientForceKFAmmoUpdate(ClipLeft,AmmoAmount(0));
+    }
+}
+
+function float GetAIRating()
+{
+	if (DiscourageReload()) //Swap to better if we can't reload fast
+		return AIRating * 0.5;
+	return AIRating;
+}
+// AI should avoid reloading if they have no ammo left or have recently been seen by an enemy
+function bool DiscourageReload()
+{
+	local float   ReloadMulti;
+	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
+	return ReloadMulti <= 1.0 && ClipLeft < 1 && AIController(Instigator.Controller).Enemy != None && (Level.TimeSeconds - AIController(Instigator.Controller).LastSeenTime < 0.5 || AmmoAmount(0) < 1);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function float SuggestAttackStyle()
@@ -72,5 +99,9 @@ function float SuggestAttackStyle()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bHoldToReload=True
+=======
+    bHoldToReload=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

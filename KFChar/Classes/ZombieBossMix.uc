@@ -9,6 +9,7 @@ simulated function BeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Mesh=SkeletalMesh'KFCharacterModels.InfectedWhiteMale1'
 	DrawScale=1.300000
 	Skins(0)=Texture'KFCharacters.ClotSkin'
@@ -18,4 +19,15 @@ defaultproperties
 	Skins(4)=Texture'KFCharacters.ClotSkin'
 	Skins(5)=Texture'KFCharacters.ClotSkin'
 	Skins(6)=Texture'KFCharacters.ClotSkin'
+=======
+     Mesh=SkeletalMesh'KFCharacterModels.InfectedWhiteMale1'
+     DrawScale=1.300000
+     Skins(0)=Texture'KFCharacters.ClotSkin'
+     Skins(1)=Texture'KFCharacters.ClotSkin'
+     Skins(2)=Texture'KFCharacters.ClotSkin'
+     Skins(3)=Texture'KFCharacters.ClotSkin'
+     Skins(4)=Texture'KFCharacters.ClotSkin'
+     Skins(5)=Texture'KFCharacters.ClotSkin'
+     Skins(6)=Texture'KFCharacters.ClotSkin'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

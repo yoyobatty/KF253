@@ -217,6 +217,7 @@ function float RatePlayerStart(NavigationPoint N, byte Team, Controller Player)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ScoreBoardType="KFMod.KFSPObjectiveBoardNew"
 	HUDType="KFmod.HUDKillingFloorSP"
 	MapListType="KFMod.KFMapListSP"
@@ -226,4 +227,15 @@ defaultproperties
 	GameName="Story"
 	Description="Story Based Cooperative Gameplay."
 	Acronym="KFS"
+=======
+     ScoreBoardType="KFMod.KFSPObjectiveBoardNew"
+     HUDType="KFmod.HUDKillingFloorSP"
+     MapListType="KFMod.KFMapListSP"
+     MapPrefix="KFS"
+     BeaconName="KFS"
+     GameReplicationInfoClass=Class'KFMod.KFSGameReplicationInfo'
+     GameName="Story"
+     Description="Story Based Cooperative Gameplay."
+     Acronym="KFS"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

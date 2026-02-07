@@ -4,10 +4,19 @@ class ZombieScrakeMix extends ZombieScrake;
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Mesh=SkeletalMesh'KFCharacterModels.Shade'
 	DrawScale=1.250000
 	Skins(0)=Texture'KFCharacters.CrawlerSkin'
 	Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
 	Skins(2)=FinalBlend'KFCharacters.CrawlerHairFB'
 	Skins(3)=FinalBlend'KFCharacters.CrawlerHairFB'
+=======
+     Mesh=SkeletalMesh'KFCharacterModels.Shade'
+     DrawScale=1.250000
+     Skins(0)=Texture'KFCharacters.CrawlerSkin'
+     Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
+     Skins(2)=FinalBlend'KFCharacters.CrawlerHairFB'
+     Skins(3)=FinalBlend'KFCharacters.CrawlerHairFB'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

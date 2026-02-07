@@ -19,6 +19,7 @@ function PlayFiring()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	FireAnim2="Fire2"
 	damageConst=45
 	maxAdditionalDamage=25
@@ -28,4 +29,17 @@ defaultproperties
 	hitDamageClass=Class'KFMod.DamTypeBat'
 	FireRate=0.710000
 	BotRefireRate=0.710000
+=======
+     WeaponRange=80.000000
+     FireAnim2="Fire2"
+     damageConst=80
+     maxAdditionalDamage=25
+     ProxySize=0.120000
+     DamagedelayMin=0.500000
+     DamagedelayMax=0.500000
+     hitDamageClass=Class'KFMod.DamTypeBat'
+     WideDamageMinHitAngle=0.750000
+     FireRate=0.710000
+     BotRefireRate=0.850000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

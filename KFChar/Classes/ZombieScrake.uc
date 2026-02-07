@@ -1,5 +1,9 @@
 // Chainsaw Zombie Monster for KF Invasion gametype
 // He's not quite as speedy as the other Zombies, But his attacks are TRULY damaging.
+<<<<<<< HEAD
+=======
+//Charges when you're too close or looking away
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 class ZombieScrake extends KFMonster ;
 
 #exec OBJ LOAD FILE=KFCharacters.utx
@@ -23,10 +27,59 @@ function RangedAttack(Actor A)
 	{
 		bShotAnim = true;
 		SetAnimAction(MeleeAnims[Rand(2)]);
+<<<<<<< HEAD
 		PlaySound(sound'Claw2s', SLOT_None);
 		GoToState('SawingLoop');
 	}
 }
+=======
+		CurrentDamType = ZombieDamType[0];
+		PlaySound(sound'Claw2s', SLOT_None);
+		GoToState('SawingLoop');
+	}
+	if( !bShotAnim && !bDecapitated && (VSize(A.Location-Location)<200 || (Normal(Controller.Target.Location - Location) dot vector(Controller.Target.Rotation) > 0.0) ) )
+		GoToState('RunningState');
+}
+
+State RunningState
+{
+	function BeginState()
+	{
+		SetGroundSpeed(OriginalGroundSpeed * 2.5);
+		if( Level.NetMode!=NM_DedicatedServer )
+			PostNetReceive();
+	}
+	function EndState()
+	{
+		SetGroundSpeed(OriginalGroundSpeed);
+		if( Level.NetMode!=NM_DedicatedServer )
+			PostNetReceive();
+	}
+	function RemoveHead()
+	{
+		GoToState('');
+		Global.RemoveHead();
+	}
+	function RangedAttack(Actor A)
+	{
+	     if ( bShotAnim || Physics == PHYS_Swimming)
+		     return;
+	     else if ( CanAttack(A) )
+	     {
+		     bShotAnim = true;
+		     SetAnimAction(MeleeAnims[Rand(2)]);
+			 CurrentDamType = ZombieDamType[0];
+		     PlaySound(sound'Claw2s', SLOT_None);
+		     GoToState('SawingLoop');
+	     }
+	}
+Begin:
+	While( Controller!=None && Controller.Target!=None && (VSize(Controller.Target.Location-Location)<200 || (Normal(Controller.Target.Location - Location) dot vector(Controller.Target.Rotation) > 0.0)))
+		Sleep(0.5+FRand());
+	GoToState('');
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 State SawingLoop
 {
 	function RangedAttack(Actor A)
@@ -39,6 +92,10 @@ State SawingLoop
 			bShotAnim = true;
 			damageRand = default.damageRand*0.6;
 			damageConst = default.damageConst*0.6;
+<<<<<<< HEAD
+=======
+			CurrentDamType = ZombieDamType[0];
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			SetAnimAction('SawImpaleLoop');
 		}
 		else GoToState('');
@@ -90,6 +147,7 @@ simulated function int DoAnimAction( name AnimName )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	MeleeAnims(0)="SawZombieAttack1"
 	MeleeAnims(1)="SawZombieAttack2"
 	MoanVoice(0)=Sound'KFPlayerSound.ScrakeGiggle'
@@ -146,4 +204,62 @@ defaultproperties
 	SoundRadius=200.000000
 	Mass=500.000000
 	RotationRate=(Yaw=45000,Roll=0)
+=======
+     MeleeAnims(0)="SawZombieAttack1"
+     MeleeAnims(1)="SawZombieAttack2"
+     MoanVoice(0)=Sound'KFPlayerSound.ScrakeGiggle'
+     MoanVoice(1)=Sound'KFPlayerSound.ScrakeVoice2'
+     MoanVoice(2)=Sound'KFPlayerSound.ScrakeVoice8'
+     bCannibal=True
+     damageRand=11
+     damageConst=14
+     damageForce=-400000
+     bFatAss=True
+     KFRagdollName="SawZombieRag"
+     bMeleeStunImmune=True
+     Intelligence=BRAINS_Mammal
+     bUseExtendedCollision=True
+     ColOffset=(Z=39.000000)
+     ColRadius=29.000000
+     ColHeight=40.000000
+     HitSound(0)=Sound'KFPlayerSound.zpain1'
+     HitSound(1)=Sound'KFPlayerSound.zpain2'
+     HitSound(2)=Sound'KFPlayerSound.zpain3'
+     HitSound(3)=Sound'KFPlayerSound.zpain4'
+     ChallengeSound(0)=Sound'KFPlayerSound.ScrakeVoice7'
+     ChallengeSound(1)=Sound'KFPlayerSound.ScrakeVoice4'
+     ChallengeSound(2)=Sound'KFPlayerSound.ScrakeVoice7'
+     ScoringValue=5
+     IdleHeavyAnim="SawZombieIdle"
+     IdleRifleAnim="SawZombieIdle"
+     MeleeRange=60.000000
+     GroundSpeed=85.000000
+     WaterSpeed=75.000000
+     HealthMax=1000.000000
+     Health=1000
+	 HeadHealth=700.000000
+     MenuName="Scrake"
+     ControllerClass=Class'KFChar.SawZombieController'
+     MovementAnims(0)="SawZombieWalk"
+     MovementAnims(1)="SawZombieWalk"
+     MovementAnims(2)="SawZombieWalk"
+     MovementAnims(3)="SawZombieWalk"
+     WalkAnims(0)="SawZombieWalk"
+     WalkAnims(1)="SawZombieWalk"
+     WalkAnims(2)="SawZombieWalk"
+     WalkAnims(3)="SawZombieWalk"
+     IdleCrouchAnim="SawZombieIdle"
+     IdleWeaponAnim="SawZombieIdle"
+     IdleRestAnim="SawZombieIdle"
+     AmbientSound=Sound'KFWeaponSound.SawIdle'
+     Mesh=SkeletalMesh'KFCharacterModels.SawZombie'
+     PrePivot=(Z=8.000000)
+     Skins(0)=Shader'KFCharacters.Zombie6Shader'
+     Skins(1)=Texture'KillingFloorWeapons.Chainsaw.ChainSawSkin3PZombie'
+     Skins(2)=TexOscillator'KillingFloorWeapons.Chainsaw.SAWCHAIN'
+     Skins(3)=Texture'KFCharacters.ScrakeFrock'
+     SoundRadius=200.000000
+     Mass=500.000000
+     RotationRate=(Yaw=45000,Roll=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

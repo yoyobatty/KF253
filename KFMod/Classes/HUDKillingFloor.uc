@@ -1,8 +1,17 @@
+<<<<<<< HEAD
 #exec OBJ LOAD FILE=KillingFloorHUD.utx
 #exec OBJ LOAD FILE=PatchTex.utx
 #exec OBJ LOAD FILE=KFInterfaceContent.utx
 #exec OBJ LOAD FILE=KFKillMeNow.utx
 #exec OBJ LOAD FILE=KFMapEndTextures.utx
+=======
+#exec OBJ LOAD FILE=..\KFMod20\Textures\KillingFloorHUD.utx
+#exec OBJ LOAD FILE=..\KFMod20\Textures\PatchTex.utx
+#exec OBJ LOAD FILE=..\KFMod20\Textures\KFInterfaceContent.utx
+#exec OBJ LOAD FILE=..\KFMod20\Textures\KFKillMeNow.utx
+#exec OBJ LOAD FILE=..\KFMod20\Textures\KFMapEndTextures.utx
+#exec OBJ LOAD FILE=Crosshairs.utx
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 class HUDKillingFloor extends HudBase
 	config(User);
@@ -48,9 +57,15 @@ var() NumericWidget DigitsCash;
 
 var() SpriteWidget ToolChargeMeter;
 
+<<<<<<< HEAD
 const MAXWEIGHT = 20;
 
 var() SpriteWidget CarryMeter[MAXWEIGHT];
+=======
+//const MAXWEIGHT = 50; //why hardcap this in the first place though?
+
+var() Material CarryIcon;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 const WEIGHTON_R=190;
 const WEIGHTON_G=60;
@@ -89,6 +104,10 @@ var material LastWeaponMat;
 var float NextModLogTime;
 
 var bool bInitialDark;  // a variable that initializes the overlay as black so theres' no pop-in when it adjusts to the zone color
+<<<<<<< HEAD
+=======
+var bool bHasFogTint; 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 var () float VeterancyMatScaleFactor;   // Amount to scale all Veterancy indicators on the HUD by
 
@@ -119,6 +138,24 @@ var KFGameReplicationInfo KFGRI;
 var float NextStatsUdpTime,EndGameHUDTime,VomitHudTimer,DamageHUDTimer;
 var ColorModifier MyColorMod;
 
+<<<<<<< HEAD
+=======
+// Player Info List(Used to draw Name, Health, Armor, and Veterancy over players)
+struct PlayerInfoPawnType
+{
+	var KFPawn	Pawn;
+	var	float	PlayerInfoScreenPosX;
+	var	float	PlayerInfoScreenPosY;
+	var float	RendTime;
+};
+var	array<PlayerInfoPawnType>				PlayerInfoPawns;
+
+var float DesaturationFactor, DarknessFactor;
+
+var		float					LastDoorBarHealthUpdate;
+var 	array<KFDoorMover>		DoorCache;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function PostBeginPlay()
 {
 	if( MyColorMod==None )
@@ -133,7 +170,138 @@ simulated function PostBeginPlay()
 	SetHUDAlpha();
 	foreach DynamicActors(class'KFSPLevelInfo', KFLevelRule)
 		Break;
+<<<<<<< HEAD
 }
+=======
+	if ( CustomCrosshairsAllowed() )
+		SetCustomCrosshairs();
+}
+
+function bool CustomCrosshairsAllowed()
+{
+	return true;
+}
+
+function bool CustomCrosshairColorAllowed()
+{
+	return true;
+}
+
+
+// TODO Add support for custom crosshair scale to menus
+function SetCustomCrosshairs()
+{
+	local int i;
+	local array<CacheManager.CrosshairRecord> CustomCrosshairs;
+
+	class'CacheManager'.static.GetCrosshairList(CustomCrosshairs);
+	Crosshairs.Length = CustomCrosshairs.Length;
+	for (i = 0; i < CustomCrosshairs.Length; i++)
+	{
+		Crosshairs[i].WidgetTexture = CustomCrosshairs[i].CrosshairTexture;
+
+		Crosshairs[i].TextureCoords.X1 = 0;
+		Crosshairs[i].TextureCoords.X2 = 64;
+		Crosshairs[i].TextureCoords.Y1 = 0;
+		Crosshairs[i].TextureCoords.Y2 = 64;
+
+		Crosshairs[i].TextureScale = 0.75;
+		Crosshairs[i].DrawPivot = DP_MiddleMiddle;
+		Crosshairs[i].PosX = 0.5;
+		Crosshairs[i].PosY = 0.5;
+		Crosshairs[i].OffsetX = 0;
+		Crosshairs[i].OffsetY = 0;
+		Crosshairs[i].ScaleMode = SM_None;
+		Crosshairs[i].Scale = 1.0;
+		Crosshairs[i].RenderStyle = STY_Alpha;
+	}
+
+	if ( CustomCrosshairColorAllowed() )
+		SetCustomCrosshairColors();
+}
+
+function SetCustomCrosshairColors()
+{
+	local int i, j;
+
+	for (i = 0; i < Crosshairs.Length; i++)
+		for (j = 0; j < 2; j++)
+			Crosshairs[i].Tints[j] = CrosshairColor;
+}
+
+
+simulated function DrawCrosshair (Canvas C)
+{
+    local float NormalScale;
+    local int i, CurrentCrosshair;
+    local float OldScale,OldW, CurrentCrosshairScale;
+    local color CurrentCrosshairColor;
+	local SpriteWidget CHtexture;
+
+    if (!bCrosshairShow)
+        return;
+
+	if ( bUseCustomWeaponCrosshairs && (PawnOwner != None) && (PawnOwner.Weapon != None) )
+	{
+		CurrentCrosshair = PawnOwner.Weapon.CustomCrosshair;
+		if (CurrentCrosshair == -1 || CurrentCrosshair == Crosshairs.Length)
+		{
+//			log("Not drawing crosshair because it's -1 or "$Crosshairs.Length);
+			return;
+		}
+
+		CurrentCrosshairColor = PawnOwner.Weapon.CustomCrosshairColor;
+		CurrentCrosshairScale = PawnOwner.Weapon.CustomCrosshairScale;
+		if ( PawnOwner.Weapon.CustomCrosshairTextureName != "" )
+		{
+			if ( PawnOwner.Weapon.CustomCrosshairTexture == None )
+			{
+				PawnOwner.Weapon.CustomCrosshairTexture = Texture(DynamicLoadObject(PawnOwner.Weapon.CustomCrosshairTextureName,class'Texture'));
+				if ( PawnOwner.Weapon.CustomCrosshairTexture == None )
+				{
+					log(PawnOwner.Weapon$" custom crosshair texture not found!");
+					PawnOwner.Weapon.CustomCrosshairTextureName = "";
+				}
+			}
+			CHTexture = Crosshairs[0];
+			CHTexture.WidgetTexture = PawnOwner.Weapon.CustomCrosshairTexture;
+		}
+	}
+	else
+	{
+		CurrentCrosshair = CrosshairStyle;
+		CurrentCrosshairColor = CrosshairColor;
+		CurrentCrosshairScale = CrosshairScale;
+	}
+
+	CurrentCrosshair = Clamp(CurrentCrosshair, 0, Crosshairs.Length - 1);
+
+    NormalScale = Crosshairs[CurrentCrosshair].TextureScale;
+	if ( CHTexture.WidgetTexture == None )
+		CHTexture = Crosshairs[CurrentCrosshair];
+    CHTexture.TextureScale *= CurrentCrosshairScale;
+
+    for( i = 0; i < ArrayCount(CHTexture.Tints); i++ )
+        CHTexture.Tints[i] = CurrentCrossHairColor;
+
+	if ( LastPickupTime > Level.TimeSeconds - 0.4 )
+	{
+		if ( LastPickupTime > Level.TimeSeconds - 0.2 )
+			CHTexture.TextureScale *= (1 + 5 * (Level.TimeSeconds - LastPickupTime));
+		else
+			CHTexture.TextureScale *= (1 + 5 * (LastPickupTime + 0.4 - Level.TimeSeconds));
+	}
+    OldScale = HudScale;
+    HudScale=1;
+    OldW = C.ColorModulate.W;
+    C.ColorModulate.W = 1;
+    DrawSpriteWidget (C, CHTexture);
+    C.ColorModulate.W = OldW;
+	HudScale=OldScale;
+    CHTexture.TextureScale = NormalScale;
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function Destroyed()
 {
 	if( MyColorMod!=None )
@@ -152,8 +320,11 @@ exec function ShowHud();
 
 simulated function SetHUDAlpha()
 {
+<<<<<<< HEAD
 	local byte i;
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	AmmoIcon.Tints[0].A=KFHUDAlpha;
 	AmmoIcon.Tints[1].A=KFHUDAlpha;
 	BulletIcon.Tints[0].A=KFHUDAlpha;
@@ -184,12 +355,15 @@ simulated function SetHUDAlpha()
 	DigitsCash.Tints[1].A=KFHUDAlpha;
 	ToolChargeMeter.Tints[0].A=KFHUDAlpha;
 	ToolChargeMeter.Tints[1].A=KFHUDAlpha;
+<<<<<<< HEAD
 
 	for(i=0; i<KFHumanPawn(PawnOwner).MaxCarryWeight; ++i)
 	{
 		CarryMeter[i].Tints[0].A=KFHUDAlpha;
 		CarryMeter[i].Tints[1].A=KFHUDAlpha;
 	}
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function Tick(float deltaTime)
@@ -239,12 +413,15 @@ simulated function Tick(float deltaTime)
 	
 	
 	// update flashlight info
+<<<<<<< HEAD
 
 	 if (PlayerOwner != none && PlayerOwner.Pawn != none)
 	{
 	  if (PlayerOwner.pawn.Weapon != none && KFWeapon(PlayerOwner.pawn.Weapon).FlashLight != none)
 	  bTorching = KFWeapon(PlayerOwner.pawn.Weapon).FlashLight.bHasLight ;
 	}
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	
 	if ( PawnOwner != None && PawnOwner.PlayerReplicationInfo != None )
 		KFPRI = KFPlayerReplicationInfo(PawnOwner.PlayerReplicationInfo);
@@ -255,6 +432,42 @@ simulated function Tick(float deltaTime)
 
 function DrawCustomBeacon(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
 {
+<<<<<<< HEAD
+=======
+	local int i;
+	local KFPawn KFP;
+
+	KFP = KFPawn(P);
+
+	if ( KFP == none || PawnOwner == none ||
+		 KFP.PlayerReplicationInfo == none || PawnOwner.PlayerReplicationInfo == none ||
+		 KFP.PlayerReplicationInfo.Team != PawnOwner.PlayerReplicationInfo.Team )
+	{
+		return;
+	}
+
+	for ( i = 0; i < PlayerInfoPawns.Length; i++ )
+	{
+		if ( PlayerInfoPawns[i].Pawn == P )
+		{
+			PlayerInfoPawns[i].PlayerInfoScreenPosX = ScreenLocX;
+			PlayerInfoPawns[i].PlayerInfoScreenPosY = ScreenLocY;
+			PlayerInfoPawns[i].RendTime = Level.TimeSeconds + 0.1;
+			return;
+		}
+	}
+
+	i = PlayerInfoPawns.Length;
+	PlayerInfoPawns.Length = i + 1;
+	PlayerInfoPawns[i].Pawn = KFP;
+	PlayerInfoPawns[i].PlayerInfoScreenPosX = ScreenLocX;
+	PlayerInfoPawns[i].PlayerInfoScreenPosY = ScreenLocY;
+	PlayerInfoPawns[i].RendTime = Level.TimeSeconds + 0.1;
+}
+
+function DrawPlayerInfo(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
+{
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	local float XL,YL;
 	local float Dist;
 	local byte BeaconAlpha;
@@ -276,7 +489,11 @@ function DrawCustomBeacon(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
 		return;
 
 	OldZ = C.Z;
+<<<<<<< HEAD
 	C.Z = 2;
+=======
+	C.Z = 1.0;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	C.Style = ERenderStyle.STY_Alpha;
 	C.SetDrawColor(255,255,255,BeaconAlpha);
@@ -339,6 +556,12 @@ simulated function DrawKFBar(Canvas C, float XCentre, float YCentre, float BarPe
 simulated function DrawHud( Canvas C )
 {
 	local KFGameReplicationInfo CurrentGame;
+<<<<<<< HEAD
+=======
+	local rotator CamRot;
+	local vector CamPos, ViewDir;
+	local int i;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
   
 	if (KFGameType(PlayerOwner.Level.Game) != none)
 		CurrentGame = KFGameReplicationInfo(PlayerOwner.Level.GRI);
@@ -349,17 +572,47 @@ simulated function DrawHud( Canvas C )
 
 	UpdateHud();
 
+<<<<<<< HEAD
+=======
+	PassStyle = STY_Modulated;
+	DrawModOverlay(C);
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if (!KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
 	{
 		if( bShowTargeting )
 			DrawTargeting(C);
 
+<<<<<<< HEAD
 		PassStyle = STY_Alpha;
 		DrawDamageIndicators(C);
 		DrawHudPassA(C);
 		PassStyle = STY_Additive;
 		DrawHudPassB(C);
 		PassStyle = STY_Alpha;
+=======
+		// Grab our View Direction
+		C.GetCameraLocation(CamPos,CamRot);
+		ViewDir = vector(CamRot);
+
+		// Draw the Name, Health, Armor, and Veterancy above other players
+		for ( i = 0; i < PlayerInfoPawns.Length; i++ )
+		{
+			if ( PlayerInfoPawns[i].Pawn != none && PlayerInfoPawns[i].Pawn.Health > 0 && (PlayerInfoPawns[i].Pawn.Location - PawnOwner.Location) dot ViewDir > 0.8 &&
+				 PlayerInfoPawns[i].RendTime > Level.TimeSeconds )
+			{
+				DrawPlayerInfo(C, PlayerInfoPawns[i].Pawn, PlayerInfoPawns[i].PlayerInfoScreenPosX, PlayerInfoPawns[i].PlayerInfoScreenPosY);
+			}
+			else
+			{
+				PlayerInfoPawns.Remove(i--, 1);
+			}
+		}
+
+		PassStyle = STY_Alpha;
+		DrawDamageIndicators(C);
+		DrawHudPassA(C);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		DrawHudPassC(C);
 		if( KFPlayerController(PlayerOwner)!=None && KFPlayerController(PlayerOwner).ActiveNote!=None )
 		{
@@ -368,7 +621,10 @@ simulated function DrawHud( Canvas C )
 			else KFPlayerController(PlayerOwner).ActiveNote.RenderNote(C);
 		}
 		PassStyle = STY_None;
+<<<<<<< HEAD
 		DrawHudPassD(C);
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		DisplayLocalMessages(C);
 		DrawWeaponName(C);
 		DrawVehicleName(C);
@@ -385,8 +641,12 @@ simulated function DrawHud( Canvas C )
 		}
 		DrawKFHUDTextElements(C);
 	}
+<<<<<<< HEAD
 	PassStyle = STY_Modulated;
 	DrawModOverlay(C);
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if (KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
 	{
 		PassStyle = STY_Alpha;
@@ -475,17 +735,33 @@ simulated function FindPlayerGrenade()
 simulated function UpdateHud()
 {
 	local float MaxGren, CurGren;
+<<<<<<< HEAD
 	local int i;
 	local float BatLife;
+=======
+
+	if( PawnOwner == none )
+	{
+		super.UpdateHud();
+		return;
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	CalculateAmmo();
 	DigitsClipsLeft.Value=CurClipsPrimary;
 
+<<<<<<< HEAD
 	if( KFHumanPawn(pawnowner)!=none )
 		BatLife = KFHumanPawn(pawnowner).TorchBatteryLife;
 	
 	if (PawnOwner.Weapon != none) 
 		DigitsNumLeftInClip.Value=kfWeapon(PawnOwner.Weapon).ClipLeft;
+=======
+	if (PawnOwner.Weapon!=None) 
+		if (KFWeapon(PawnOwner.Weapon)!=None)
+			DigitsNumLeftInClip.Value=kfWeapon(PawnOwner.Weapon).ClipLeft;
+		else DigitsNumLeftInClip.Value = CurAmmoPrimary;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if (DigitsNumLeftInClip.Value < 0)
 		DigitsNumLeftInClip.Value = 0;
@@ -501,6 +777,7 @@ simulated function UpdateHud()
 
 	HealthMeter.Scale = pawnowner.Health / pawnowner.HealthMax;
 	ArmourMeter.Scale = xPawn(pawnowner).ShieldStrength / 100;
+<<<<<<< HEAD
 	BatteryMeter.Scale = BatLife / KFHumanPawn(pawnowner).default.TorchBatteryLife;
 
 	for(i=0; i<KFHumanPawn(PawnOwner).MaxCarryWeight; ++i)
@@ -525,6 +802,10 @@ simulated function UpdateHud()
 		}
 
 	}
+=======
+	if(KFHumanPawn(PawnOwner)!=None)
+		BatteryMeter.Scale = float(KFHumanPawn(PawnOwner).TorchBatteryLife) / float(KFHumanPawn(pawnowner).default.TorchBatteryLife);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	// "Poison" the health meter
 	if ( VomitHudTimer>Level.TimeSeconds )
@@ -553,11 +834,16 @@ simulated function UpdateHud()
 	Super.UpdateHud();
 }
 
+<<<<<<< HEAD
 simulated function CalculateAmmo()
+=======
+simulated function CalculateAmmo() //Revised to work with UT2004 weapons as well as KF ones.
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 {
 	MaxAmmoPrimary = 1;
 	CurAmmoPrimary = 1;
 
+<<<<<<< HEAD
 	if(PawnOwner.Weapon == none)
 		return;
 
@@ -573,6 +859,32 @@ simulated function CalculateAmmo()
 		CurClipsPrimary = 0;
 }
 
+=======
+	if ( PawnOwner == None || KFWeapon(PawnOwner.Weapon) == none )
+		return;
+
+	PawnOwner.Weapon.GetAmmoCount(MaxAmmoPrimary,CurAmmoPrimary);
+
+	if(KFWeapon(PawnOwner.Weapon) != None )
+	{
+		if( KFWeapon(PawnOwner.Weapon).bHoldToReload )
+		{
+			CurClipsPrimary = Max(CurAmmoPrimary-KFWeapon(PawnOwner.Weapon).ClipLeft,0); // Single rounds reload, just show the true ammo count.
+			return;
+		}
+			
+		CurClipsPrimary = (CurAmmoPrimary - kfWeapon(PawnOwner.Weapon).ClipLeft) / kfWeapon(PawnOwner.Weapon).ClipCount;
+
+		// count the partial clip if there is one
+		if((CurAmmoPrimary - kfWeapon(PawnOwner.Weapon).ClipLeft) % kfWeapon(PawnOwner.Weapon).ClipCount > 0 )
+			CurClipsPrimary+=1;
+		if (CurClipsPrimary < 0)   
+			CurClipsPrimary = 0;
+	}
+}
+
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function DrawHudPassA (Canvas C)
 {
 	local class<Ammunition> AmmoClass;
@@ -581,8 +893,15 @@ simulated function DrawHudPassA (Canvas C)
 	local class<KFVeterancyTypes> VE;
 	local int MW,MH;
 
+<<<<<<< HEAD
 	//  if( bShowWeaponInfo && (PawnOwner.Weapon != None) )
 	if((PawnOwner.Weapon != None) )
+=======
+	DrawDoorHealthBars(C);
+
+	//  if( bShowWeaponInfo && (PawnOwner.Weapon != None) )
+	if((PawnOwner != none && PawnOwner.Weapon != None) )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	{
 		AmmoClass = PawnOwner.Weapon.GetAmmoClass(0);
 		if( (AmmoClass != None) || Syringe(PawnOwner.Weapon)!=None )
@@ -593,21 +912,42 @@ simulated function DrawHudPassA (Canvas C)
 			{
 				DrawSpriteWidget (C, AmmoIcon);
 				DrawSpriteWidget (C, BulletIcon);
+<<<<<<< HEAD
 				DrawSpriteWidget (C, DividerIcon);
 				DrawNumericWidget (C, DigitsClipsLeft, DigitsBig);
+=======
+				if(KFWeapon(PawnOwner.Weapon)!=none)
+				{
+					DrawSpriteWidget (C, DividerIcon);
+					DrawNumericWidget (C, DigitsClipsLeft, DigitsBig);
+				}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				DrawNumericWidget (C, DigitsNumLeftInClip, DigitsBig);
 			}
 		}
 	}
+<<<<<<< HEAD
 	if( KFPawn(PawnOwner)!=None )
 		KFPawn(PawnOwner).GetVeteran().Static.SpecialHUDInfo(C);
   
 	// Torch
 	if (bTorching)
+=======
+	if( KFPawn(PawnOwner)!=None && KFPawn(PawnOwner).GetVeteran() != None )
+		KFPawn(PawnOwner).GetVeteran().Static.SpecialHUDInfo(C);
+  
+	// Torch
+
+	if ( KFWeapon(PawnOwner.Weapon) != none && KFWeapon(PawnOwner.Weapon).bTorchEnabled )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	{
 		DrawSpriteWidget (C, BatteryMeter);
 		DrawSpriteWidget (C, TorchBatteryIcon);
 	}
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	// Grenade counter
 	if(PlayerGrenade!=none)
 	{
@@ -629,8 +969,36 @@ simulated function DrawHudPassA (Canvas C)
 	 DrawNumericWidget(C, DigitsCash, DigitsBig);
         }
 
+<<<<<<< HEAD
 	for( i=0; i<KFHumanPawn(PawnOwner).MaxCarryWeight; i++ )
 		DrawSpriteWidget( C, CarryMeter[i] );
+=======
+	//10x easier and faster than using spritewidgets, also allows for more weight than the stock capped 20 - by YoYoBatty
+	if(KFHumanPawn(PawnOwner)!=None)
+	{
+		for( i=0; i<KFHumanPawn(PawnOwner).MaxCarryWeight; i++ )
+		{
+			if(i < KFHumanPawn(PawnOwner).CurrentWeight )
+			{
+				C.DrawColor.R = WEIGHTON_R;
+				C.DrawColor.G = WEIGHTON_G;
+				C.DrawColor.B = WEIGHTON_B;
+			}
+			else
+			{
+				C.DrawColor.R = WEIGHTOFF_R;
+				C.DrawColor.G = WEIGHTOFF_G;
+				C.DrawColor.B = WEIGHTOFF_B;
+			}
+			//C.DrawColor.R = WEIGHTOFF_R;
+			//C.DrawColor.G = WEIGHTOFF_G;
+			//C.DrawColor.B = WEIGHTOFF_B;
+
+			C.SetPos(C.ClipX*0.97,C.ClipY*0.87 - (i*34)); //draws it right above the nade left icon, just like original
+			C.DrawTile(CarryIcon,27,35,210,65,35,63); //nice and clean, gets the full icon size too
+		}
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if( KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo)!=None )
 	{
@@ -638,8 +1006,13 @@ simulated function DrawHudPassA (Canvas C)
 		if( VE!=None )
 		{
 			C.DrawColor.R = 255;
+<<<<<<< HEAD
 			C.DrawColor.B = 255;
 			C.DrawColor.G = 255;
+=======
+			C.DrawColor.G = 255;
+			C.DrawColor.B = 255;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			C.DrawColor.A = 255;
 
 			Ma = VE.Default.OnHUDIcon;
@@ -710,6 +1083,10 @@ simulated event PostRender( canvas Canvas )
 		Canvas.DrawColor = ConsoleColor;
 
 		PlayerOwner.ViewTarget.DisplayDebug(Canvas, XPos, YPos);
+<<<<<<< HEAD
+=======
+		DrawHeadShotSphere();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		if (PlayerOwner.ViewTarget != PlayerOwner && (Pawn(PlayerOwner.ViewTarget) == None || Pawn(PlayerOwner.ViewTarget).Controller == None))
 		{
 			YPos += XPos * 2;
@@ -896,7 +1273,13 @@ simulated function Timer()
 
 simulated function DrawModOverlay( Canvas C )
 {
+<<<<<<< HEAD
 	local float MaxRBrighten,MaxGBrighten,MaxBBrighten;
+=======
+	local int FinalR, FinalG, FinalB, FinalAlpha;
+	local int MaxRBrighten, MaxGBrighten, MaxBBrighten;
+	local int BaseR, BaseG, BaseB;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	C.SetPos(0,0);
 
@@ -909,6 +1292,10 @@ simulated function DrawModOverlay( Canvas C )
 			return;
 
 		// If critical, pulsate.  otherwise, dont.
+<<<<<<< HEAD
+=======
+		/* 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		if( PlayerOwner.Pawn!=none && PlayerOwner.Pawn.Health>0 )
 		{
 			if (PlayerOwner.pawn.Health < PlayerOwner.pawn.HealthMax * 0.25)
@@ -917,6 +1304,7 @@ simulated function DrawModOverlay( Canvas C )
 				VisionOverlay = FireOverlay;
 			else VisionOverlay = default.VisionOverlay; 
 		}
+<<<<<<< HEAD
 
 
 		// Dead Players see Red
@@ -926,6 +1314,19 @@ simulated function DrawModOverlay( Canvas C )
 				Return;
 			if( PlayerOwner.ViewTarget!=GoalTarget || GoalTarget==None )
 				bDisplayDeathScreen = False;
+=======
+		*/
+		//Desaturate from 100 to 0 health, darken at 50 health and lower
+		if (PlayerOwner.Pawn != None && PlayerOwner.Pawn.Health > 0)
+			DesaturationFactor = 0.5 + 0.5 * (float(PlayerOwner.Pawn.Health) / PlayerOwner.Pawn.HealthMax);
+		// Dead Players see Red
+		if( PlayerOwner.PlayerReplicationInfo.bOutOfLives || PlayerOwner.PlayerReplicationInfo.bIsSpectator )
+		{
+			//if( !bDisplayDeathScreen )
+			//	Return;
+			//if( PlayerOwner.ViewTarget!=GoalTarget || GoalTarget==None )
+			//	bDisplayDeathScreen = False;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			C.SetDrawColor(255,255,255,GrainAlpha);
 			C.DrawTile(GhostMat,C.SizeX,C.SizeY,0,0,1024,1024);
 			return;
@@ -940,13 +1341,18 @@ simulated function DrawModOverlay( Canvas C )
 		{
 			C.SetDrawColor(0,0,0,255);
 			C.DrawTile(VisionOverlay,C.SizeX,C.SizeY,0,0,1024,1024);
+<<<<<<< HEAD
 			bInitialDark = true;
+=======
+			bInitialDark = true;	
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			return;
 		}
 
 		// Players can choose to turn this feature off completely.
 		// conversely, setting bDistanceFog = false in a Zone 
 		//will cause the code to ignore that zone for a shift in RGB tint
+<<<<<<< HEAD
 		if (KFLevelRule != none && !KFLevelRule.bUseVisionOverlay)
 			return;
 	  
@@ -959,6 +1365,45 @@ simulated function DrawModOverlay( Canvas C )
 
 		C.SetDrawColor(LastR+MaxRBrighten,LastG+MaxGBrighten,LastB+MaxBBrighten,GrainAlpha);
 		C.DrawTileScaled(VisionOverlay,C.SizeX,C.SizeY);  //,0,0,1024,1024);
+=======
+		// Players can choose to turn this feature off completely.
+		if (KFLevelRule != None && !KFLevelRule.bUseVisionOverlay)
+			return;
+
+        // Choose base color: if we never picked up a fog tint, use neutral white so screen isn't black.
+        if( LastR==0 && LastG==0 && LastB==0 )
+        {
+            BaseR = 255;
+            BaseG = 255;
+            BaseB = 255;
+        }
+        else
+        {
+            BaseR = LastR;
+            BaseG = LastG;
+            BaseB = LastB;
+        }
+
+        // Original zone-based tinting logic (now using Base* instead of Last*)
+        MaxRBrighten = Round(BaseR * (1.0 - (BaseR / 255)) - 2);
+        MaxGBrighten = Round(BaseG * (1.0 - (BaseG / 255)) - 2);
+        MaxBBrighten = Round(BaseB * (1.0 - (BaseB / 255)) - 2);
+
+        // Blend the mod overlay color with grayscale based on DesaturationFactor
+        FinalR = Round((BaseR + MaxRBrighten) * (DesaturationFactor));
+        FinalG = Round((BaseG + MaxGBrighten) * (DesaturationFactor));
+        FinalB = Round((BaseB + MaxBBrighten) * (DesaturationFactor));
+
+		// Ensure values are clamped between 0 and 255
+		FinalR = Clamp(FinalR, 0, 255);
+		FinalG = Clamp(FinalG, 0, 255);
+		FinalB = Clamp(FinalB, 0, 255);
+
+		// Set the draw color with the final calculated values
+		C.SetDrawColor(FinalR, FinalG, FinalB, GrainAlpha);
+		C.DrawTile(VisionOverlay,C.SizeX,C.SizeY,0,0,1024,1024);
+		//C.DrawTileScaled(VisionOverlay, C.SizeX, C.SizeY);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		
 		/*
                 // Added Canvas Modulation
@@ -1020,6 +1465,7 @@ simulated function DrawModOverlay( Canvas C )
 				else if (CurrentZone != none)
 					LastVolume = none;
 
+<<<<<<< HEAD
 				if (LastZone != none)
 				{
 					LastR = LastZone.DistanceFogColor.R;
@@ -1032,6 +1478,22 @@ simulated function DrawModOverlay( Canvas C )
 					LastG = LastVolume.DistanceFogColor.G;
 					LastB = LastVolume.DistanceFogColor.B;
 				}
+=======
+                if (LastZone != none)
+                {
+                    LastR = LastZone.DistanceFogColor.R;
+                    LastG = LastZone.DistanceFogColor.G;
+                    LastB = LastZone.DistanceFogColor.B;
+                    bHasFogTint = true;  // captured a fog tint
+                }
+                else if (LastVolume != none)
+                {
+                    LastR = LastVolume.DistanceFogColor.R;
+                    LastG = LastVolume.DistanceFogColor.G;
+                    LastB = LastVolume.DistanceFogColor.B;
+                    bHasFogTint = true;  // captured a fog tint
+                }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				else if (LastZone != none && LastVolume != none)
 					return;
 
@@ -1112,6 +1574,11 @@ simulated function DrawHudPassC(Canvas C)
 			C.DrawText(PortraitString,true);
 		}
 	}
+<<<<<<< HEAD
+=======
+
+	DrawCrosshair(C);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function bool DrawLevelAction (Canvas C)
@@ -1210,6 +1677,7 @@ simulated function font LoadLevelActionFont()
 }
 
 // Draw Health Bars for damage opened doors.
+<<<<<<< HEAD
 simulated function DrawDoorHealthBars(Canvas C)
 {
 	local KFDoorMover DamageDoor;
@@ -1261,6 +1729,65 @@ simulated function DrawDoorHealthBar(Canvas C, Actor A, int Health, int MaxHealt
 		DrawKFBar(C, HBScreenPos.X, HBScreenPos.Y, 1.0f * Health / MaxHealth, 255);
 }
 
+=======
+function DrawDoorHealthBars(Canvas C)
+{
+	local KFDoorMover DamageDoor;
+	local vector CameraLocation, CamDir, TargetLocation, HBScreenPos;
+	local rotator CameraRotation;
+	local name DoorTag;
+	local int i;
+
+
+	if ( Level.TimeSeconds > LastDoorBarHealthUpdate + 0.2 ||
+        (PlayerOwner.Pawn != None && PlayerOwner.Pawn.Weapon != none && PlayerOwner.Pawn.Weapon.class == class'Welder' && PlayerOwner.bFire == 1 ))
+	{
+		if(PlayerOwner.Pawn == None)
+			return;
+		DoorCache.Remove(0, DoorCache.Length);
+
+		foreach CollidingActors(class'KFDoorMover', DamageDoor, 300.00, PlayerOwner.Pawn.Location)
+		{
+			if ( DamageDoor.WeldStrength > 0 && !DamageDoor.bHidden)
+			{
+				DoorCache.Insert(0, 1);
+				DoorCache[0] = DamageDoor;
+
+				C.GetCameraLocation(CameraLocation, CameraRotation);
+				TargetLocation = DamageDoor.WeldIconLocation /*+ vect(0, 0, 1) * Height*/;
+				TargetLocation.Z = CameraLocation.Z;
+				CamDir	= vector(CameraRotation);
+
+				if ( Normal(TargetLocation - CameraLocation) dot Normal(CamDir) >= 0.1 && DamageDoor.Tag != DoorTag && FastTrace(DamageDoor.WeldIconLocation - ((DoorCache[i].WeldIconLocation - CameraLocation) * 0.25), CameraLocation) )
+				{
+					HBScreenPos = C.WorldToScreen(TargetLocation);
+					DrawKFBar(C, HBScreenPos.X, HBScreenPos.Y, DamageDoor.WeldStrength / DamageDoor.MaxWeld, 255);
+					DoorTag = DamageDoor.Tag;
+				}
+			}
+		}
+
+		LastDoorBarHealthUpdate = Level.TimeSeconds;
+	}
+	else
+	{
+		for ( i = 0; i < DoorCache.Length; i++ )
+		{
+	 		C.GetCameraLocation(CameraLocation, CameraRotation);
+			TargetLocation = DoorCache[i].WeldIconLocation /*+ vect(0, 0, 1) * Height*/;
+			TargetLocation.Z = CameraLocation.Z;
+			CamDir	= vector(CameraRotation);
+
+			if ( Normal(TargetLocation - CameraLocation) dot Normal(CamDir) >= 0.1 && DoorCache[i].Tag != DoorTag && FastTrace(DoorCache[i].WeldIconLocation - ((DoorCache[i].WeldIconLocation - CameraLocation) * 0.25), CameraLocation) )
+			{
+				HBScreenPos = C.WorldToScreen(TargetLocation);
+				DrawKFBar(C, HBScreenPos.X, HBScreenPos.Y, DoorCache[i].WeldStrength / DoorCache[i].MaxWeld, 255);
+				DoorTag = DoorCache[i].Tag;
+			}
+		}
+	}
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function DisplayHit(vector HitDir, int Damage, class<DamageType> damageType)
 {
 	// What type of damage are we sustaining?
@@ -1307,7 +1834,39 @@ simulated function DrawDamageIndicators(Canvas C)
 
 simulated function DrawSpectatingHud( Canvas C )
 {
+<<<<<<< HEAD
 	DrawModOverlay(C);
+=======
+	local rotator CamRot;
+	local vector CamPos, ViewDir;
+	local int i;
+
+	DrawModOverlay(C);
+
+	if( bHideHud )
+	{
+		return;
+	}
+
+	// Grab our View Direction
+	C.GetCameraLocation(CamPos, CamRot);
+	ViewDir = vector(CamRot);
+
+	// Draw the Name, Health, Armor, and Veterancy above other players
+	for ( i = 0; i < PlayerInfoPawns.Length; i++ )
+	{
+		if ( PlayerInfoPawns[i].Pawn != None && PlayerInfoPawns[i].Pawn.Health > 0 && (PlayerInfoPawns[i].Pawn.Location - CamPos) dot ViewDir > 0.6 &&
+			 PlayerInfoPawns[i].RendTime > Level.TimeSeconds )
+		{
+			DrawPlayerInfo(C, PlayerInfoPawns[i].Pawn, PlayerInfoPawns[i].PlayerInfoScreenPosX, PlayerInfoPawns[i].PlayerInfoScreenPosY);
+		}
+		else
+		{
+			PlayerInfoPawns.Remove(i--, 1);
+		}
+	}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	super.DrawSpectatingHud(C);
 	if( KFPlayerController(PlayerOwner)!=None && KFPlayerController(PlayerOwner).ActiveNote!=None )
 		KFPlayerController(PlayerOwner).ActiveNote = None;
@@ -1339,7 +1898,12 @@ simulated function DrawWeaponName(Canvas C)
 	C.Font  = GetFontSizeIndex( C, -1 );
 	C.SetDrawColor(255,50,50,KFHUDAlpha);
 	C.Strlen(CurWeaponName,XL,YL);
+<<<<<<< HEAD
 	C.SetPos( (C.ClipX/2) - (XL/2) + C.ClipX / 3 , C.ClipY*0.8-YL + C.ClipY / 8);
+=======
+	//C.SetPos( (C.ClipX/2) - (XL/2) + C.ClipX / 3 , C.ClipY*0.8-YL + C.ClipY / 8 + 10);
+	C.SetPos(C.ClipX * 0.79, C.ClipY * 0.91);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	C.DrawText(CurWeaponName);
 }
 
@@ -1524,6 +2088,7 @@ simulated function DrawEndGameHUD( Canvas C, bool bVictory )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	KFHUDAlpha=200
 	GrainAlpha=200
 	HealthBarFullVisDist=700.000000
@@ -1584,4 +2149,47 @@ defaultproperties
 	YouveLostTheMatch="Squad eliminated."
 	ConsoleMessagePosX=0.005000
 	ConsoleMessagePosY=0.920000
+=======
+     KFHUDAlpha=200
+     GrainAlpha=200
+     HealthBarFullVisDist=700.000000
+     HealthBarCutoffDist=2000.000000
+     DoorHealthViewDist=4000.000000
+     BarLength=54.250000
+     BarHeight=10.000000
+     HealthBarWidth=50.000000
+     HealthBarHeight=10.000000
+     DigitsBig=(DigitTexture=Texture'KillingFloorHUD.Generic.HUD',TextureCoords[0]=(X2=38,Y2=38),TextureCoords[1]=(X1=39,X2=77,Y2=38),TextureCoords[2]=(X1=78,X2=116,Y2=38),TextureCoords[3]=(X1=117,X2=155,Y2=38),TextureCoords[4]=(X1=156,X2=194,Y2=38),TextureCoords[5]=(X1=195,X2=233,Y2=38),TextureCoords[6]=(X1=234,X2=272,Y2=38),TextureCoords[7]=(X1=273,X2=311,Y2=38),TextureCoords[8]=(X1=312,X2=350,Y2=38),TextureCoords[9]=(X1=351,X2=389,Y2=38),TextureCoords[10]=(X1=390,X2=428,Y2=38))
+     AmmoIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=128,X2=191,Y2=63),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-16,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     BulletIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=64,X2=127,Y2=63),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-394,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     DividerIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(Y1=64,X2=31,Y2=127),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-219,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     TorchBatteryIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=14,Y1=180,X2=30,Y2=192),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosY=1.000000,OffsetX=-16,OffsetY=-100,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     DigitsClipsLeft=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-74,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     DigitsNumLeftInClip=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-190,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     HealthBarBackMat=Texture'InterfaceContent.Menu.BorderBoxD'
+     HealthBarMat=Texture'KFInterfaceContent.Menu.StatusBarInner'
+     GrenadeIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X2=63,Y2=63),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-16,OffsetY=-100,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     DigitsGrenade=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-74,OffsetY=-80,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     HealthArmourBorderLeft=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=14,Y1=204,X2=254,Y2=249),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=10,OffsetY=-10,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     HealthMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=186,X2=250,Y2=199),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=37,OffsetY=-15,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     ArmourMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=168,X2=250,Y2=181),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=37,OffsetY=-38,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     BatteryMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=150,X2=250,Y2=163),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosY=1.000000,OffsetX=1220,OffsetY=-100,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     CashIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=193,X2=255,Y2=63),TextureScale=0.295000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=446,OffsetY=-15,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     DigitsCash=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=374,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     ToolChargeMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=186,X2=250,Y2=199),TextureScale=0.750000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-6,OffsetY=-6,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     CarryIcon=Texture'KFKillMeNow.KFHUDIcons'
+     VisionOverlay=Shader'KFX.SepiaShader'
+     GhostMat=Shader'KFX.LightBloom'
+     NearDeathOverlay=Shader'KFX.NearDeathShader'
+     FireOverlay=Shader'KFX.BlazingShader'
+     LevelActionFontColor=(B=255,G=255,R=255,A=255)
+     LevelActionPositionX=0.500000
+     LevelActionPositionY=0.250000
+     VeterancyMatScaleFactor=1.500000
+     OverlayFadeSpeed=0.024250
+     YouveWonTheMatch="Your squad survived! "
+     YouveLostTheMatch="Squad eliminated."
+     ConsoleMessagePosX=0.005000
+     ConsoleMessagePosY=0.920000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

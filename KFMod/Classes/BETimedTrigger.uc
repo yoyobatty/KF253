@@ -29,5 +29,9 @@ event Timer()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	eventDelay=1.000000
+=======
+     eventDelay=1.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

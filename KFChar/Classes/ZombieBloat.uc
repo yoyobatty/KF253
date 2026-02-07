@@ -88,12 +88,26 @@ function SpawnTwoShots()
 	local vector X,Y,Z, FireStart;
 	local rotator FireRotation;
 
+<<<<<<< HEAD
+=======
+	if( Controller!=None && KFDoorMover(Controller.Target)!=None )
+	{
+		Controller.Target.TakeDamage(22,Self,Location,vect(0,0,0),Class'DamTypeVomit');
+		return;
+	}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	GetAxes(Rotation,X,Y,Z);
 	FireStart = Location+(vect(30,0,64) >> Rotation)*DrawScale;
 	if ( !SavedFireProperties.bInitialized )
 	{
+<<<<<<< HEAD
 		SavedFireProperties.AmmoClass = Class'SkaarjAmmo';
 		SavedFireProperties.ProjectileClass = Class'KFBloatVomit';
+=======
+		SavedFireProperties.AmmoClass = MyAmmo.Class;
+		SavedFireProperties.ProjectileClass = MyAmmo.ProjectileClass;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		SavedFireProperties.WarnTargetPct = 1;
 		SavedFireProperties.MaxRange = 500;
 		SavedFireProperties.bTossed = False;
@@ -102,6 +116,7 @@ function SpawnTwoShots()
 		SavedFireProperties.bInstantHit = True;
 		SavedFireProperties.bInitialized = True;
 	}
+<<<<<<< HEAD
 	FireRotation = Controller.AdjustAim(SavedFireProperties,FireStart,600);
 	Spawn(Class'KFBloatVomit',,,FireStart,FireRotation);
 
@@ -115,6 +130,19 @@ function SpawnTwoShots()
 
 	if( Controller!=None && KFDoorMover(Controller.Target)!=None )
 		Controller.Target.TakeDamage(22,Self,Location,vect(0,0,0),Class'DamTypeVomit');
+=======
+  ToggleAuxCollision(false);
+	FireRotation = Controller.AdjustAim(SavedFireProperties,FireStart,600);
+	Spawn(MyAmmo.ProjectileClass,,,FireStart,FireRotation);
+
+	FireStart-=(0.5*CollisionRadius*Y);
+	FireRotation.Yaw -= 1200;
+	spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
+	FireStart+=(CollisionRadius*Y);
+	FireRotation.Yaw += 2400;
+	spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
+  ToggleAuxCollision(true);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 
@@ -157,9 +185,12 @@ function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
 
   super.PlayDyingAnimation(DamageType, HitLoc);
   
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
   if(BloatJet!=none)
   {
     if(Gored < 5)
@@ -201,12 +232,23 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// Bloats are volatile. They burn faster than other zeds.
 	if (DamageType == class 'Burned')
 		Damage *= 1.5;
+<<<<<<< HEAD
 	if( damageType!=Class'DamTypeVomit' )
 		Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
+=======
+	if( damageType==Class'DamTypeVomit' )
+		return;
+  Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
+}
+
+function TakeBileDamage()
+{
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
+<<<<<<< HEAD
 	MeleeAnims(0)="BloatChop2"
 	MeleeAnims(1)="BloatChop2"
 	MeleeAnims(2)="BloatChop2"
@@ -262,4 +304,63 @@ defaultproperties
 	Skins(1)=Texture'KFCharacters.BloatCleaverSkin'
 	Mass=400.000000
 	RotationRate=(Yaw=45000,Roll=0)
+=======
+  MeleeAnims(0)="BloatChop2"
+  MeleeAnims(1)="BloatChop2"
+  MeleeAnims(2)="BloatChop2"
+  MoanVoice(0)=Sound'KFPlayerSound.BloatVoice1'
+  MoanVoice(1)=Sound'KFPlayerSound.BloatVoice3'
+  MoanVoice(2)=Sound'KFPlayerSound.BloatVoice4'
+  damageRand=8
+  damageConst=10
+  damageForce=70000
+  bFatAss=True
+  KFRagdollName="BloatRag"
+  PuntAnim="BloatPunt"
+  Intelligence=BRAINS_Stupid
+  bCanDistanceAttackDoors=True
+  bUseExtendedCollision=True
+  ColOffset=(Z=60)//(Z=42)
+  ColRadius=27
+  ColHeight=22//40
+  HitSound(0)=Sound'KFPlayerSound.zpain1'
+  HitSound(1)=Sound'KFPlayerSound.zpain2'
+  HitSound(2)=Sound'KFPlayerSound.zpain3'
+  HitSound(3)=Sound'KFPlayerSound.zpain4'
+  ChallengeSound(0)=Sound'KFPlayerSound.BloatVoice1'
+  ChallengeSound(1)=Sound'KFPlayerSound.BloatVoice3'
+  ChallengeSound(2)=Sound'KFPlayerSound.BloatVoice3'
+  ChallengeSound(3)=Sound'KFPlayerSound.BloatVoice4'
+  AmmunitionClass=Class'KFMod.BZombieAmmo'
+  ScoringValue=2
+  IdleHeavyAnim="BloatIdle"
+  IdleRifleAnim="BloatIdle"
+  MeleeRange=55.000000
+  GroundSpeed=75.000000
+  WaterSpeed=102.000000
+  HealthMax=500.000000
+  Health=500
+  HeadHeight=2.5
+  HeadScale=1.5
+  MenuName="Bloat"
+  ControllerClass=Class'KFChar.BloatZombieController'
+  MovementAnims(0)="WalkBloat"
+  MovementAnims(1)="WalkBloat"
+  MovementAnims(2)="WalkBloat"
+  MovementAnims(3)="WalkBloat"
+  WalkAnims(0)="WalkBloat"
+  WalkAnims(1)="WalkBloat"
+  WalkAnims(2)="WalkBloat"
+  WalkAnims(3)="WalkBloat"
+  IdleCrouchAnim="BloatIdle"
+  IdleWeaponAnim="BloatIdle"
+  IdleRestAnim="BloatIdle"
+  AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
+  Mesh=SkeletalMesh'KFCharacterModels.Bloat'
+  PrePivot=(Z=8.000000)
+  Skins(0)=Shader'KFCharacters.Zombie7Shader'
+  Skins(1)=Texture'KFCharacters.BloatCleaverSkin'
+  Mass=400.000000
+  RotationRate=(Yaw=45000,Roll=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

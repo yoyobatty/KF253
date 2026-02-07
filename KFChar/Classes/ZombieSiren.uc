@@ -21,6 +21,10 @@ function bool FlipOver()
 {
 	Return False;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function DoorAttack(Actor A)
 {
 	if ( bShotAnim || Physics == PHYS_Swimming || bDecapitated || A==None )
@@ -28,20 +32,37 @@ function DoorAttack(Actor A)
 	bShotAnim = true;
 	SetAnimAction('Siren_Scream');
 }
+<<<<<<< HEAD
 function RangedAttack(Actor A)
 {
 	local int LastFireTime;
+=======
+
+function RangedAttack(Actor A)
+{
+	local int LastFireTime;
+	local float Dist;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if ( bShotAnim || bDecapitated )
 		return;
 
+<<<<<<< HEAD
+=======
+	Dist = VSize(A.Location - Location);
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if ( Physics == PHYS_Swimming )
 	{
 		SetAnimAction('Claw');
 		bShotAnim = true;
 		LastFireTime = Level.TimeSeconds;
 	}
+<<<<<<< HEAD
 	else if ( VSize(A.Location - Location) < MeleeRange + CollisionRadius + A.CollisionRadius )
+=======
+	else if ( Dist < MeleeRange + CollisionRadius + A.CollisionRadius )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	{
 		bShotAnim = true;
 		LastFireTime = Level.TimeSeconds;
@@ -50,6 +71,7 @@ function RangedAttack(Actor A)
 		Controller.bPreparingMove = true;
 		Acceleration = vect(0,0,0);
 	}
+<<<<<<< HEAD
 	else if(VSize(A.Location - Location) <= 700 && !bDecapitated)
 	{
 		bShotAnim=true;
@@ -59,6 +81,38 @@ function RangedAttack(Actor A)
 	}
 }
 
+=======
+	else if(Dist <= ScreamRadius && !bDecapitated)
+	{
+		bShotAnim=true;
+		SetAnimAction('Siren_Scream');
+		// Only stop moving if we are close
+		if( Dist < ScreamRadius * 0.75 ) //0.25 was too fucking close, holy shit
+		{
+    		Controller.bPreparingMove = true;
+    		Acceleration = vect(0,0,0);
+        }
+        else
+        {
+            Acceleration = AccelRate * Normal(A.Location - Location);
+        }
+	}
+}
+
+simulated function int DoAnimAction( name AnimName )
+{
+	if( AnimName=='Siren_Scream' || AnimName=='Siren_Bite' )
+	{
+		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
+		PlayAnim(AnimName,, 0.1, 1);
+		return 1;
+	}
+
+	PlayAnim(AnimName,,0.1);
+	Return 0;
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Scream Time
 simulated function SpawnTwoShots()
 {
@@ -72,9 +126,15 @@ simulated function SpawnTwoShots()
 	if( Level.NetMode!=NM_Client )
 	{
 		// Deal Actual Damage.
+<<<<<<< HEAD
 		HurtRadius(ScreamDamage ,ScreamRadius, ScreamDamageType, ScreamForce, Location);
 		if( Controller!=None && KFDoorMover(Controller.Target)!=None )
 			Controller.Target.TakeDamage(ScreamDamage*0.9,Self,Location,vect(0,0,0),ScreamDamageType);
+=======
+		if( Controller!=None && KFDoorMover(Controller.Target)!=None )
+			Controller.Target.TakeDamage(ScreamDamage*0.6,Self,Location,vect(0,0,0),ScreamDamageType);
+		else HurtRadius(ScreamDamage ,ScreamRadius, ScreamDamageType, ScreamForce, Location);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 }
 
@@ -93,7 +153,11 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 	{
 		// don't let blast damage affect fluid - VisibleCollisingActors doesn't really work for them - jag
 		// Or Karma actors in this case. Self inflicted Death due to flying chairs is uncool for a zombie of your stature.
+<<<<<<< HEAD
 		if( Victims!=self && !Victims.IsA('FluidSurfaceInfo') && Victims.Class!=Class && !Victims.IsA('ExtendedZCollision') )
+=======
+		if( Victims!= None && Victims!=self && !Victims.IsA('FluidSurfaceInfo')  && !Victims.IsA('KFMonster') && !Victims.IsA('ExtendedZCollision') && !Victims.IsA('KFBloatVomit') )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		{
 			dir = Victims.Location - HitLocation;
 			pwndir = dir;
@@ -112,7 +176,11 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 				Momentum = 0;
 
 			if (Victims.IsA('KFGlassMover'))   // Hack for shattering in interesting ways.
+<<<<<<< HEAD
 				DamageAmount = Mover(Victims).DamageThreshold * rand ((Mover(Victims).DamageThreshold * 0.4)) ;
+=======
+				DamageAmount = KFGlassMover(Victims).Health * rand ((KFGlassMover(Victims).Health * 0.4)) ;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 			Victims.TakeDamage(damageScale * DamageAmount*dotDmg,Instigator,
 			 Victims.Location - 0.5 * (Victims.CollisionHeight + Victims.CollisionRadius) * dir,(damageScale * Momentum * dir)*dotDmg,DamageType);
@@ -156,6 +224,7 @@ function PlayDyingSound()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ScreamRadius=800
 	ScreamDamageType=Class'KFMod.SirenScreamDamage'
 	ScreamForce=-300000
@@ -163,6 +232,15 @@ defaultproperties
 	RotRate=(X=500.000000,Y=500.000000,Z=500.000000)
 	RotTime=3.500000
 	OffsetMag=(X=45.000000,Y=45.000000,Z=45.000000)
+=======
+	ScreamRadius=700
+	ScreamDamageType=Class'KFMod.SirenScreamDamage'
+	ScreamForce=-50000
+	RotMag=(X=200.000000,Y=200.000000,Z=200.000000)
+	RotRate=(X=500.000000,Y=500.000000,Z=500.000000)
+	RotTime=3.500000
+	OffsetMag=(X=25.000000,Y=25.000000,Z=25.000000)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	OffsetRate=(X=500.000000,Y=500.000000,Z=500.000000)
 	OffsetTime=3.500000
 	MeleeAnims(0)="Siren_Bite"
@@ -171,11 +249,18 @@ defaultproperties
 	HitAnims(0)="HitReactionF"
 	HitAnims(1)="HitReactionF"
 	HitAnims(2)="HitReactionF"
+<<<<<<< HEAD
+=======
+	PuntAnim="Siren_Bite"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	MoanVoice(0)=Sound'KFPlayerSound.SirenVoice1'
 	MoanVoice(1)=Sound'KFPlayerSound.SirenVoice2'
 	MoanVoice(2)=Sound'KFPlayerSound.SirenVoice3'
 	MoanVoice(3)=Sound'KFPlayerSound.SirenVoice4'
+<<<<<<< HEAD
 	bDurableHead=True
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	damageRand=7
 	damageConst=10
 	damageForce=5000
@@ -183,7 +268,11 @@ defaultproperties
 	ZombieDamType(0)=Class'KFMod.DamTypeSlashingAttack'
 	ZombieDamType(1)=Class'KFMod.DamTypeSlashingAttack'
 	ZombieDamType(2)=Class'KFMod.DamTypeSlashingAttack'
+<<<<<<< HEAD
 	ScreamDamage=9
+=======
+	ScreamDamage=8
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	bCanDistanceAttackDoors=True
 	HitSound(0)=Sound'KFPlayerSound.StalkerPain1'
 	HitSound(1)=Sound'KFPlayerSound.StalkerPain2'
@@ -200,8 +289,14 @@ defaultproperties
 	MeleeRange=45.000000
 	GroundSpeed=100.000000
 	WaterSpeed=80.000000
+<<<<<<< HEAD
 	HealthMax=350.000000
 	Health=350
+=======
+	HealthMax=300.000000
+	Health=300
+	HeadHealth=200.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	MenuName="Siren"
 	MovementAnims(0)="Siren_Walk"
 	MovementAnims(1)="Siren_Walk"

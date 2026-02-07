@@ -24,6 +24,11 @@ event Untrigger( Actor Other, Pawn EventInstigator )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bSendUntrigger=True
 	bSendTrigger=True
+=======
+     bSendUntrigger=True
+     bSendTrigger=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

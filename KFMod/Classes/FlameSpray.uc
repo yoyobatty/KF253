@@ -34,7 +34,10 @@ simulated function PostBeginPlay()
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 
     SetTimer(0.4, false);
+<<<<<<< HEAD
     tempStartLoc = Location;
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     /*
 
@@ -53,8 +56,15 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Speed=1500.000000
 	MaxSpeed=2000.000000
 	Damage=10.000000
 	DamageRadius=50.000000
+=======
+     Speed=1500.000000
+     MaxSpeed=2000.000000
+     Damage=10.000000
+     DamageRadius=50.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

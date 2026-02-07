@@ -1,6 +1,10 @@
 // Zombie Monster for KF Invasion gametype
 
+<<<<<<< HEAD
 class ZombieFleshpound extends KFMonster ;
+=======
+class ZombieFleshpound extends KFMonster;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 #exec OBJ LOAD FILE=KFCharacters.utx
 #exec OBJ LOAD FILE=KFCharacterModels.ukx
@@ -22,10 +26,19 @@ var() float	OffsetTime;				// how much time to offset view
 
 var name ChargingAnim;		// How he runs when charging the player.
 
+<<<<<<< HEAD
 var ONSHeadlightCorona DeviceGlow;
 
 var () int RageDamageThreshold;  // configurable.
 
+=======
+//var ONSHeadlightCorona DeviceGlow;
+
+var () int RageDamageThreshold;  // configurable.
+
+var bool bFrustrated;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	reliable if(Role == ROLE_Authority)
@@ -63,16 +76,27 @@ function PlayTakeHit(vector HitLocation, int Damage, class<DamageType> DamageTyp
 
 function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
 {
+<<<<<<< HEAD
 	local int BlockSlip;
 	local float BlockChance, RageChance;
 	local Vector X,Y,Z, Dir;
 
 	GetAxes(Rotation, X,Y,Z);
+=======
+	local Vector Dir;
+	local int OldHealth;
+
+	//GetAxes(Rotation, X,Y,Z);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if( LastDamagedTime<Level.TimeSeconds )
 		TwoSecondDamageTotal = 0;
 	LastDamagedTime = Level.TimeSeconds+2;
+<<<<<<< HEAD
 	TwoSecondDamageTotal += Damage;
+=======
+	OldHealth = Health;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	
 	// He's impervious to small arms fire (non explosives)
 	// Frags and LAW rockets will bring him down way faster than bullets and shells.
@@ -86,6 +110,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	if (Damage >= Health)
 		PostNetReceive();
 
+<<<<<<< HEAD
 	// Damage Berserk responses...
 	// Start a charge.
 	// The Lower his health, the less damage needed to trigger this response.
@@ -97,10 +122,15 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// Calculate whether the shot was coming from in front.
 	Dir = -Normal(Location - hitlocation);
 	BlockSlip = rand(5);
+=======
+	// Calculate whether the shot was coming from in front.
+	Dir = -Normal(Location - hitlocation);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if (AnimAction == 'PoundBlock')
 		Damage *= BlockDamageReduction;
 
+<<<<<<< HEAD
 	if (Dir Dot X > 0.7 || Dir == vect(0,0,0))
 		BlockChance = (Health / HealthMax * 100 ) - Damage * 0.25;
 
@@ -111,12 +141,23 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 	// Log (Damage);
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if (damageType == class 'DamTypeVomit')
 		Damage = 0; // nulled
 
 	if((Health - Damage) > 0)
 		Momentum = vect(0,0,0) ;
+<<<<<<< HEAD
 	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType) ;
+=======
+	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType);
+
+	TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage in Balance Round 6(second attempt)
+
+	if (TwoSecondDamageTotal > RageDamageThreshold && !bChargingPlayer || bFrustrated)
+		 StartCharging();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 // changes colors on Device (notified in anim)
@@ -144,9 +185,32 @@ function RangedAttack(Actor A)
 	}
 }
 
+<<<<<<< HEAD
 // Sets the FP in a berserk charge state until he either strikes his target, or hits timeout
 function StartCharging()
 {
+=======
+function BlockDamage()
+{
+	if (bShotAnim || Physics == PHYS_Swimming)
+		return;
+	else
+	{
+		//Level.Game.Broadcast(self, 'FleshPoundBlock');
+		bShotAnim = true;
+		SetAnimAction('PoundBlock');
+		return;
+	}
+}
+
+// Sets the FP in a berserk charge state until he either strikes his target, or hits timeout
+function StartCharging()
+{
+    if( Health <= 0 )
+    {
+        return;
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	SetAnimAction('PoundRage');
 	Acceleration = vect(0,0,0);
 	bShotAnim = true;
@@ -154,7 +218,28 @@ function StartCharging()
 	Velocity.Y = 0;
 	Controller.GoToState('WaitForAnim');
 	KFMonsterController(Controller).bUseFreezeHack = True;
+<<<<<<< HEAD
 	GoToState('RageCharging');
+=======
+    FleshpoundZombieController(Controller).SetPoundRageTimout(1.5);
+	GoToState('BeginRaging');
+}
+
+state BeginRaging
+{
+    Ignores StartCharging;
+
+	function Tick( float Delta )
+	{
+        Acceleration = vect(0,0,0);
+
+        global.Tick(Delta);
+	}
+
+Begin:
+    Sleep(1.5);
+    GotoState('RageCharging');
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 State RageCharging
@@ -163,27 +248,71 @@ Ignores StartCharging;
 
 	function BeginState()
 	{
+<<<<<<< HEAD
 		bChargingPlayer = true;
 		if( Level.NetMode!=NM_DedicatedServer )
 			ClientChargingAnims();
 		RageStartTime = Level.TimeSeconds+5+FRand()*6;
+=======
+		local float DifficultyModifier;
+
+		bChargingPlayer = true;
+		if( Level.NetMode!=NM_DedicatedServer )
+			ClientChargingAnims();
+
+		// Scale rage length by difficulty
+		if( Level.Game.GameDifficulty < 2.0 )
+		{
+			DifficultyModifier = 0.85;
+		}
+		else if( Level.Game.GameDifficulty < 4.0 )
+		{
+			DifficultyModifier = 1.0;
+		}
+		else if( Level.Game.GameDifficulty < 5.0 )
+		{
+			DifficultyModifier = 1.25;
+		}
+		else // Hardest difficulty
+		{
+			DifficultyModifier = 3.0; 
+		}
+		RageStartTime = (Level.TimeSeconds + 5 * DifficultyModifier) + (FRand() * 6 * DifficultyModifier);
+		NetUpdateTime = Level.TimeSeconds - 1;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 	function EndState()
 	{
 		bChargingPlayer = False;
+<<<<<<< HEAD
 		if( Health>0 )
 		{
 			GroundSpeed = default.GroundSpeed;
 			if( Level.NetMode!=NM_DedicatedServer )
 				ClientChargingAnims();
+=======
+		bFrustrated = false;
+		FleshPoundZombieController(Controller).RageFrustrationTimer = 0;
+		if( Health>0 )
+		{
+			SetGroundSpeed(OriginalGroundSpeed);
+			if( Level.NetMode!=NM_DedicatedServer )
+				ClientChargingAnims();
+			NetUpdateTime = Level.TimeSeconds - 1;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 	function Tick( float Delta )
 	{
 		if( !bShotAnim )
 		{
+<<<<<<< HEAD
 			GroundSpeed = Default.GroundSpeed*2;
 			if( Level.TimeSeconds>RageStartTime )
+=======
+			SetGroundSpeed(OriginalGroundSpeed * 2.1);//2.0;
+			if( !bFrustrated && Level.TimeSeconds>RageStartTime )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				GoToState('');
 		}
 	}
@@ -301,7 +430,11 @@ function SpinDamage(actor Target)
 
 	if (Target !=none && Target.IsA('KFDoorMover'))
 	{
+<<<<<<< HEAD
 		Target.TakeDamage(DamageAmount , self ,HitLocation,pushdir, class 'KFmod.ZombieMeleeDamage');
+=======
+		Target.TakeDamage(DamageAmount , self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		PlayZombieAttackHitSound();
 	}
 
@@ -312,13 +445,22 @@ function SpinDamage(actor Target)
 			HumanTarget.Controller.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 
 		//TODO - line below was KFPawn. Does this whole block need to be KFPawn, or is it OK as KFHumanPawn?
+<<<<<<< HEAD
 		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFmod.ZombieMeleeDamage');
+=======
+		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 		if (KFHumanPawn(Target).Health <=0)
 		{
 			KFHumanPawn(Target).SpawnGibs(rotator(pushdir), 1);
 			TearBone=KFPawn(Target).GetClosestBone(HitLocation,Velocity,dummy);
+<<<<<<< HEAD
 			HideBone(TearBone);
+=======
+			KFHumanPawn(Controller.Target).HideBone(TearBone);
+			//HideBone(TearBone);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 }
@@ -383,6 +525,11 @@ simulated event SetAnimAction(name NewAction)
 		}
 		else AnimAction = NewAction;
 
+<<<<<<< HEAD
+=======
+		CurrentDamtype = ZombieDamType[Rand(3)];
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		if ( PlayAnim(AnimAction,,0.1) && AnimAction != KFHitFront 
 			&& AnimAction != KFHitBack
 			&& AnimAction != KFHitLeft
@@ -417,6 +564,7 @@ function bool SameSpeciesAs(Pawn P)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	BlockDamageReduction=0.400000
 	RotMag=(X=400.000000,Y=400.000000)
 	RotRate=(X=400.000000,Y=400.000000,Z=400.000000)
@@ -483,4 +631,73 @@ defaultproperties
 	Skins(3)=Shader'KFCharacters.FPAmberBloomShader'
 	Mass=600.000000
 	RotationRate=(Yaw=45000,Roll=0)
+=======
+     BlockDamageReduction=0.400000
+     RotMag=(X=400.000000,Y=400.000000)
+     RotRate=(X=400.000000,Y=400.000000,Z=400.000000)
+     RotTime=2.500000
+     OffsetMag=(X=35.000000,Y=35.000000,Z=35.000000)
+     OffsetRate=(X=300.000000,Y=300.000000,Z=300.000000)
+     OffsetTime=3.500000
+     ChargingAnim="PoundRun"
+     RageDamageThreshold=360
+     MeleeAnims(0)="PoundAttack1"
+     MeleeAnims(1)="PoundAttack2"
+     MeleeAnims(2)="PoundAttack3"
+     MoanVoice(0)=Sound'KFPlayerSound.Flesh1'
+     MoanVoice(1)=Sound'KFPlayerSound.Flesh2'
+     MoanVoice(2)=Sound'KFPlayerSound.Flesh3'
+     MoanVoice(3)=Sound'KFPlayerSound.Flesh4'
+     damageRand=15
+     damageConst=25
+     damageForce=15000
+     bFatAss=True
+     KFRagdollName="FleshPoundRag"
+     SpinDamConst=20.000000
+     SpinDamRand=20.000000
+     bMeleeStunImmune=True
+     Intelligence=BRAINS_Mammal
+     bUseExtendedCollision=True
+     ColOffset=(Z=42.000000)
+     ColRadius=36.000000
+     ColHeight=46.000000
+     bBoss=True
+     HitSound(0)=Sound'KFPlayerSound.zpain1'
+     HitSound(1)=Sound'KFPlayerSound.zpain2'
+     HitSound(2)=Sound'KFPlayerSound.zpain3'
+     HitSound(3)=Sound'KFPlayerSound.zpain4'
+     ScoringValue=10
+     IdleHeavyAnim="PoundIdle"
+     IdleRifleAnim="PoundIdle"
+     RagDeathVel=100.000000
+     RagDeathUpKick=100.000000
+     MeleeRange=55.000000
+     GroundSpeed=130.000000
+     WaterSpeed=120.000000
+     HealthMax=1500.000000
+     Health=1500
+	 HeadHealth=800
+     MenuName="Flesh Pound"
+     ControllerClass=Class'KFChar.FleshpoundZombieController'
+     MovementAnims(0)="PoundWalk"
+     MovementAnims(1)="PoundWalk"
+     MovementAnims(2)="PoundWalk"
+     MovementAnims(3)="PoundWalk"
+     WalkAnims(0)="PoundWalk"
+     WalkAnims(1)="PoundWalk"
+     WalkAnims(2)="PoundWalk"
+     WalkAnims(3)="PoundWalk"
+     IdleCrouchAnim="PoundIdle"
+     IdleWeaponAnim="PoundIdle"
+     IdleRestAnim="PoundIdle"
+     AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
+     Mesh=SkeletalMesh'KFCharacterModels.ZombieBoss'
+     PrePivot=(Z=8.000000)
+     Skins(0)=Texture'KFCharacters.PoundSkin'
+     Skins(1)=Shader'KFCharacters.PoundBitsShader'
+     Skins(2)=FinalBlend'KFCharacters.YellowPoundMeter'
+     Skins(3)=Shader'KFCharacters.FPAmberBloomShader'
+     Mass=600.000000
+     RotationRate=(Yaw=45000,Roll=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -16,6 +16,11 @@ function bool CheckReplacement( Actor Other, out byte bSuperRelevant )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	FriendlyName="Machine Pistols"
 	Description="All the semi-auto 9mms in Killing Floor are replaced with fully automatic counterparts. "
+=======
+     FriendlyName="Machine Pistols"
+     Description="All the semi-auto 9mms in Killing Floor are replaced with fully automatic counterparts. "
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

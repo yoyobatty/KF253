@@ -146,10 +146,19 @@ Respawn:
 
 defaultproperties
 {
+<<<<<<< HEAD
 	AmmoAmount=500
 	InventoryType=Class'KFMod.ShotgunAmmo'
 	PickupMessage="ShotgunSuperAmmoPickup"
 	PickupForce="AssaultAmmoPickup"
 	DrawType=DT_StaticMesh
 	StaticMesh=StaticMesh'KillingFloorStatics.L85Ammo'
+=======
+     AmmoAmount=500
+     InventoryType=Class'KFMod.ShotgunAmmo'
+     PickupMessage="ShotgunSuperAmmoPickup"
+     PickupForce="AssaultAmmoPickup"
+     DrawType=DT_StaticMesh
+     StaticMesh=StaticMesh'KillingFloorStatics.L85Ammo'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
