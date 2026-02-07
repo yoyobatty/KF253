@@ -1,0 +1,34 @@
+class KFCinematicGame extends KFSPGameType;
+
+defaultproperties
+{
+	RoundLimit=1
+	RoundTimeLimit=10
+	PracticeTimeLimit=60
+	ReinforcementsFreq=7
+	WaveConfigMenu="GUI2K4.UT2K4InvasionWaveConfig"
+	FinalWave=15
+	Waves(0)=(WaveMask=1,WaveMaxMonsters=30,WaveDuration=255)
+	Waves(1)=(WaveMask=7,WaveMaxMonsters=40,WaveDuration=255,WaveDifficulty=0.000000)
+	Waves(2)=(WaveMask=15,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.000000)
+	Waves(3)=(WaveMask=63,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(4)=(WaveMask=60,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(5)=(WaveMask=64,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(6)=(WaveMask=108,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(7)=(WaveMask=200,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(8)=(WaveMask=496,WaveMaxMonsters=50,WaveDuration=255,WaveDifficulty=0.500000)
+	Waves(9)=(WaveMask=638,WaveMaxMonsters=50,WaveDuration=255)
+	Waves(10)=(WaveDuration=90)
+	Waves(11)=(WaveDuration=180)
+	Waves(12)=(WaveDuration=180)
+	Waves(13)=(WaveDuration=180)
+	Waves(14)=(WaveDuration=180)
+	Waves(15)=(WaveDuration=255)
+	bAdjustSkill=True
+	SpawnProtectionTime=2.000000
+	LoginMenuClass="GUI2K4.UT2K4PlayerLoginMenu"
+	bWeaponStay=False
+	ResetTimeDelay=0
+	GoalScore=0
+	PlayerControllerClassName="KFMod.KFCinematicPlayer"
+}
