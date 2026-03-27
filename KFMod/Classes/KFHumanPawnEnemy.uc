@@ -96,6 +96,7 @@ function Died(Controller Killer, class<DamageType> damageType, vector HitLocatio
 
 defaultproperties
 {
+<<<<<<< HEAD
 	AttitudeToPlayer=ATTITUDE_Friendly
 	ReactionTime=1.000000
 	HealthMod=125
@@ -111,4 +112,21 @@ defaultproperties
 	HealthMax=125.000000
 	Health=125
 	ControllerClass=Class'KFMod.KFFriendlyAI'
+=======
+     AttitudeToPlayer=ATTITUDE_Friendly
+     ReactionTime=1.000000
+     HealthMod=125
+     WeaponType=Class'KFMod.Single'
+     MaxMultiJump=1
+     GroundSpeed=270.000000
+     WaterSpeed=250.000000
+     AirSpeed=250.000000
+     JumpZ=300.000000
+     MaxFallSpeed=6000.000000
+     BaseEyeHeight=50.000000
+     EyeHeight=50.000000
+     HealthMax=125.000000
+     Health=125
+     ControllerClass=Class'KFMod.KFFriendlyAI'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

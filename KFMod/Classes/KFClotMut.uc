@@ -28,7 +28,13 @@ function Timer()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	GroupName="KF-MonsterMut"
 	FriendlyName="KF Clot Mutator"
 	Description="Only Clots will appear during the game."
+=======
+     GroupName="KF-MonsterMut"
+     FriendlyName="KF Clot Mutator"
+     Description="Only Clots will appear during the game."
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

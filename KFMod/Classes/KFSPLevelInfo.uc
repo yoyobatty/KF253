@@ -55,5 +55,9 @@ function AddGameInv( Pawn Other )
 defaultproperties
 {
 	bUseVisionOverlay=True
+<<<<<<< HEAD
+=======
+	RemoteRole=ROLE_None
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	bNoDelete=True
 }

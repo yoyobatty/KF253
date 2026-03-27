@@ -216,9 +216,17 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bDisableAfterTriggered=True
 	TimeOutSeconds=60
 	PlayerThreshold=0.750000
 	bStatic=False
 	RemoteRole=ROLE_None
+=======
+     bDisableAfterTriggered=True
+     TimeOutSeconds=60
+     PlayerThreshold=0.750000
+     bStatic=False
+     RemoteRole=ROLE_None
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

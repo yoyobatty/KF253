@@ -46,7 +46,11 @@ function PlayZombieAttackHitSound()
 function RangedAttack(Actor A)
 {
 	Super.RangedAttack(A);
+<<<<<<< HEAD
 	if( !bShotAnim && !bDecapitated && VSize(A.Location-Location)<=300 )
+=======
+	if( !bShotAnim && !bDecapitated && VSize(A.Location-Location)<=400 )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		GoToState('RunningState');
 }
 
@@ -54,14 +58,22 @@ State RunningState
 {
 	function BeginState()
 	{
+<<<<<<< HEAD
 		GroundSpeed = default.GroundSpeed*1.5;
+=======
+		SetGroundSpeed(OriginalGroundSpeed * 1.7);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		bRunning = true;
 		if( Level.NetMode!=NM_DedicatedServer )
 			PostNetReceive();
 	}
 	function EndState()
 	{
+<<<<<<< HEAD
 		GroundSpeed = default.GroundSpeed;
+=======
+		SetGroundSpeed(OriginalGroundSpeed);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		bRunning = False;
 		if( Level.NetMode!=NM_DedicatedServer )
 			PostNetReceive();
@@ -83,6 +95,7 @@ Begin:
 
 defaultproperties
 {
+<<<<<<< HEAD
 	MeleeAnims(0)="GoreAttack1"
 	MeleeAnims(1)="GoreAttack2"
 	MeleeAnims(2)="GoreAttack1"
@@ -124,4 +137,48 @@ defaultproperties
 	Skins(0)=Shader'KFCharacters.Zombie3Shader'
 	Mass=350.000000
 	RotationRate=(Yaw=45000,Roll=0)
+=======
+     MeleeAnims(0)="GoreAttack1"
+     MeleeAnims(1)="GoreAttack2"
+     MeleeAnims(2)="GoreAttack1"
+     MoanVoice(0)=Sound'KFPlayerSound.GoreFastVoice2'
+     MoanVoice(1)=Sound'KFPlayerSound.GoreFastVoice4'
+     MoanVoice(2)=Sound'KFPlayerSound.GoreFastVoice2'
+     bCannibal=True
+     damageRand=10
+     damageConst=10
+     damageForce=5000
+     HitSound(0)=Sound'KFPlayerSound.zpain1'
+     HitSound(1)=Sound'KFPlayerSound.zpain2'
+     HitSound(2)=Sound'KFPlayerSound.zpain3'
+     HitSound(3)=Sound'KFPlayerSound.zpain4'
+     ChallengeSound(0)=Sound'KFPlayerSound.GoreFastVoice1'
+     ChallengeSound(1)=Sound'KFPlayerSound.GoreFastVoice1'
+     ChallengeSound(2)=Sound'KFPlayerSound.GoreFastVoice3'
+     ChallengeSound(3)=Sound'KFPlayerSound.GoreFastVoice3'
+     ScoringValue=3
+     IdleHeavyAnim="GoreIdle"
+     IdleRifleAnim="GoreIdle"
+     MeleeRange=60.000000
+     GroundSpeed=140.000000
+     WaterSpeed=130.000000
+     HealthMax=350.000000
+     Health=350
+	 HeadHealth=150.000000
+     MenuName="Gorefast"
+     ControllerClass=Class'KFChar.GorefastController'
+     MovementAnims(0)="GoreWalk"
+     WalkAnims(0)="GoreWalk"
+     WalkAnims(1)="GoreWalk"
+     WalkAnims(2)="GoreWalk"
+     WalkAnims(3)="GoreWalk"
+     IdleCrouchAnim="GoreIdle"
+     IdleWeaponAnim="GoreIdle"
+     IdleRestAnim="GoreIdle"
+     AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
+     Mesh=SkeletalMesh'KFCharacterModels.GoreFast'
+     Skins(0)=Shader'KFCharacters.Zombie3Shader'
+     Mass=350.000000
+     RotationRate=(Yaw=45000,Roll=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

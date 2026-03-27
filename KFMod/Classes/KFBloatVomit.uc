@@ -3,15 +3,19 @@ class KFBloatVomit extends BioGlob;
 
 simulated function PostBeginPlay()
 {
+<<<<<<< HEAD
 	Super.PostBeginPlay();
 
 	SetOwner(None);
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if (Role == ROLE_Authority)
 	{
 		Velocity = Vector(Rotation) * Speed;
 		Velocity.Z += TossZ;
 	}
+<<<<<<< HEAD
 
 	if (Role == ROLE_Authority)
 		Rand3 = Rand(3);
@@ -20,28 +24,73 @@ simulated function PostBeginPlay()
 		bDynamicLight = false;
 		LightType = LT_None;
 	}
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     
 	// Difficulty Scaling
 	if (Level.Game != none)
 	{
+<<<<<<< HEAD
 		BaseDamage *= (Level.Game.GameDifficulty / 3);
 		Damage *= (Level.Game.GameDifficulty / 3);
 	} 
 }
 
 
+=======
+		BaseDamage = Max((DifficultyDamageModifer() * BaseDamage),1);
+		Damage = Max((DifficultyDamageModifer() * Damage),1);
+	} 
+}
+
+// Scales the damage this Zed deals by the difficulty level
+function float DifficultyDamageModifer()
+{
+    local float AdjustedDamageModifier;
+
+    if ( Level.Game.GameDifficulty >= 7.0 ) // Hell on Earth
+    {
+    	AdjustedDamageModifier = 2.0;
+    }
+    else if ( Level.Game.GameDifficulty >= 5.0 ) // Suicidal
+    {
+    	AdjustedDamageModifier = 1.5;
+    }
+    else if ( Level.Game.GameDifficulty >= 4.0 ) // Hard
+    {
+    	AdjustedDamageModifier = 1.25;
+    }
+    else if ( Level.Game.GameDifficulty >= 2.0 ) // Normal
+    {
+    	AdjustedDamageModifier = 1.0;
+    }
+    else //if ( GameDifficulty == 1.0 ) // Beginner
+    {
+    	AdjustedDamageModifier = 0.3;
+    }
+
+    return AdjustedDamageModifier;
+}
+
+function TakeDamage( int Damage, Pawn InstigatedBy, Vector HitLocation, Vector Momentum, class<DamageType> DamageType );
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 state OnGround
 {
     simulated function BeginState()
     {
+<<<<<<< HEAD
         //PlayAnim('hit');
         SetTimer(RestTime, false);
         BlowUp(Location);
+=======
+        SetTimer(RestTime, false);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     }
 
     simulated function Timer()
     {
+<<<<<<< HEAD
         if (bDrip)
         {
             bDrip = false;
@@ -55,11 +104,20 @@ state OnGround
             GotoState('Flying');
         }
         else
+=======
+        BlowUp(Location);
+    }
+
+    simulated function ProcessTouch(Actor Other, Vector HitLocation)
+    {
+        if (Pawn(Other)!=None)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         {
             BlowUp(Location);
         }
     }
 
+<<<<<<< HEAD
 	simulated function ProcessTouch(Actor Other, Vector HitLocation)
 	{
 		if ( Other != none )
@@ -143,6 +201,9 @@ singular function SplashGlobs(int NumGloblings)
         }
         //else log("unable to spawn globling");
     }
+=======
+    function TakeDamage( int Damage, Pawn InstigatedBy, Vector HitLocation, Vector Momentum, class<DamageType> DamageType );
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function Destroyed()
@@ -156,7 +217,11 @@ simulated function Destroyed()
         Fear.Destroy();
     if (Trail != None)
         Trail.Destroy();
+<<<<<<< HEAD
     //Super.Destroyed();
+=======
+    Super(Projectile).Destroyed();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 
@@ -165,7 +230,10 @@ auto state Flying
     simulated function Landed( Vector HitNormal )
     {
         local Rotator NewRot;
+<<<<<<< HEAD
         local int CoreGoopLevel;
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
         if ( Level.NetMode != NM_DedicatedServer )
         {
@@ -173,6 +241,7 @@ auto state Flying
             // explosion effects
         }
 
+<<<<<<< HEAD
         SurfaceNormal = HitNormal;
 
         // spawn globlings
@@ -183,18 +252,29 @@ auto state Flying
                 SplashGlobs(GoopLevel - CoreGoopLevel);
             SetGoopLevel(CoreGoopLevel);
         }
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         spawn(class'KFMod.VomitDecal',,,, rotator(-HitNormal));
 
         bCollideWorld = false;
         SetCollisionSize(GoopVolume*10.0, GoopVolume*10.0);
+<<<<<<< HEAD
         bProjTarget = true;
+=======
+        //bProjTarget = true;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
         NewRot = Rotator(HitNormal);
         NewRot.Roll += 32768;
         SetRotation(NewRot);
         SetPhysics(PHYS_None);
+<<<<<<< HEAD
         bCheckedsurface = false;
         Fear = Spawn(class'AvoidMarker');
+=======
+        Fear = Spawn(class'AvoidMarker');
+        Fear.StartleBots();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         GotoState('OnGround');
     }
 
@@ -214,7 +294,11 @@ auto state Flying
 	{
 		if( ExtendedZCollision(Other)!=None )
 			Return;
+<<<<<<< HEAD
 		if (Other != Instigator && (Other.IsA('Pawn') || Other.IsA('DestroyableObjective') || Other.bProjTarget))
+=======
+		if (Other != Instigator && (Pawn(Other)!=None))
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			HurtRadius(Damage,DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
 		else if ( Other != Instigator && Other.bBlockActors )
 			HitWall( Normal(HitLocation-Location), Other );
@@ -223,6 +307,7 @@ auto state Flying
 
 defaultproperties
 {
+<<<<<<< HEAD
 	BaseDamage=3
 	TouchDetonationDelay=0.000000
 	Speed=400.000000
@@ -235,4 +320,16 @@ defaultproperties
 	CollisionRadius=0.000000
 	CollisionHeight=0.000000
 	bUseCollisionStaticMesh=False
+=======
+    BaseDamage=3
+    TouchDetonationDelay=0.000000
+    Speed=400.000000
+    Damage=4.000000
+    MomentumTransfer=2000.000000
+    MyDamageType=Class'KFMod.DamTypeVomit'
+    bDynamicLight=False
+    LifeSpan=8.000000
+    Skins(0)=Texture'KillingFloorLabTextures.LabCommon.voidtex'
+    bUseCollisionStaticMesh=False
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

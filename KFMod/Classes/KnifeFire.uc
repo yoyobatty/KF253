@@ -42,14 +42,18 @@ simulated event ModeDoFire()
             
      }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
   Super(KFMeleeFire).ModeDoFire();
 
 }
 
 defaultproperties
 {
+<<<<<<< HEAD
 	FireAnims(0)="Fire"
 	FireAnims(1)="Fire2"
 	FireAnims(2)="fire3"
@@ -59,4 +63,22 @@ defaultproperties
 	hitDamageClass=Class'KFMod.DamTypeKnife'
 	FireRate=0.600000
 	BotRefireRate=0.300000
+=======
+     WeaponRange=65.000000
+     FireAnims(0)="Fire"
+     FireAnims(1)="Fire2"
+     FireAnims(2)="fire3"
+     damageConst=25
+     maxAdditionalDamage=10
+     DamagedelayMin=0.100000
+     DamagedelayMax=0.300000
+     hitDamageClass=Class'KFMod.DamTypeKnife'
+     WideDamageMinHitAngle=0.750000
+     UpSwingRot=(Pitch=20,Yaw=10)
+     UpSwingTime=0.200000
+     DownSwingRot=(Pitch=-30,Yaw=-20)
+     DownSwingTime=0.100000
+     FireRate=0.600000
+     BotRefireRate=0.900000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

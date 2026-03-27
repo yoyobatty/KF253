@@ -13,6 +13,7 @@ function ShowDeagleInfo(Canvas C)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Weight=6.000000
 	cost=300
 	BuyClipSize=10
@@ -30,4 +31,24 @@ defaultproperties
 	StaticMesh=StaticMesh'KillingFloorStatics.WinchesterGround'
 	CollisionRadius=30.000000
 	CollisionHeight=5.000000
+=======
+     Weight=6.000000
+     cost=300
+     BuyClipSize=10
+     PowerValue=50
+     SpeedValue=35
+     RangeValue=90
+     Description="A rugged and reliable single-shot rifle."
+     ItemName="Winchester"
+     AmmoItemName="Winchester bullets"
+     showMesh=SkeletalMesh'KFWeaponModels.Winchester3P'
+     AmmoMesh=StaticMesh'KillingFloorStatics.WinchesterAmmo'
+     InventoryType=Class'KFMod.Winchester'
+     PickupMessage="You got the Winchester Rifle"
+     PickupForce="AssaultRiflePickup"
+     StaticMesh=StaticMesh'KillingFloorStatics.WinchesterGround'
+     CollisionRadius=30.000000
+     CollisionHeight=5.000000
+     CorrespondingVeterancyName="Sharpshooter"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

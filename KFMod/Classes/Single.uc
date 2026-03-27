@@ -27,6 +27,7 @@ function byte BestMode()
 	return 0;
 }
 
+<<<<<<< HEAD
 defaultproperties
 {
 	ClipCount=15
@@ -63,4 +64,56 @@ defaultproperties
 	IconCoords=(X1=434,Y1=253,X2=506,Y2=292)
 	ItemName="9mm Tactical"
 	Mesh=SkeletalMesh'KFWeaponModels.9MM'
+=======
+function bool RecommendRangedAttack()
+{
+	return true;
+}
+
+simulated function bool PutDown()
+{
+	if (  Instigator.PendingWeapon != none && Instigator.PendingWeapon.class == class'Dualies' )
+	{
+		bIsReloading = false;
+	}
+
+	return super.PutDown();
+}
+
+defaultproperties
+{
+     ClipCount=15
+     ReloadRate=2.000000
+     ReloadAnim="Reload"
+     ReloadAnimRate=1.000000
+     WeaponReloadAnim="ReloadPistol"
+     ModeSwitchAnim="LightOn"
+     //FlashBoneName="Flash"
+     HudImage=Texture'KFKillMeNow.SingleHUD'
+     Weight=0.000000
+     bKFNeverThrow=True
+     bTorchEnabled=True
+     UpKick=300
+     FireModeClass(0)=Class'KFMod.SingleFire'
+     FireModeClass(1)=Class'KFMod.SingleALTFire'
+     PutDownAnim="PutDown"
+     SelectSound=Sound'KFPlayerSound.getweaponout'
+     AIRating=0.300000
+     CurrentRating=0.300000
+     bShowChargingBar=True
+     Description="A 9mm Pistol"
+     DisplayFOV=75.000000
+     Priority=3
+     SmallViewOffset=(X=13.000000,Y=18.000000,Z=-10.000000)
+     InventoryGroup=2
+     GroupOffset=1
+     PickupClass=Class'KFMod.SinglePickup'
+     PlayerViewOffset=(X=4.000000,Y=11.500000,Z=-6.000000)
+     PlayerViewPivot=(Yaw=-500,Pitch=400)
+     BobDamping=4.000000
+     AttachmentClass=Class'KFMod.SingleAttachment'
+     IconCoords=(X1=434,Y1=253,X2=506,Y2=292)
+     ItemName="9mm Tactical"
+     Mesh=SkeletalMesh'KFWeaponModels.9MM'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

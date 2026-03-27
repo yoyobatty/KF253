@@ -20,6 +20,10 @@ function PlayFiring()
 
 defaultproperties
 {
+<<<<<<< HEAD
+=======
+	WeaponRange=150.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	maxAdditionalDamage=50
 	hitDamageClass=Class'KFMod.DamTypeChainsaw'
 	TransientSoundVolume=100.000000

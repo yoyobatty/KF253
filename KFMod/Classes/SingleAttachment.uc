@@ -65,6 +65,7 @@ simulated function TacBeamGone()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
 	mTracerClass=Class'KFMod.KFNewTracer'
 	mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
@@ -77,4 +78,18 @@ defaultproperties
 	LightRadius=0.000000
 	CullDistance=5000.000000
 	Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+=======
+     mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
+     mTracerClass=Class'KFMod.KFNewTracer'
+     mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
+     TPAnims(0)="DeagleBlast"
+     WeaponIdleMovementAnim="DeagleHold"
+     SecondaryWeaponIdleMovementAnim="SingleTacLightHold"
+     //bHeavy=True
+     SplashEffect=Class'XGame.BulletSplash'
+     LightType=LT_Pulse
+     LightRadius=0.000000
+     CullDistance=5000.000000
+     Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

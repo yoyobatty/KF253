@@ -12,6 +12,19 @@ var() float HeadShotDamageMult;
 var Actor ImpactActor;
 var Pawn IgnoreImpactPawn;
 
+<<<<<<< HEAD
+=======
+// Kill-cam additions
+var() float KillCamDuration;
+var bool bKillCamTriggered;
+
+// Cache original collision so we can restore after detaching from base
+var float OrigCollisionRadius;
+var float OrigCollisionHeight;
+
+var CrossbowArrowDummyPickup DummyPickupRef;
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	reliable if ( Role==ROLE_Authority && bNetInitial )
@@ -35,6 +48,10 @@ simulated function PostNetBeginPlay()
 		GoToState('OnWall');
 	}
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function PostBeginPlay()
 {
 	Super.PostBeginPlay();
@@ -43,12 +60,86 @@ simulated function PostBeginPlay()
 		Velocity*=0.65;
 }
 
+<<<<<<< HEAD
+=======
+simulated function Tick( float DeltaTime )
+{
+	//local vector HN, HL;
+	//local Actor P;
+	
+	Super.Tick(DeltaTime);
+	/* 
+	P = Trace(HL,HN,Location+Vector(Rotation)*Velocity*20.f,Location,True);
+	if(P!=None && KFMonster(P)!=None)
+	{
+		if (KFMonster(P).Health - Damage <= 0 && KFMonster(P).Health > 0)
+		{
+			TriggerKillCam();
+		}
+	}
+	*/
+	if( Physics==PHYS_Falling )
+		SetRotation(rotator(Velocity));
+	else if( Physics==PHYS_Projectile )
+		Velocity.Z -= DeltaTime * 100.0; // gravity	
+}
+/* 
+// Start and restore the kill-cam for the shooter
+function TriggerKillCam()
+{
+    local PlayerController PC;
+
+    if (bKillCamTriggered || Instigator == None)
+        return;
+
+    PC = PlayerController(Instigator.Controller);
+    if (PC == None)
+        return;
+
+    bKillCamTriggered = true;
+
+	Level.Game.SetGameSpeed(0.2);
+
+    // Tell the owning client to view this arrow
+	PC.ClientSetFixedCamera(true);
+	PC.ClientSetBehindView(true);
+    PC.ClientSetViewTarget(self);
+
+    // After Duration, restore view
+    SetTimer(KillCamDuration, false);
+}
+
+function Timer()
+{
+    local PlayerController PC;
+
+	Level.Game.SetGameSpeed(1.0);
+    PC = PlayerController(Instigator.Controller);
+    if (PC != None)
+    {
+        if (Instigator != None)
+            PC.ClientSetViewTarget(Instigator);
+        else if (PC.Pawn != None)
+            PC.ClientSetViewTarget(PC.Pawn);
+        else
+            PC.ClientSetViewTarget(PC);
+		PC.ClientSetBehindView(false);
+		PC.ClientSetFixedCamera(false);
+		bKillCamTriggered = false;
+    }
+}
+*/
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated state OnWall
 {
 Ignores HitWall;
 
 	function ProcessTouch (Actor Other, vector HitLocation)
 	{
+<<<<<<< HEAD
+=======
+		/* 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		local Inventory inv;
 
 		if( Pawn(Other)!=None && Pawn(Other).Inventory!=None )
@@ -65,6 +156,7 @@ Ignores HitWall;
 				}
 			}
 		}
+<<<<<<< HEAD
 	}
 	simulated function Tick( float Delta )
 	{
@@ -84,6 +176,56 @@ Ignores HitWall;
 			Trail.mRegen = False;
 		SetCollisionSize(25,25);
 	}
+=======
+		*/
+	}
+    simulated function Tick( float Delta )
+    {
+        Super.Tick(Delta);
+
+        //Fixes arrows sticking to objects that get destroyed or hidden
+        if( (Base!=None && (NetKActor(Base)!=None || Decoration(Base)!=None) && (Base.bDeleteMe || Base.bHidden)) )
+        {
+            bCollideWorld = True;
+            if (OrigCollisionRadius == 0) OrigCollisionRadius = default.CollisionRadius;
+            if (OrigCollisionHeight == 0) OrigCollisionHeight = default.CollisionHeight;
+            SetCollisionSize(OrigCollisionRadius, OrigCollisionHeight);
+
+            // make sure we are visible on clients
+            if( Level.NetMode==NM_Client )
+                bHidden = False;
+
+            SetBase(None);
+            SetPhysics(PHYS_Projectile);
+			Velocity = Vect(0,0,-1) * 100.f;
+			SetRotation(rotator(Velocity));
+            GotoState(''); 
+        }
+    }
+
+    simulated function BeginState()
+    {
+        // save current collision before enlarging it for pickup-on-wall
+        OrigCollisionRadius = CollisionRadius;
+        OrigCollisionHeight = CollisionHeight;
+
+        bCollideWorld = False;
+        if( Level.NetMode!=NM_DedicatedServer )
+            AmbientSound = None;
+        if( Trail!=None )
+            Trail.mRegen = False;
+		DummyPickupRef = Spawn(class'CrossbowArrowDummyPickup',,,Location-Vector(Rotation)*10);
+		if( DummyPickupRef != None )
+		{
+			DummyPickupRef.ArrowRef = self;
+			DummyPickupRef.InitDroppedPickupFor(DummyPickupRef.Inventory);
+			DummyPickupRef.SetBase(self); //Keep it attached 
+			DummyPickupRef.AddToNavigation();
+		}
+		// Enlarge collision size to make it easier to pick up arrows stuck in walls/f
+        SetCollisionSize(25,25);
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function Explode(vector HitLocation, vector HitNormal);
@@ -92,6 +234,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 {
 	local vector X,End,HL,HN;
 
+<<<<<<< HEAD
 	if ( Other!=none && Other!=Instigator && Other!=IgnoreImpactPawn ) // dont want to hit ourself (nor we want to hit same target twice) :)
 	{
 		X = Normal(Velocity);
@@ -138,18 +281,91 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 		}
 	}
 }
+=======
+	if ( Other == none || Other == Instigator || Other.Base == Instigator || Other==IgnoreImpactPawn ||
+        (IgnoreImpactPawn != none && Other.Base == IgnoreImpactPawn) )
+		return;
+
+	// Don't allow hits on poeple on the same team
+    if ( KFHumanPawn(Other) != None
+         && Instigator != None && Instigator.Controller != None
+         && KFHumanPawn(Other).Controller != None
+         && KFHumanPawn(Other).Controller.SameTeamAs(Instigator.Controller) )
+    {
+        return;
+    }
+
+	X = Normal(Velocity);
+
+	if( Level.NetMode!=NM_Client )
+		PlayhitNoise(Pawn(Other)!=none && Pawn(Other).ShieldStrength>0);
+
+	if( Level.NetMode!=NM_DedicatedServer && SkeletalMesh(Other.Mesh)!=None && Other.DrawType==DT_Mesh && Pawn(Other)!=None )
+	{ // Attach victim to the wall behind if it dies.
+		End = Other.Location+X*600;
+		if( Other.Trace(HL,HN,End,Other.Location,False)!=None )
+			Spawn(Class'BodyAttacher',Other,,HitLocation).AttachEndPoint = HL-HN;
+	}
+    if ( KFGlassMover(Other) != None )
+    {
+        if( Level.NetMode!=NM_Client )
+            Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * X, MyDamageType);
+
+        PlaySound(Arrow_rico[Rand(2)],,2.0*TransientSoundVolume);
+        Spawn(class'KFHitEffect');
+        return;
+    }
+	if( Physics==PHYS_Projectile && Pawn(Other)!=None && Vehicle(Other)==None )
+	{
+		IgnoreImpactPawn = Pawn(Other);
+		if( IgnoreImpactPawn.IsHeadShot(HitLocation, X, 1.0) )
+			Other.TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * X, DamageTypeHeadShot);
+		else Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * X, MyDamageType);
+		//SetPhysics(PHYS_Falling);
+		Damage/=1.25;
+		Velocity*=0.85;
+		Return;
+	}
+	else if( ExtendedZCollision(Other)!=None && Pawn(Other.Owner)!=None )
+	{
+		if( Other.Owner==IgnoreImpactPawn )
+			Return;
+		IgnoreImpactPawn = Pawn(Other.Owner);
+		if ( IgnoreImpactPawn.IsHeadShot(HitLocation, X, 1.0))
+			Other.TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * X, DamageTypeHeadShot);
+		else Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * X, MyDamageType);
+		//SetPhysics(PHYS_Falling);
+		Damage/=1.25;
+		Velocity*=0.85;
+		Return;
+	}
+	Stick(Other,HitLocation);
+	if( Level.NetMode!=NM_Client )
+	{
+		if (Pawn(Other) != none && Pawn(Other).IsHeadShot(HitLocation, X, 1.0))
+			Pawn(Other).TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * X, DamageTypeHeadShot);
+		else Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * X, MyDamageType);
+	}
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function PlayhitNoise( bool bArmored )
 {
 	if( bArmored )
 		PlaySound(Arrow_hitarmor);   // implies hit a target with shield/armor
 	else PlaySound(Arrow_hitflesh); 
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function HitWall( vector HitNormal, actor Wall )
 {
 	speed = VSize(Velocity);
       
 	if ( Role==ROLE_Authority && Wall!=none )
 	{
+<<<<<<< HEAD
 		if ( !Wall.bStatic && !Wall.bWorldGeometry )
 		{
 			if ( Instigator == None || Instigator.Controller == None )
@@ -160,15 +376,41 @@ simulated function HitWall( vector HitNormal, actor Wall )
 		MakeNoise(1.0);
 	}
 	PlaySound(Arrow_hitwall[Rand(3)],,2.5*TransientSoundVolume);
+=======
+        if ( (!Wall.bStatic && !Wall.bWorldGeometry) )
+        {
+            if ( Instigator == None || Instigator.Controller == None )
+                Wall.SetDelayedDamageInstigatorController(InstigatorController);
+            Wall.TakeDamage( Damage, instigator, Location, MomentumTransfer * Normal(Velocity), MyDamageType);
+            HurtWall = Wall;
+        }
+		MakeNoise(1.0);
+	}
+	PlaySound(Arrow_hitwall[Rand(3)],,2.5*TransientSoundVolume);
+	if( Physics!=PHYS_Falling && (Normal(Velocity) Dot HitNormal)>-0.1 )
+	{
+		Velocity = MirrorVectorByNormal(Velocity,HitNormal);
+		SetPhysics(PHYS_Falling);
+		Return;
+	}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	Spawn(class'KFHitEffect');
 	if( Instigator!=None && Level.NetMode!=NM_Client )
 		MakeNoise(0.3);
 	Stick(Wall, Location+HitNormal);
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function Landed(vector HitNormal)
 {
 	HitWall(HitNormal, None);
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function Stick(actor HitActor, vector HitLocation)
 {
 	local name NearestBone;
@@ -202,6 +444,7 @@ simulated function Destroyed()
 {
 	if (Trail !=None)
 		Trail.mRegen = False;
+<<<<<<< HEAD
 	Super.Destroyed();
 }
 simulated function Tick( float Delta )
@@ -209,6 +452,15 @@ simulated function Tick( float Delta )
 	if( Physics==PHYS_Falling )
 		SetRotation(rotator(Velocity));
 }
+=======
+    if (DummyPickupRef != None)
+    {
+        DummyPickupRef.ArrowRef = None;
+        DummyPickupRef.Destroy();
+    }
+	Super.Destroyed();
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 defaultproperties
 {
@@ -220,21 +472,37 @@ defaultproperties
 	Arrow_rico(1)=Sound'KFWeaponSound.bullethitmetal3'
 	Arrow_hitarmor=Sound'KFWeaponSound.bullethitflesh4'
 	Arrow_hitflesh=Sound'KFWeaponSound.bullethitflesh4'
+<<<<<<< HEAD
 	HeadShotDamageMult=6.000000
 	Speed=15000.000000
 	MaxSpeed=20000.000000
 	Damage=120.000000
 	MomentumTransfer=150000.000000
+=======
+	HeadShotDamageMult=4.000000
+	Speed=6000.000000
+	MaxSpeed=80000.000000
+	Damage=300.000000
+	MomentumTransfer=10000.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	MyDamageType=Class'KFMod.DamTypeCrossbow'
 	ExplosionDecal=Class'KFMod.ShotgunDecal'
 	CullDistance=3000.000000
 	bNetTemporary=False
 	AmbientSound=Sound'PatchSounds.ArrowZip'
+<<<<<<< HEAD
 	LifeSpan=10.000000
+=======
+	LifeSpan=25.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	Mesh=SkeletalMesh'KFWeaponModels.XbowBolt'
 	DrawScale=15.000000
 	AmbientGlow=30
 	Style=STY_Alpha
 	bUnlit=False
 	bFullVolume=True
+<<<<<<< HEAD
+=======
+	KillCamDuration=1.500000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

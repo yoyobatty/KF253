@@ -5,5 +5,9 @@ class ZombieNode extends KeyPoint;
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Texture=Texture'PatchTex.Common.ZNTex'
+=======
+     Texture=Texture'PatchTex.Common.ZNTex'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

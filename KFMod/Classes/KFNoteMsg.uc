@@ -54,6 +54,11 @@ static function ClientReceive(
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bIsConsoleMessage=False
 	Lifetime=0
+=======
+     bIsConsoleMessage=False
+     Lifetime=0
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -91,6 +91,7 @@ function bool FlipOver()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	PounceSpeed=330.000000
 	MeleeAnims(0)="ZombieLeapAttack"
 	MeleeAnims(1)="ZombieLeapAttack"
@@ -157,4 +158,72 @@ defaultproperties
 	Skins(0)=Shader'KFCharacters.Zombie9Shader'
 	Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
 	CollisionHeight=25.000000
+=======
+     PounceSpeed=330.000000
+     MeleeAnims(0)="ZombieLeapAttack"
+     MeleeAnims(1)="ZombieLeapAttack"
+     MeleeAnims(2)="LeapAttack3"
+     HitAnims(0)="ZombieSpring"
+     HitAnims(1)="ZombieSpring"
+     HitAnims(2)="ZombieSpring"
+     KFHitFront="ZombieSpring"
+     KFHitBack="ZombieSpring"
+     KFHitLeft="ZombieSpring"
+     KFHitRight="ZombieSpring"
+     bStunImmune=True
+     bCannibal=True
+     damageRand=4
+     damageConst=4
+     damageForce=5000
+     KFRagdollName="CrawlerRag"
+     Intelligence=BRAINS_Mammal
+     HitSound(0)=Sound'KFPlayerSound.zpain1'
+     HitSound(1)=Sound'KFPlayerSound.zpain2'
+     HitSound(2)=Sound'KFPlayerSound.zpain3'
+     HitSound(3)=Sound'KFPlayerSound.zpain4'
+     ScoringValue=1
+     IdleHeavyAnim="ZombieLeapIdle"
+     IdleRifleAnim="ZombieLeapIdle"
+     bCrawler=True
+     GroundSpeed=140.000000
+     WaterSpeed=130.000000
+     JumpZ=350.000000
+     Health=100
+     MenuName="Crawler"
+     ControllerClass=Class'KFChar.CrawlerController'
+     MovementAnims(0)="ZombieScuttle"
+     MovementAnims(1)="ZombieScuttle"
+     MovementAnims(2)="ZombieScuttle"
+     MovementAnims(3)="ZombieScuttle"
+     TurnLeftAnim="ZombieLeapIdle"
+     TurnRightAnim="ZombieLeapIdle"
+     WalkAnims(0)="ZombieScuttle"
+     WalkAnims(1)="ZombieScuttle"
+     WalkAnims(2)="ZombieScuttle"
+     WalkAnims(3)="ZombieScuttle"
+     AirAnims(0)="ZombieSpring"
+     AirAnims(1)="ZombieSpring"
+     AirAnims(2)="ZombieSpring"
+     AirAnims(3)="ZombieSpring"
+     TakeoffAnims(0)="ZombieSpring"
+     TakeoffAnims(1)="ZombieSpring"
+     TakeoffAnims(2)="ZombieSpring"
+     TakeoffAnims(3)="ZombieSpring"
+     LandAnims(0)="ZombieLeapIdle"
+     LandAnims(1)="ZombieLeapIdle"
+     LandAnims(2)="ZombieLeapIdle"
+     LandAnims(3)="ZombieLeapIdle"
+     AirStillAnim="ZombieSpring"
+     TakeoffStillAnim="ZombieLeap"
+     IdleCrouchAnim="ZombieLeapIdle"
+     IdleWeaponAnim="ZombieLeapIdle"
+     IdleRestAnim="ZombieLeapIdle"
+     SpineBone1=
+     SpineBone2=
+     bOrientOnSlope=True
+     Mesh=SkeletalMesh'KFCharacterModels.Shade'
+     Skins(0)=Shader'KFCharacters.Zombie9Shader'
+     Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
+     CollisionHeight=25.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -2,6 +2,7 @@ class KFGibGroup extends xPawnGibGroup;
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Gibs(0)=Class'KFMod.KFGibHead'
 	Gibs(1)=Class'KFMod.KFGibHeadb'
 	Gibs(2)=Class'KFMod.KFGibHead'
@@ -18,4 +19,22 @@ defaultproperties
 	BloodEmitClass=None
 	NoBloodEmitClass=None
 	NoBloodHitClass=None
+=======
+     Gibs(0)=Class'KFMod.KFGibHead'
+     Gibs(1)=Class'KFMod.KFGibHeadb'
+     Gibs(2)=Class'KFMod.KFGibHead'
+     Gibs(3)=Class'KFMod.KFGibHeadb'
+     Gibs(4)=Class'KFMod.KFGibHead'
+     Gibs(5)=Class'KFMod.KFGibHead'
+     Gibs(6)=Class'KFMod.KFGibHeadb'
+     Gibs(7)=Class'KFMod.KFGibHead'
+     BloodHitClass=Class'KFMod.KFBloodPuff'
+     LowGoreBloodHitClass=Class'KFMod.KFBloodPuff'
+     BloodGibClass=None//Class'KFMod.KFBloodJet'
+     LowGoreBloodGibClass=Class'KFMod.KFBloodPuff'
+     LowGoreBloodEmitClass=Class'KFMod.KFBloodPuff'
+     BloodEmitClass=Class'KFMod.KFBloodPuff'
+     NoBloodEmitClass=Class'KFMod.KFBloodPuff'
+     NoBloodHitClass=Class'KFMod.KFBloodPuff'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

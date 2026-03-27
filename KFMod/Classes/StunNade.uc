@@ -22,6 +22,7 @@ function byte BestMode()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ClipCount=1
 	ReloadRate=1.000000
 	ReloadBeginSound=Sound'KFWeaponSound.DeagleClipout'
@@ -45,4 +46,26 @@ defaultproperties
 	Mesh=SkeletalMesh'KFWeaponModels.Stun'
 	TransientSoundVolume=1.000000
 	TransientSoundRadius=700.000000
+=======
+     ClipCount=1
+     ReloadRate=1.000000
+     ReloadBeginSound=Sound'KFWeaponSound.DeagleClipout'
+     ReloadSound=Sound'KFWeaponSound.DeagleClipin'
+     ReloadAnim="Reload"
+     ReloadAnimRate=1.000000
+     FireModeClass(0)=Class'KFMod.StunNadeFire'
+     FireModeClass(1)=Class'KFMod.NoFire'
+     PutDownAnim="PutDown"
+     Description="the Concussion grenade does very little damage to enemies, but will stun any foes in the explosion AOE for a brief period of time."
+     DisplayFOV=70.000000
+     Priority=40
+     PickupClass=Class'KFMod.StunNadePickup'
+     BobDamping=10.000000
+     AttachmentClass=Class'KFMod.StunAttachment'
+     IconCoords=(X1=458,Y1=82,X2=491,Y2=133)
+     ItemName="Concussion Grenade"
+     Mesh=SkeletalMesh'KFWeaponModels.Stun'
+     TransientSoundVolume=1.000000
+     TransientSoundRadius=700.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

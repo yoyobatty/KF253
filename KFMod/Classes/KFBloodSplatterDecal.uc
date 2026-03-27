@@ -14,9 +14,17 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Splats(0)=Texture'KFX.BloodSplat1'
 	Splats(1)=Texture'KFX.BloodSplat2'
 	Splats(2)=Texture'KFX.BloodSplat3'
 	ProjTexture=Texture'KFX.BloodSplat1'
 	LifeSpan=10.000000
+=======
+     Splats(0)=Texture'KFX.BloodSplat1'
+     Splats(1)=Texture'KFX.BloodSplat2'
+     Splats(2)=Texture'KFX.BloodSplat3'
+     ProjTexture=Texture'KFX.BloodSplat1'
+     LifeSpan=60.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

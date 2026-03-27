@@ -160,6 +160,7 @@ simulated function TacBeamGone()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bMyFlashTurn=True
 	BrotherMesh=SkeletalMesh'KFWeaponModels.9mm3P'
 	mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
@@ -170,4 +171,16 @@ defaultproperties
 	WeaponIdleMovementAnim="IdleDualies"
 	SecondaryWeaponIdleMovementAnim="DoubleTacLightHold"
 	Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+=======
+     bMyFlashTurn=True
+     BrotherMesh=SkeletalMesh'KFWeaponModels.9mm3P'
+     mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
+     mTracerClass=Class'KFMod.KFNewTracer'
+     mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
+     TPAnims(0)="DualiesAttackRight"
+     TPAnims(1)="DualiesAttackLeft"
+     WeaponIdleMovementAnim="IdleDualies"
+     SecondaryWeaponIdleMovementAnim="DoubleTacLightHold"
+     Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -12,9 +12,13 @@ var bool bCracked,bClientCracked;
 
 replication
 {
+<<<<<<< HEAD
 	reliable if(Role == ROLE_Authority)
 		ClientGlassBits,ClientBreakGlassBits,Health;
 	reliable if (Role < ROLE_Authority)
+=======
+	reliable if ( Role == ROLE_Authority )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		bCracked;
 }
 
@@ -81,7 +85,11 @@ function Bump( actor Other )
 		return;
 
 	// If the incoming object is moving at a speed above our set threshold ..
+<<<<<<< HEAD
 	if (vSize(Other.Velocity) >= 10)
+=======
+	if (VSize(Other.Velocity) >= 10 || VSize(Other.Acceleration) >= 10)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	{
 		TakeDamage(VSize(Other.Velocity),pawn(Other),location,Other.Velocity,DummyDam);
 		ShardWindow();
@@ -89,6 +97,7 @@ function Bump( actor Other )
 	if (Other.IsA('KFMonster'))
 	{
 		GlassCrasher = KFMonster(Other);
+<<<<<<< HEAD
   
 		GlassCrasher.Acceleration = vect(0,0,0);
 		GlassCrasher.Velocity = vect(0,0,0);
@@ -98,15 +107,36 @@ function Bump( actor Other )
 		GlassCrasher.controller.GotoState('WaitForAnim');
 
 		TakeDamage(GlassCrasher.damageConst,pawn(Other),location,Other.Velocity,DummyDam);
+=======
+
+        GlassCrasher.HandleBumpGlass();
+
+		TakeDamage(GlassCrasher.damageConst + rand(GlassCrasher.damageRand),GlassCrasher,location,Other.Velocity,DummyDam);
+	}
+	else if( ExtendedZCollision(Other)!=None &&
+        Other.Base != none && KFMonster(Other.Base) != none )
+    {
+		GlassCrasher = KFMonster(Other.Base);
+
+        GlassCrasher.HandleBumpGlass();
+
+		TakeDamage(GlassCrasher.damageConst + rand(GlassCrasher.damageRand),GlassCrasher,location,Other.Velocity,DummyDam);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 }
 
 simulated function SetInitialState();
+<<<<<<< HEAD
 simulated function ClientGlassBits();
 simulated function ClientBreakGlassBits(); // NOT in use.
 
 // Added bHidden for small bit of optimization
 function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
+=======
+
+// Added bHidden for small bit of optimization
+function TakeDamage( int Damage, Pawn InstigatedBy, Vector Hitlocation, Vector Momentum, class<DamageType> damageType)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 {
 	if( bHidden )
 		return;
@@ -148,6 +178,7 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	GlassBits=Class'KFMod.WindowGlassEmitter'
 	BreakGlassBits=Class'KFMod.BreakWindowGlassEmitter'
 	ShatteredTexture=Shader'KillingFloorLabTextures.Statics.ShaderCrackedGlass'
@@ -161,4 +192,27 @@ defaultproperties
 	bCollideActors=True
 	bBlockActors=True
 	bBlockKarma=True
+=======
+     GlassBits=Class'KFMod.WindowGlassEmitter'
+     BreakGlassBits=Class 'KFmod.BreakWindowGlassEmitter'
+     bShadowCast=False
+     bBlockKarma=True
+     bPathColliding=False
+     bCollideActors=True
+     bBlockActors=True
+
+     ShatteredTexture = Shader 'KillingFloorLabTextures.Statics.ShaderCrackedGlass'
+
+     Health = 50
+
+     bStasis = true
+
+     Physics=PHYS_None
+     RemoteRole=ROLE_SimulatedProxy
+
+     NetPriority=2.7
+     bAlwaysRelevant=true
+     NetUpdateFrequency=1
+     bNoDelete=true
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

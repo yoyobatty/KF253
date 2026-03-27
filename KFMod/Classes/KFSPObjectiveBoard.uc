@@ -47,7 +47,13 @@ simulated function SetGRI(GameReplicationInfo GRI)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	titlestring="Current Objective:"
 	NoObjString="No Objectives"
 	HudClass=Class'KFMod.HUDKillingFloorSP'
+=======
+     titlestring="Current Objective:"
+     NoObjString="No Objectives"
+     HudClass=Class'KFMod.HUDKillingFloorSP'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

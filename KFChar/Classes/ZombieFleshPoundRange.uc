@@ -185,6 +185,7 @@ simulated function DeviceGoNormal();
 
 defaultproperties
 {
+<<<<<<< HEAD
 	damageRand=8
 	damageConst=10
 	ScoringValue=12
@@ -194,4 +195,15 @@ defaultproperties
 	Mesh=SkeletalMesh'KFCharacterModels.RangedPound'
 	Skins(0)=Texture'KFCharacters.GunPoundSkin'
 	Skins(2)=Texture'KFCharacters.AutoTurretGunTex1'
+=======
+     damageRand=8
+     damageConst=10
+     ScoringValue=12
+     HealthMax=1600.000000
+     Health=1600
+     MenuName="Flesh Pound Chaingunner"
+     Mesh=SkeletalMesh'KFCharacterModels.RangedPound'
+     Skins(0)=Texture'KFCharacters.GunPoundSkin'
+     Skins(2)=Texture'KFCharacters.AutoTurretGunTex1'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -116,10 +116,19 @@ simulated function RenderNote( Canvas C )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	NoteText="This is default note text"
 	NoteTextFont=Font'Engine.DefaultFont'
 	NoteTextColor=(B=255,G=255,R=255,A=255)
 	bEnabled=True
 	TextCoords=(X1=0.100000,Y1=0.100000,X2=0.900000,Y2=1.000000)
 	bNoDelete=True
+=======
+     NoteText="This is default note text"
+     NoteTextFont=Font'Engine.DefaultFont'
+     NoteTextColor=(B=255,G=255,R=255,A=255)
+     bEnabled=True
+     TextCoords=(X1=0.100000,Y1=0.100000,X2=0.900000,Y2=1.000000)
+     bNoDelete=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

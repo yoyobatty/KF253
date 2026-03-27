@@ -376,6 +376,7 @@ state SpeechMenuVisible
 
 defaultproperties
 {
+<<<<<<< HEAD
 	SMStateName(2)="Need Support"
 	SMStateName(3)="Form Up"
 	SMStateName(4)="Take This"
@@ -398,4 +399,15 @@ defaultproperties
 	SavedPasswords(8)=(Server="72.189.189.72")
 	SavedPasswords(9)=(Server="72.189.189.72")
 	SavedPasswords(10)=(Server="213.22.168.84",Password="alpha")
+=======
+     SMStateName(2)="Need Support"
+     SMStateName(3)="Form Up"
+     SMStateName(4)="Take This"
+     SMStateName(5)="Going Trading"
+     SMStateName(6)="MEDIC!"
+     SMStateName(7)="I'm Welding"
+     SMStateName(8)="I'm Covering"
+     SMStateName(9)="Taunt Anim"
+     Favorites(0)=(IP="69.114.228.143",Port=7777,QueryPort=7778)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

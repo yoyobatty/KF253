@@ -9,6 +9,15 @@ var bool bZoomed;
 
 var() Sound FireSounds[10];
 
+<<<<<<< HEAD
+=======
+function DoTrace(Vector Start, Rotator Dir)
+{
+    DamageType = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.static.GetMAC10DamageType();
+	Super.DoTrace(Start,Dir);
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function PlayFiring()
 {
 	if ( Weapon.Mesh != None )
@@ -34,6 +43,7 @@ function ServerPlayFiring()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	FireSounds(0)=Sound'KFWeaponSound.L85Fire'
 	FireSounds(1)=Sound'KFWeaponSound.L85Fire1'
 	FireSounds(2)=Sound'KFWeaponSound.L85Fire2'
@@ -65,4 +75,38 @@ defaultproperties
 	FlashEmitterClass=Class'KFMod.MGMuzzFlash'
 	aimerror=0.000000
 	SpreadStyle=SS_Random
+=======
+    FireSounds(0)=Sound'KFWeaponSound.L85Fire'
+    FireSounds(1)=Sound'KFWeaponSound.L85Fire1'
+    FireSounds(2)=Sound'KFWeaponSound.L85Fire2'
+    FireSounds(3)=Sound'KFWeaponSound.L85Fire3'
+    FireSounds(4)=Sound'KFWeaponSound.L85Fire4'
+    FireSounds(5)=Sound'KFWeaponSound.L85Fire5'
+    FireSounds(6)=Sound'KFWeaponSound.L85Fire6'
+    FireSounds(7)=Sound'KFWeaponSound.L85Fire7'
+    FireSounds(8)=Sound'KFWeaponSound.L85Fire8'
+    FireSounds(9)=Sound'KFWeaponSound.L85Fire9'
+    DamageType=Class'KFMod.DamTypeBullpup'
+    DamageMin=26
+    DamageMax=32
+    Momentum=8500.000000
+    bPawnRapidFireAnim=True
+    TransientSoundVolume=30.000000
+    FireLoopAnim="Fire"
+    FireForce="AssaultRifleFire"
+    FireRate=0.100000
+    AmmoClass=Class'KFMod.BullpupAmmo'
+    AmmoPerFire=1
+    ShakeRotMag=(X=25.000000,Y=25.000000,Z=25.000000)
+    ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
+    ShakeRotTime=0.500000
+    ShakeOffsetMag=(X=3.000000,Y=3.000000,Z=3.000000)
+    ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
+    ShakeOffsetTime=1.000000
+    BotRefireRate=0.950000 // 95% chance to fire again
+    FlashEmitterClass=Class'KFMod.MGMuzzFlash'
+    aimerror=42.000000
+    Spread=0.008500
+    SpreadStyle=SS_Random
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

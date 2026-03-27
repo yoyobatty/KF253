@@ -20,5 +20,9 @@ function SetPawnClass(string inClass, string inCharacter)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	PlayerReplicationInfoClass=None
+=======
+     PlayerReplicationInfoClass=None
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

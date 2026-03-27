@@ -13,6 +13,7 @@ function ShowDeagleInfo(Canvas C)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Weight=4.000000
 	cost=250
 	AmmoCost=15
@@ -31,4 +32,25 @@ defaultproperties
 	StaticMesh=StaticMesh'KillingFloorStatics.3PDeagle_Ground'
 	DrawScale=0.700000
 	CollisionHeight=5.000000
+=======
+     Weight=4.000000
+     cost=250
+     AmmoCost=15
+     BuyClipSize=7
+     PowerValue=65
+     SpeedValue=35
+     RangeValue=60
+     Description="50 Cal AE handgun. A powerful personal choice for personal defense."
+     ItemName="Handcannon"
+     AmmoItemName=".300 JHP Ammo"
+     showMesh=SkeletalMesh'KFWeaponModels.Deagle3P'
+     AmmoMesh=StaticMesh'KillingFloorStatics.DeagleAmmo'
+     InventoryType=Class'KFMod.Deagle'
+     PickupMessage="You got the Handcannon"
+     PickupForce="AssaultRiflePickup"
+     StaticMesh=StaticMesh'KillingFloorStatics.3PDeagle_Ground'
+     DrawScale=0.700000
+     CollisionHeight=5.000000
+     CorrespondingVeterancyName="Sharpshooter"
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

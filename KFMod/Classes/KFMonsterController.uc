@@ -30,6 +30,32 @@ function Restart()
 		Super.Restart();
 }
 
+<<<<<<< HEAD
+=======
+event bool NotifyBump(actor Other)
+{
+	local Pawn P;
+
+	Disable('NotifyBump');
+	P = Pawn(Other);
+	if ( (P == None) || (P.Controller == None) || (Enemy == P) )
+		return false;
+	if ( SetEnemy(P) )
+	{
+		WhatToDoNext(4);
+		return false;
+	}
+
+	if ( Enemy == P )
+		return false;
+
+	if ( !AdjustAround(P) )
+		CancelCampFor(P.Controller);
+	return false;
+}
+
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Randomly plays a different moan sound for the Zombie each time it is called. Gruesome!
 function ZombieMoan()
 {
@@ -51,7 +77,28 @@ function PostBeginPlay()
 	ItsSet=false;
 }
 
+<<<<<<< HEAD
 function FearThisSpot(AvoidMarker aSpot);
+=======
+event SeePlayer(Pawn SeenPlayer)
+{
+	if ( ((ChooseAttackCounter < 2) || (ChooseAttackTime != Level.TimeSeconds)) && SetEnemy(SeenPlayer) )
+		WhatToDoNext(3);
+	if ( Enemy == SeenPlayer )
+	{
+		VisibleEnemy = Enemy;
+		EnemyVisibilityTime = Level.TimeSeconds;
+		bEnemyIsVisible = true;
+	}
+}
+
+// Overridden because we want our Zeds to be a bit more scared of fear spots
+function FearThisSpot(AvoidMarker aSpot)
+{
+	if ( Skill > 1 + 2.0 * FRand() )
+        super(Controller).FearThisSpot(aSpot);
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 function BreakUpDoor( KFDoorMover Other ) // I have came up to a door, break it!
 {
@@ -182,7 +229,11 @@ function bool FindNewEnemy()
 
 	if ( BestEnemy != None )
 	{
+<<<<<<< HEAD
 		ChangeEnemy(BestEnemy,CanSee(BestEnemy));
+=======
+		ChangeEnemy(BestEnemy,bSeeBest);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		return true;
 	}
 	return false;
@@ -249,7 +300,13 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 				return FindBestPathToward(A,True,bAllowDetour);
 			}
 			else if( LastResult==MoveTarget )
+<<<<<<< HEAD
 				NumAttmpts++;
+=======
+			{
+				NumAttmpts++;
+			}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			else NumAttmpts = 0;
 			LastResult = MoveTarget;
 			if( NavigationPoint(MoveTarget)!=None && KFMonster(Trace(Dummy,Dummy,MoveTarget.Location,Pawn.Location,True))!=None )
@@ -288,6 +345,10 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 	}
 	return false;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function FightEnemy(bool bCanCharge)
 {
 	if( KFM.bShotAnim )
@@ -353,7 +414,11 @@ state ZombieHunt extends Hunting
 	{
 		local float ZDif;
 
+<<<<<<< HEAD
 		if( Pawn.CollisionRadius!=Pawn.Default.CollisionRadius || Pawn.CollisionHeight!=Pawn.Default.CollisionHeight )
+=======
+		if( Pawn != none && Pawn.CollisionRadius!=Pawn.Default.CollisionRadius || Pawn.CollisionHeight!=Pawn.Default.CollisionHeight )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		{
 			ZDif = Pawn.Default.CollisionRadius-44;
 			Pawn.MoveSmooth(vect(0,0,1)*ZDif);
@@ -654,7 +719,11 @@ ignores EnemyNotVisible;
 	}
 	function Timer()
 	{
+<<<<<<< HEAD
 		if(Pawn.Velocity == vect(0,0,0))
+=======
+		if(VSize(Pawn.Velocity) <= 0.f)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			Gotostate('ZombieRestFormation','Moving');
 		SetCombatTimer();
 		disable('NotifyBump');
@@ -931,6 +1000,7 @@ Begin:
 	WhatToDoNext(30);
 }
 
+<<<<<<< HEAD
 function WaitForMover(Mover M)
 {
     if ( (Enemy != None) && (Level.TimeSeconds - LastSeenTime < M.MoveTime) )
@@ -943,6 +1013,8 @@ function WaitForMover(Mover M)
 }
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function HearNoise(float Loudness, Actor NoiseMaker)
 {
 	if( NoiseMaker!=none && FastTrace(NoiseMaker.Location,Pawn.Location) )
@@ -952,8 +1024,11 @@ function HearNoise(float Loudness, Actor NoiseMaker)
 	}
 }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 state Kicking
 {
   ignores EnemyNotVisible;
@@ -1152,6 +1227,10 @@ Ignores SeePlayer,HearNoise,Timer,EnemyNotVisible,NotifyBump;
 		{
 			Pawn.AccelRate = Pawn.Default.AccelRate;
 			Pawn.GroundSpeed = Pawn.Default.GroundSpeed;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 		bUseFreezeHack = False;
 	}
@@ -1234,9 +1313,87 @@ function Trigger( actor Other, pawn EventInstigator )
 		WhatToDoNext(54);
 }
 
+<<<<<<< HEAD
 defaultproperties
 {
 	StrafingAbility=-1.000000
 	CombatStyle=1.000000
 	ReactionTime=1.000000
+=======
+function MoverFinished()
+{
+	if ( ProceedWithMove() )
+	{
+		//SendChatMsg("Elevator finished, proceeding.");
+		PendingMover = None;
+		bPreparingMove = false;
+	}
+}
+
+function bool ProceedWithMove()
+{
+    local LiftExit Start, DestExit;
+    local Mover Lift;
+    local float dist2D;
+    local vector dir;
+
+    if ( Pawn == None || Pawn.Controller == None )
+        return false;
+
+    Lift = PendingMover;
+    if ( Lift == None )
+        return true; // no mover to worry about
+
+    // Already standing on the lift?
+    if ( Pawn.Base == Lift )
+        return true;
+
+    // Anchor is a LiftExit we reached, and lift is at the right keyframe
+    Start = LiftExit(Pawn.Anchor);
+    if ( (Start != None) && (Start.KeyFrame != 255) && Pawn.ReachedDestination(Start) )
+    {
+        if ( Lift.KeyNum == Start.KeyFrame )
+            return true;
+    }
+
+    // MoveTarget is a LiftExit, we’re near the lift: ask exit if it’s reachable
+    DestExit = LiftExit(Pawn.Controller.MoveTarget);
+    if ( DestExit != None )
+    {
+        dir = Lift.Location - Pawn.Location;
+        dir.Z = 0;
+        dist2D = VSize(dir);
+        if ( dist2D < 400.0 )
+            return (Lift.Location.Z < Pawn.Location.Z + Pawn.CollisionHeight);
+    }
+
+    // Fallback: close enough to the mover in 2D & Z
+    dir = Lift.Location - Pawn.Location;
+    dir.Z = 0;
+    dist2D = VSize(dir);
+    if ( (dist2D < 400.0)
+         && (Lift.Location.Z - Lift.CollisionHeight
+             < Pawn.Location.Z - Pawn.CollisionHeight + MAXSTEPHEIGHT)
+         && (Lift.Location.Z - Lift.CollisionHeight
+             > Pawn.Location.Z - Pawn.CollisionHeight - 1200.0) )
+    {
+        return true;
+    }
+
+    // If lift is closed, treat move as allowed (doors should be open by now)
+    if ( Lift.bClosed )
+	{
+		Pawn.SetMoveTarget(LiftCenter(Lift.MyMarker).SpecialHandling(Pawn));
+        return true;
+	}
+
+    return false;
+}
+
+defaultproperties
+{
+     StrafingAbility=0.000000
+     CombatStyle=1.000000
+     ReactionTime=1.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

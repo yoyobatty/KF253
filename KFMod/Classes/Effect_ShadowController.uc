@@ -1,5 +1,9 @@
 //=============================================================================
+<<<<<<< HEAD
 // © 2004 Matt 'SquirrelZero' Farber
+=======
+// ï¿½ 2004 Matt 'SquirrelZero' Farber
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 //=============================================================================
 // This is a master class for controlling all shadows.  This is needed to spawn
 // and determine the visibility of all shadows.  It also keeps track of all the
@@ -144,7 +148,11 @@ simulated function FillLights()
 				Lights[i].LastLight = OrigLight[i];
 
 		// loop it, loop it good
+<<<<<<< HEAD
 		SetTimer(0.05,false);
+=======
+		//SetTimer(0.01,false);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 	else
 	{
@@ -197,6 +205,10 @@ simulated function Tick(float dt)
 	
 	// update all shadows
 	UpdateShadows(dt);
+<<<<<<< HEAD
+=======
+	FillLights();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function UpdateShadows(float dt)
@@ -248,6 +260,7 @@ simulated function Destroyed()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ShadowClass=Class'KFMod.Effect_ShadowProjector'
 	MaxLightDistance=1000.000000
 	MaxShadows=2
@@ -255,4 +268,13 @@ defaultproperties
 	bHidden=True
 	bAlwaysRelevant=True
 	RemoteRole=ROLE_SimulatedProxy
+=======
+     ShadowClass=Class'KFMod.Effect_ShadowProjector'
+     MaxLightDistance=10000.000000
+     MaxShadows=3
+     DrawType=DT_None
+     bHidden=True
+     bAlwaysRelevant=True
+     RemoteRole=ROLE_SimulatedProxy
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

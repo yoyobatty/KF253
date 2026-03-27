@@ -2,7 +2,11 @@ Class BodyAttacher extends KBSJoint
 	Transient;
 
 var vector AttachEndPoint;
+<<<<<<< HEAD
 
+=======
+/* 
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function PostBeginPlay()
 {
 	SetTimer(1,False);
@@ -11,6 +15,10 @@ simulated function Timer()
 {
 	Destroy();
 }
+<<<<<<< HEAD
+=======
+*/
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function Tick( float Delta )
 {
 	if( Owner==None )
@@ -33,7 +41,15 @@ simulated function Tick( float Delta )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	bNoDelete=False
 	Physics=PHYS_None
 	LifeSpan=20.000000
+=======
+	RemoteRole=ROLE_None
+	bHidden=True
+    bNoDelete=False
+    Physics=PHYS_None
+    LifeSpan=20.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

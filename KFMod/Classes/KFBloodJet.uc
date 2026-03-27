@@ -44,5 +44,10 @@ simulated function WallSplat()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Skins(0)=Texture'KFX.BloodySpray'
+=======
+    Skins(0)=Texture'KFX.BloodSplash'
+    bUnlit=False
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

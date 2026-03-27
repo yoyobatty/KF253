@@ -45,8 +45,15 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Mesh=SkeletalMesh'KFCharacterModels.Bloat'
 	DrawScale=0.800000
 	Skins(0)=Texture'KFCharacters.BloatSkin'
 	Skins(1)=Texture'KFCharacters.BloatCleaverSkin'
+=======
+     Mesh=SkeletalMesh'KFCharacterModels.Bloat'
+     DrawScale=0.800000
+     Skins(0)=Texture'KFCharacters.BloatSkin'
+     Skins(1)=Texture'KFCharacters.BloatCleaverSkin'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

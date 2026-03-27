@@ -13,8 +13,15 @@ function BlowUp(vector HitLocation)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Speed=10000.000000
 	MaxSpeed=10100.000000
 	MomentumTransfer=70000.000000
 	LifeSpan=1.000000
+=======
+     Speed=10000.000000
+     MaxSpeed=10100.000000
+     MomentumTransfer=70000.000000
+     LifeSpan=1.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

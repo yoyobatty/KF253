@@ -72,7 +72,12 @@ function DoTrace(Vector Start, Rotator Dir)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	DamageMax=40
 	Momentum=10000.000000
 	FireSound=Sound'KFWeaponSound.DualiesFire'
+=======
+     Momentum=10000.000000
+     FireSound=Sound'KFWeaponSound.DualiesFire'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

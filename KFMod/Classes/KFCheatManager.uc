@@ -1,5 +1,95 @@
 class KFCheatManager extends CheatManager;
 
+<<<<<<< HEAD
+=======
+var bool  bTurbo;
+var float SavedGroundSpeed, SavedWaterSpeed, SavedAirControl, SavedJumpZ, SavedMaxFallSpeed;
+
+exec function Summon( string ClassName )
+{
+	local class<actor> NewClass;
+	local vector SpawnLoc;
+    local Actor SpawnedActor;
+
+	if (!areCheatsEnabled()) return;
+
+	log( "Fabricate " $ ClassName );
+	NewClass = class<actor>( DynamicLoadObject( ClassName, class'Class' ) );
+	if( NewClass!=None )
+	{
+		if ( Pawn != None )
+			SpawnLoc = Pawn.Location;
+		else
+			SpawnLoc = Location;
+		SpawnedActor = Spawn( NewClass,,,SpawnLoc + 72 * Vector(Rotation) + vect(0,0,1) * 15 );
+        if(Pickup(SpawnedActor) != None)
+            Pickup(SpawnedActor).AddToNavigation(); // make sure pickup is added to navmesh
+	}
+	ReportCheat("Summon");
+}
+
+exec function Summon2( string ClassName, int Quantity )
+{
+    local class<actor> NewClass;
+    local vector SpawnLoc, TestLoc, Forward, Right;
+    local Actor SpawnedActor;
+    local int i, j;
+    local float Step, Angle;
+
+    if (!areCheatsEnabled()) return;
+
+    log( "Fabricated "$Quantity$ " of: " $ ClassName );
+    NewClass = class<actor>( DynamicLoadObject( ClassName, class'Class' ) );
+    if( NewClass!=None )
+    {
+        if ( Pawn != None )
+            SpawnLoc = Pawn.Location;
+        else
+            SpawnLoc = Location;
+
+        Forward = vector(Rotation);
+        Right   = Forward cross vect(0,0,1);
+
+        for ( i = 0; i < Quantity; i++ )
+        {
+            SpawnedActor = None;
+
+            for (j = 0; j < 60 && SpawnedActor == None; j++)
+            {
+                Step  = 48.0 + 48.0 * (j / 12);
+                Angle = 2 * Pi * (j % 12) / 12.0;
+
+                TestLoc = SpawnLoc
+                    + (Forward * cos(Angle) + Right * sin(Angle)) * Step
+                    + vect(0,0,1) * 15;
+
+                    SpawnedActor = Spawn( NewClass,,, TestLoc );
+                    if (SpawnedActor != None && Pickup(SpawnedActor) != None)
+                        Pickup(SpawnedActor).AddToNavigation();
+            }
+        }
+    }
+    ReportCheat("Summon2");
+}
+
+exec function God()
+{
+	if (!areCheatsEnabled()) return;
+	if ( bGodMode )
+	{
+		bGodMode = false;
+        Pawn.bIgnoreForces = Pawn.default.bIgnoreForces;
+		ClientMessage("God mode off");
+		return;
+	}
+
+	bGodMode = true;
+    Pawn.bIgnoreForces = true;
+	ClientMessage("God Mode on");
+	ReportCheat("God");
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 exec function LaidLaw()
 {
     if(!areCheatsEnabled()) return;
@@ -8,7 +98,10 @@ exec function LaidLaw()
         ClientMessage("Lay down the LAW!");
         ReportCheat("LAW");
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 exec function Arsenal()
@@ -16,7 +109,11 @@ exec function Arsenal()
     local Inventory Inv;
 
     if (!areCheatsEnabled()) return;
+<<<<<<< HEAD
     if( (Level.Netmode!=NM_Standalone) || (Pawn == None) || (Vehicle(Pawn) != None) )
+=======
+    if( (Pawn == None) )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         return;
 
     Pawn.GiveWeapon("KFmod.Bullpup");
@@ -27,6 +124,7 @@ exec function Arsenal()
     Pawn.GiveWeapon("KFmod.Single");
     Pawn.GiveWeapon("KFmod.Axe");
     Pawn.GiveWeapon("KFmod.Bat");
+<<<<<<< HEAD
     Pawn.GiveWeapon("KFmod.Knife");
     Pawn.GiveWeapon("KFmod.Chainsaw");
     Pawn.GiveWeapon("KFmod.PlaceMineWeapon");
@@ -34,13 +132,22 @@ exec function Arsenal()
     Pawn.GiveWeapon("KFmod.LAW");
     Pawn.GiveWeapon("KFmod.Frag");
     Pawn.GiveWeapon("KFmod.StunNade");
+=======
+    Pawn.GiveWeapon("KFMod.Flamethrower");
+    Pawn.GiveWeapon("KFmod.LAW");
+    Pawn.GiveWeapon("KFmod.Frag");
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     Pawn.GiveWeapon("KFmod.Shotgun");
     Pawn.GiveWeapon("KFmod.BoomStick");
 
     for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
     {
         if ( Weapon(Inv)!=None )
+<<<<<<< HEAD
             Weapon(Inv).SuperMaxOutAmmo();
+=======
+            Weapon(Inv).MaxOutAmmo();
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
     }
 
     ReportCheat("Arsenal");
@@ -49,12 +156,18 @@ exec function Arsenal()
 
 exec function Backup()
 {
+<<<<<<< HEAD
  local KFSoldierFriendly Soldier;
 
 
     if (!areCheatsEnabled()) return;
     if( (Level.Netmode!=NM_Standalone) || (Pawn == None) || (Vehicle(Pawn) != None) )
         return;
+=======
+    local KFSoldierFriendly Soldier;
+
+    if (!areCheatsEnabled()) return;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     Soldier = Spawn(class'KFmod.KFSoldierFriendly');
     Soldier.PlayerReplicationInfo.Team.TeamIndex = PlayerReplicationInfo.Team.TeamIndex;
@@ -64,13 +177,17 @@ exec function Backup()
 
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 exec function Horde()
 {
     local float RandomZombieNum;
     local String ZombieName;
 
     if (!areCheatsEnabled()) return;
+<<<<<<< HEAD
     if( (Level.Netmode!=NM_Standalone) || (Pawn == None) || (Vehicle(Pawn) != None) )
         return;
 
@@ -97,6 +214,31 @@ exec function Horde()
     if (RandomZombieNum == 6)
      ZombieName = "FleshPound";
 
+=======
+
+    RandomZombieNum = rand(10);
+
+    if (RandomZombieNum == 0)
+        ZombieName = "Clot";
+    else if (RandomZombieNum == 1)
+        ZombieName = "Crawler";
+    else if (RandomZombieNum == 2)
+        ZombieName = "Stalker";
+    else if (RandomZombieNum == 3)
+        ZombieName = "Bloat";
+    else if (RandomZombieNum == 4)
+        ZombieName = "Gorefast";
+    else if (RandomZombieNum == 5)
+        ZombieName = "Scrake";
+    else if (RandomZombieNum == 6)
+        ZombieName = "FleshPound";
+    else if (RandomZombieNum == 7)
+        ZombieName = "Siren";
+    else if (RandomZombieNum == 8)
+        ZombieName = "Shade";
+    else
+        ZombieName = "Wretch";
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
    if (ZombieName != "")
     ConsoleCommand("Summon KFChar.Zombie"$ZombieName);
@@ -105,12 +247,106 @@ exec function Horde()
     ClientMessage("You've got company!");
 }
 
+<<<<<<< HEAD
+=======
+exec function Horde2(optional int Quantity)
+{
+    local int i, slotsPerRing, ringIndex, slotIndex, spawnedCount;
+    local float radiusStep, radius, angleStep, angle;
+    local vector SpawnLoc, TestLoc, Forward, Right;
+    local actor SpawnedActor;
+    local float RandomZombieNum;
+    local string ZombieName, ClassName;
+    local class<actor> NewClass;
+
+    if (!areCheatsEnabled()) return;
+
+    if (Quantity <= 0)
+        Quantity = 16; // default horde size
+
+    if (Pawn != None)
+        SpawnLoc = Pawn.Location;
+    else
+        SpawnLoc = Location;
+
+    Forward      = vector(Rotation);
+    Right        = Forward cross vect(0,0,1);
+    slotsPerRing = 12;      // how many slots per ring
+    radiusStep   = 96.0;    // distance between rings
+
+    while (spawnedCount < Quantity)
+    {
+        // pick a random zombie type for this one
+        RandomZombieNum = rand(10);
+
+        if (RandomZombieNum == 0)
+            ZombieName = "Clot";
+        else if (RandomZombieNum == 1)
+            ZombieName = "Crawler";
+        else if (RandomZombieNum == 2)
+            ZombieName = "Stalker";
+        else if (RandomZombieNum == 3)
+            ZombieName = "Bloat";
+        else if (RandomZombieNum == 4)
+            ZombieName = "Gorefast";
+        else if (RandomZombieNum == 5)
+            ZombieName = "Scrake";
+        else if (RandomZombieNum == 6)
+            ZombieName = "FleshPound";
+        else if (RandomZombieNum == 7)
+            ZombieName = "Siren";
+        else if (RandomZombieNum == 8)
+            ZombieName = "Shade";
+        else
+            ZombieName = "Wretch";
+
+        ClassName = "KFChar.Zombie"$ZombieName;
+        NewClass  = class<actor>(DynamicLoadObject(ClassName, class'Class'));
+
+        if (NewClass == None)
+        {
+            // if this type fails, skip it and pick another next loop
+            spawnedCount++;
+            continue;
+        }
+
+        SpawnedActor = None;
+
+        // keep expanding rings outward until we find a free spot
+        ringIndex = 0;
+        while (SpawnedActor == None && ringIndex < 1000) // big safety cap
+        {
+            radius    = 48.0 + radiusStep * ringIndex;
+            angleStep = 2 * Pi / float(slotsPerRing);
+
+            for (slotIndex = 0; slotIndex < slotsPerRing && SpawnedActor == None; slotIndex++)
+            {
+                angle   = angleStep * float(slotIndex);
+                TestLoc = SpawnLoc
+                        + (Forward * cos(angle) + Right * sin(angle)) * radius
+                        + vect(0,0,1) * 15;
+
+                SpawnedActor = Spawn(NewClass,,, TestLoc);
+            }
+
+            ringIndex++;
+        }
+
+        spawnedCount++;
+    }
+
+    ReportCheat("Horde2");
+    ClientMessage("Mixed horde spawned: "$Quantity$" zeds!");
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 exec function MopUp()
 {
     local KFMonster LevelMonster;
     local int LevelMonsterTotal;
 
     if (!areCheatsEnabled()) return;
+<<<<<<< HEAD
     if( (Level.Netmode!=NM_Standalone) || (Pawn == None) || (Vehicle(Pawn) != None) )
         return;
 
@@ -119,17 +355,78 @@ exec function MopUp()
     LevelMonsterTotal++;
     LevelMonster.KilledBy(Pawn);
    }
+=======
+
+    forEach DynamicActors(class 'KFMonster', LevelMonster)
+    {
+        LevelMonsterTotal++;
+        LevelMonster.KilledBy(Pawn);
+    }
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
     ReportCheat("MopUp");
     ClientMessage("The number of zombies in this map was : "$LevelMonsterTotal);
 }
 
+<<<<<<< HEAD
 
 exec function Heal()
 {
 
     if (!areCheatsEnabled()) return;
     if( (Level.Netmode!=NM_Standalone) || (Pawn == None) || (Vehicle(Pawn) != None) )
+=======
+exec function StartWave()
+{
+    if (!areCheatsEnabled()) return;
+
+    if(!KFGameType(Level.Game).bWaveInProgress)
+        KFGameType(Level.Game).WaveCountDown = 6;
+    else return;
+
+    ReportCheat("StartWave");
+    ClientMessage("Wave starting in 5 seconds.");
+}
+
+exec function EndWave()
+{
+    local KFMonster LevelMonster;
+
+    if (!areCheatsEnabled()) return;
+
+    if(!KFGameType(Level.Game).bWaveInProgress)
+        return;
+
+    forEach DynamicActors(class 'KFMonster', LevelMonster)
+        LevelMonster.KilledBy(Pawn);
+
+    KFGameType(Level.Game).DoWaveEnd();
+
+    ReportCheat("EndWave");
+    ClientMessage("Wave ended.");
+}
+
+exec function ExtraTime(optional float ExtraSeconds)
+{
+    if (!areCheatsEnabled()) return;
+
+    if(KFGameType(Level.Game).WaveCountDown >= 1)
+        KFGameType(Level.Game).WaveCountDown += ExtraSeconds;
+    else return;
+
+    if (ExtraSeconds <= 0)
+        ExtraSeconds = 10.0;
+
+    ReportCheat("ExtraTime");
+    ClientMessage("Extra "$ExtraSeconds$" seconds of trader time!");
+}
+
+exec function Heal()
+{
+    if (!areCheatsEnabled()) 
+        return;
+    if( (Pawn == None) )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         return;
 
     Pawn.GiveHealth(100,Pawn.HealthMax);
@@ -138,6 +435,53 @@ exec function Heal()
     ClientMessage("Much better.");
 }
 
+<<<<<<< HEAD
+=======
+exec function HealAll()
+{
+    local KFHumanPawn TeamMatePawn;
+    if (!areCheatsEnabled()) 
+        return;
+
+    foreach DynamicActors(class'KFHumanPawn', TeamMatePawn)
+    {
+        if (TeamMatePawn != None)
+            TeamMatePawn.GiveHealth(100,TeamMatePawn.HealthMax);
+    }
+
+    ReportCheat("Healed All");
+    ClientMessage("Much better.");
+}
+
+exec function SetHealth(int NewHealth)
+{
+    if (!areCheatsEnabled()) 
+        return;
+    if( (Pawn == None) )
+        return;
+
+    Pawn.Health = NewHealth;
+
+    ReportCheat("SetHealth");
+    ClientMessage("Health set to "$NewHealth);
+}
+
+exec function SetHealthAll(int NewHealth)
+{
+    local KFHumanPawn TeamMatePawn;
+    if (!areCheatsEnabled()) 
+        return;
+
+    foreach DynamicActors(class'KFHumanPawn', TeamMatePawn)
+    {
+        if (TeamMatePawn != None)
+            TeamMatePawn.Health = NewHealth;
+    }
+
+    ReportCheat("SetHealthAll");
+    ClientMessage("Health for all set to "$NewHealth);
+}
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 /*
     exec function TimeIsATeacher()
@@ -186,6 +530,212 @@ exec function ViewZombie()
 		ViewSelf(true);
 }
 
+<<<<<<< HEAD
+=======
+exec function shownav()
+{
+    local NavigationPoint N, DN;
+    local int i;
+    local ReachSpec R;
+    local vector DestOffset;
+    local color C;
+
+    hidenav();
+
+    DestOffset = vect(0,0,8);
+    DN = Level.NavigationPointList;
+
+    for( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+    {
+        N.bHidden = False;
+
+        for( i=0; i!=N.PathList.Length; ++i )
+        {
+            R = N.PathList[i];
+
+            if( R != None )
+            {
+                if( R.Start != None && R.End != None )
+                {
+                    if( (R.reachFlags & 0x1F) != R.reachFlags )
+                    {
+                        // special flags, special color
+                        C.R = 128;
+                        C.G = 0;
+                        C.B = 255;
+                    }
+                    else
+                    {
+                        C.R = 255;
+                        C.G = 255;
+                        C.B = 255;
+                    }
+
+                    DN.DrawStayingDebugLine(R.Start.Location + DestOffset, R.End.Location - DestOffset, C.R,C.G,C.B);
+                }
+                else
+                {
+                     //gLog("INVALID REACHSPEC" #GON(N)  #GON(R) #GON(R.Start) #GON(R.End));
+                     Log("INVALID REACHSPEC" @N  @R @R.Start @R.End);
+                     DN.DrawStayingDebugLine(N.Location, N.Location+vect(0,0,255), 255,0,0);
+                }
+            }
+        }
+
+    }
+}
+
+exec function hidenav()
+{
+    local NavigationPoint N;
+    Level.NavigationPointList.ClearStayingDebugLines();
+    for( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+        N.bHidden = True;
+}
+
+exec function Cash(optional int Amount)
+{
+    if (!AreCheatsEnabled()) return;
+    if (PlayerReplicationInfo == None) return;
+
+    if (Amount <= 0)
+        Amount = 500;
+
+    PlayerReplicationInfo.Score += Amount; // In KF this commonly maps to player cash
+    ReportCheat("Cash");
+    ClientMessage("Dosh +"$Amount);
+}
+
+exec function CashAll(optional int Amount)
+{
+    local KFPlayerReplicationInfo TeamMatePRI;
+
+    if (!AreCheatsEnabled()) return;
+
+    if (Amount <= 0)
+        Amount = 500;
+
+    foreach DynamicActors(class'KFPlayerReplicationInfo', TeamMatePRI)
+    {
+        if (TeamMatePRI != None)
+            TeamMatePRI.Score += Amount; // In KF this commonly maps to player cash
+    }
+
+    ReportCheat("CashAll");
+    ClientMessage("Dosh +"$Amount$" for all.");
+}
+
+exec function Vest()
+{
+    if (!AreCheatsEnabled()) return;
+    if (Pawn == None || Vehicle(Pawn) != None) return;
+
+    Pawn.ShieldStrength = 100;
+    ReportCheat("Vest");
+    ClientMessage("Armor topped up.");
+}
+
+exec function VestAll()
+{
+    local KFHumanPawn TeamMatePawn;
+
+    if (!AreCheatsEnabled()) return;
+    if (Vehicle(Pawn) != None) return;
+
+    foreach DynamicActors(class'KFHumanPawn', TeamMatePawn)
+    {
+        if (TeamMatePawn != None)
+            TeamMatePawn.ShieldStrength = 100;
+    }
+
+    ReportCheat("Vest");
+    ClientMessage("Armor topped up for all.");
+}
+
+exec function Nuke(optional float Radius)
+{
+    local KFMonster M;
+    local int Killed;
+
+    if (!AreCheatsEnabled()) return;
+
+   if (Radius <= 0)
+       Radius = 50000.0;
+
+    foreach DynamicActors(class'KFMonster', M)
+    {
+        if (M != None && VSize(M.Location - Pawn.Location) <= Radius && M.Health > 0 && !M.bDeleteMe)
+        {
+            M.TakeDamage(10000, Pawn, M.Location, Pawn.Velocity * M.Mass, class'DamTypeFrag');
+            ++Killed;
+        }
+    }
+
+    ReportCheat("Nuke");
+    ClientMessage("Nuked zeds in radius "$int(Radius)$"uu: "$Killed);
+}
+
+exec function AllAmmo()
+{
+	local Inventory Inv;
+	if (!areCheatsEnabled()) return;
+
+	for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+		if ( Weapon(Inv)!=None )
+			Weapon(Inv).MaxOutAmmo();
+
+	ReportCheat("AllAmmo");
+}
+exec function AllAmmoAll(optional bool bSuper)
+{
+	local Inventory Inv;
+    local KFHumanPawn TeamMatePawn;
+
+    if (!AreCheatsEnabled()) return;
+
+    foreach DynamicActors(class'KFHumanPawn', TeamMatePawn)
+    {
+        for( Inv=TeamMatePawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+            if ( Weapon(Inv)!=None )
+                if (bSuper)
+                    Weapon(Inv).SuperMaxOutAmmo();
+                else
+                    Weapon(Inv).MaxOutAmmo();
+    }
+    
+	ReportCheat("AllAmmoAll");
+    ClientMessage("Everyone's ammo maxed out");
+}
+
+exec function GodAll()
+{
+    local Controller C;
+
+    if (!AreCheatsEnabled()) return;
+
+	For ( C=Level.ControllerList; C!=None; C=C.NextController )
+    {
+        if ( C.bIsPlayer )
+        {
+            if(!C.bGodMode)
+            {
+                C.bGodMode = true;
+                if(PlayerController(C) != None)
+                    PlayerController(C).ClientMessage("God mode on.");
+            }
+            else
+            {
+                C.bGodMode = false;
+                if(PlayerController(C) != None)
+                    PlayerController(C).ClientMessage("God mode off.");
+            }
+        }
+	}
+
+    ReportCheat("GodAll");
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 defaultproperties
 {
 }

@@ -55,6 +55,11 @@ simulated function PostNetBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	WeaponIdleMovementAnim="Idle_Rifle"
 	bHeavy=True
+=======
+     WeaponIdleMovementAnim="Idle_Rifle"
+     bHeavy=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

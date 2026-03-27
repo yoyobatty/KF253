@@ -47,6 +47,7 @@ singular function PhysicsVolumeChange( PhysicsVolume NewVolume );
 
 defaultproperties
 {
+<<<<<<< HEAD
 	DrawType=DT_StaticMesh
 	StaticMesh=StaticMesh'NewPatchSM.BossSyringe'
 	bStatic=False
@@ -57,4 +58,16 @@ defaultproperties
 	bCollideWorld=True
 	bProjTarget=True
 	bBounce=True
+=======
+     DrawType=DT_StaticMesh
+     StaticMesh=StaticMesh'NewPatchSM.BossSyringe'
+     bStatic=False
+     RemoteRole=ROLE_None
+     LifeSpan=300.000000
+     CollisionRadius=4.000000
+     CollisionHeight=4.000000
+     bCollideWorld=True
+     bProjTarget=True
+     bBounce=True
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

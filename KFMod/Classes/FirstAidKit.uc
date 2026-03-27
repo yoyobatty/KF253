@@ -67,6 +67,7 @@ function AnnouncePickup( Pawn Receiver )
 
 defaultproperties
 {
+<<<<<<< HEAD
 	HealingAmount=50
 	bSuperHeal=False
 	bOnlyReplicateHidden=False
@@ -82,4 +83,21 @@ defaultproperties
 	CollisionRadius=28.000000
 	CollisionHeight=20.000000
 	RotationRate=(Yaw=0)
+=======
+     HealingAmount=50
+     bSuperHeal=False
+     bOnlyReplicateHidden=False
+     RespawnTime=60.000000
+     PickupMessage="You used a First Aid Kit"
+     PickupSound=Sound'KFPlayerSound.MedkitUse'
+     StaticMesh=StaticMesh'KillingFloorStatics.FirstAidKit'
+     Physics=PHYS_Falling
+     DrawScale=1.000000
+     AmbientGlow=40
+     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
+     ScaleGlow=0.000000
+     CollisionRadius=28.000000
+     CollisionHeight=20.000000
+     RotationRate=(Yaw=0)
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

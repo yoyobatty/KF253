@@ -2,10 +2,14 @@
 
 class KFGib extends Gib;
 
+<<<<<<< HEAD
 simulated function PostBeginPlay()
 {
    SpawnTrail();
 }
+=======
+var() xEmitter TrailFlame;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 simulated function HitWall( Vector HitNormal, Actor Wall )
 {
@@ -39,9 +43,36 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
     }
 }
 
+<<<<<<< HEAD
 defaultproperties
 {
 	DampenFactor=0.400000
 	LifeSpan=0.000000
 	Mass=280.000000
+=======
+simulated function SpawnTrail()
+{
+    if ( Level.NetMode != NM_DedicatedServer )
+    {
+		if ( bFlaming && FRand() < 0.7) //Spawn both!
+		{
+			TrailFlame = Spawn(class'KFHitFlame', self,,Location,Rotation);
+            TrailFlame.SetPhysics( PHYS_Trailer );
+			TrailFlame.LifeSpan = 4 + 2*FRand();
+			LifeSpan = TrailFlame.LifeSpan + 4.0;
+			TrailFlame.SetTimer(LifeSpan - 3.0,false);
+		}
+        Trail = Spawn(TrailClass, self,, Location, Rotation);
+        Trail.LifeSpan = 1.8;
+		Trail.SetPhysics( PHYS_Trailer );
+		RandSpin( 64000 );
+	}
+}
+
+defaultproperties
+{
+     DampenFactor=0.400000
+     LifeSpan=12.000000
+     Mass=280.000000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

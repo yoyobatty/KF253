@@ -54,6 +54,11 @@ simulated event RenderOverlays(Canvas Canvas)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	UpKick=50
 	FireModeClass(0)=Class'KFMod.BullpupFireSP'
+=======
+     UpKick=50
+     FireModeClass(0)=Class'KFMod.BullpupFireSP'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

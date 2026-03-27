@@ -97,5 +97,9 @@ simulated function AddKFPRI(PlayerReplicationInfo PRI)
 
 defaultproperties
 {
+<<<<<<< HEAD
 	LobbyTimeout=-1
+=======
+     LobbyTimeout=-1
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

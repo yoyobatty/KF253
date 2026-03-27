@@ -7,6 +7,10 @@ var() Material OnHUDIcon,SubHUDIcon;
 var() localized string VeterancyName,VeterancyDescription,VeterancyRequirement;
 
 var string VetButtonStyle; // OBSOLOTE!
+<<<<<<< HEAD
+=======
+var bool bHasPerkWeapon;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 // This skill can be qualified for..?
 static function bool QualityFor( KFPlayerStats Other )
@@ -33,18 +37,29 @@ static function float GetMeleeMovementSpeedModifier()
 	Return 0;
 }
 // Reduce damage zombies can deal to you
+<<<<<<< HEAD
 static function int ReduceDamage( KFPawn Injured, KFMonster DamageTaker, int InDamage, class<DamageType> DmgType )
+=======
+static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 {
 	Return InDamage;
 }
 // Add damage you deal to zombies
+<<<<<<< HEAD
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
+=======
+static function int AddDamage( KFMonster Injured, KFPawn Instigator, int InDamage, class<DamageType> DmgType )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 {
 	Return InDamage;
 }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Add max carry weight for weapons
 static function int AddCarryMaxWeight()
 {
@@ -60,6 +75,15 @@ static function float AddExtraAmmoFor( Class<Ammunition> AmmoType )
 {
 	Return 1;
 }
+<<<<<<< HEAD
+=======
+
+static function float GetMagCapacityMod(KFWeapon Other)
+{
+	return 1.0;
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Multiply headshot damage
 static function float GetHeadShotDamMulti()
 {
@@ -104,12 +128,38 @@ static function bool FlamingNades()
 	Return False;
 }
 
+<<<<<<< HEAD
+=======
+// Healing Grenades? Muahahaha
+static function bool HealingNades()
+{
+	Return False;
+}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // Change effective range on FLamethrower
 static function int ExtraRange()
 {
 	Return 0;
 }
 
+<<<<<<< HEAD
 defaultproperties
 {
+=======
+static function class<DamageType> GetMAC10DamageType()
+{
+	return class'KFMod.DamTypeBullpup';
+}
+
+// Reduce damage when wearing Armor
+static function float GetBodyArmorDamageModifier()
+{
+	return 1.0;
+}
+
+defaultproperties
+{
+	bHasPerkWeapon=false
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

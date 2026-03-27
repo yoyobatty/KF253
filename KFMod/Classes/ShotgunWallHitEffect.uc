@@ -72,6 +72,7 @@ simulated function PostNetBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ImpactSounds(0)=Sound'XEffects.Impact1Snd'
 	ImpactSounds(1)=Sound'XEffects.Impact2Snd'
 	ImpactSounds(2)=Sound'XEffects.Impact5Snd'
@@ -81,4 +82,15 @@ defaultproperties
 	DrawType=DT_None
 	RemoteRole=ROLE_SimulatedProxy
 	LifeSpan=0.200000
+=======
+     ImpactSounds(0)=Sound'XEffects.Impact1Snd'
+     ImpactSounds(1)=Sound'XEffects.Impact2Snd'
+     ImpactSounds(2)=Sound'XEffects.Impact5Snd'
+     ImpactSounds(3)=Sound'XEffects.Impact3'
+     ImpactSounds(4)=Sound'XEffects.Impact1'
+     ImpactSounds(5)=Sound'XEffects.Impact2'
+     DrawType=DT_None
+     RemoteRole=ROLE_SimulatedProxy
+     LifeSpan=0.200000
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

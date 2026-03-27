@@ -142,10 +142,19 @@ function Reset()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	ShotLength=2.000000
 	bInitiallyActive=True
 	bHidden=True
 	bNoDelete=True
 	RemoteRole=ROLE_None
 	Texture=Texture'Engine.Proj_Icon'
+=======
+     ShotLength=2.000000
+     bInitiallyActive=True
+     bHidden=True
+     bNoDelete=True
+     RemoteRole=ROLE_None
+     Texture=Texture'Engine.Proj_Icon'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

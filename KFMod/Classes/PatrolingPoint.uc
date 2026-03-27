@@ -14,5 +14,9 @@ function PostBeginPlay()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	Texture=Texture'Engine.S_NavP'
+=======
+     Texture=Texture'Engine.S_NavP'
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

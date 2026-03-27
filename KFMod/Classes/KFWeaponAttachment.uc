@@ -18,7 +18,11 @@ var() vector            mShellEmitterOffset;
 
 var vector  mOldHitLocation;
 
+<<<<<<< HEAD
 var () class<KFHitEffect> HitEffectType;
+=======
+var () class<Actor> HitEffectType;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
                                                         
 var() array<name> TPAnims,TPAnimsB; // Custom third person animations.
 var() name WeaponIdleMovementAnim,SecondaryWeaponIdleMovementAnim; // Custom holding weapon animation.
@@ -28,7 +32,11 @@ var vector OlComprVect;
 
 simulated function name GetThirdPersonAnim()
 {
+<<<<<<< HEAD
         if( FiringMode==1 && TPAnimsB.Length>0 )
+=======
+    if( FiringMode==1 && TPAnimsB.Length>0 )
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		Return TPAnimsB[Rand(TPAnimsB.Length)];
 	if( TPAnims.Length==0 )
 		Return '';
@@ -47,22 +55,33 @@ simulated function PostNetReceive()
 			KFPawn(Instigator).WeaponAttachment = Self;
 		}
 	}
+<<<<<<< HEAD
 	else if( mHitLocation!=vect(0,0,0) )
 	{
 		AddHitFX();
 		mHitLocation = vect(0,0,0);
 	}
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 simulated function PostNetBeginPlay()
 {
 	Super.PostNetBeginPlay();
+<<<<<<< HEAD
 	LastInstig = Instigator;
 	mHitLocation = vect(0,0,0);
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if( KFPawn(Instigator)!=None )
 	{
 		KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
 		KFPawn(Instigator).WeaponAttachment = Self;
 	}
+<<<<<<< HEAD
+=======
+	LastInstig = Instigator;
+	mHitLocation = vect(0,0,0);
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	bNetNotify = True;
 }
 
@@ -85,6 +104,7 @@ simulated function AddHitFX()
 {
 	local vector SpawnLoc, SpawnDir, SpawnVel;
 	local float hitDist;
+<<<<<<< HEAD
 	local Actor A;
 
 	if( Instigator!=None )
@@ -95,6 +115,8 @@ simulated function AddHitFX()
 	}
 
 	CheckForSplash();
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if (mTracer == None)
 		mTracer = Spawn(mTracerClass);
@@ -159,6 +181,7 @@ simulated function vector GetTracerStart()
 
 function UpdateHit(Actor HitActor, vector HitLocation, vector HitNormal)
 {
+<<<<<<< HEAD
 	local vector V;
 
 	if( Level.NetMode!=NM_StandAlone ) // Skip some processing on single player games
@@ -177,6 +200,13 @@ function UpdateHit(Actor HitActor, vector HitLocation, vector HitNormal)
 		AddHitFX();
 	}
 	mHitLocation = V;
+=======
+	SpawnHitCount++;
+	mHitLocation = HitLocation;
+	mHitActor = HitActor;
+	mHitNormal = HitNormal;
+	NetUpdateTime = Level.TimeSeconds - 1;
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated event ThirdPersonEffects()
@@ -186,6 +216,26 @@ simulated event ThirdPersonEffects()
 	if ( (Level.NetMode == NM_DedicatedServer) || (Instigator == None) )
 		return;
 
+<<<<<<< HEAD
+=======
+		// new Trace FX - Ramm
+	if (FiringMode == 0)
+	{
+		if ( OldSpawnHitCount != SpawnHitCount )
+		{
+			OldSpawnHitCount = SpawnHitCount;
+			GetHitInfo();
+			PC = Level.GetLocalPlayerController();
+			if ( ((Instigator != None) && (Instigator.Controller == PC)) || (VSize(PC.ViewTarget.Location - mHitLocation) < 4000) )
+			{
+				Spawn(HitEffectType,mHitActor,, mHitLocation, Rotator(mHitNormal));
+				CheckForSplash();
+				AddHitFX();
+			}
+		}
+	}
+
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
   	if ( FlashCount>0 )
 	{
 		if( KFPawn(Instigator)!=None )
@@ -200,7 +250,10 @@ simulated event ThirdPersonEffects()
 			return;
 
 		WeaponLight();
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		DoFlashEmitter();
 
 		if ( (mShellCaseEmitter == None) && (Level.DetailMode != DM_Low) && !Level.bDropDetail )
@@ -251,6 +304,7 @@ simulated function DoFlashEmitter()
 
 defaultproperties
 {
+<<<<<<< HEAD
 	mTracerPullback=50.000000
 	mTracerSpeed=7500.000000
 	HitEffectType=Class'KFMod.KFHitEffect'
@@ -262,4 +316,17 @@ defaultproperties
 	LightBrightness=255.000000
 	LightRadius=10.000000
 	LightPeriod=3
+=======
+     mTracerPullback=50.000000
+     mTracerSpeed=7500.000000
+     HitEffectType=Class'KFMod.KFHitEffect'
+     WeaponIdleMovementAnim="Idle_Rifle"
+     LightType=LT_Steady
+     LightEffect=LE_NonIncidence
+     LightHue=30
+     LightSaturation=150
+     LightBrightness=255.000000
+     LightRadius=10.000000
+     LightPeriod=3
+>>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
