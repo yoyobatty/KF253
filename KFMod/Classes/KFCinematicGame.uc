@@ -1,0 +1,52 @@
+class KFCinematicGame extends KFSPGameType;
+
+defaultproperties
+{
+     RoundLimit=1
+     RoundTimeLimit=10
+     PracticeTimeLimit=60
+     ReinforcementsFreq=7
+     StartingCash=250
+     bNoLateJoiners=False
+     MonsterSquad(0)="1A1G2A1G1A"
+     MonsterSquad(1)="4A2D"
+     MonsterSquad(2)="2D2A2D"
+     MonsterSquad(3)="2A1C2D1B"
+     MonsterSquad(4)="2A2C1E"
+     MonsterSquad(5)="2A2C"
+     MonsterSquad(6)="2D1H2A1E"
+     MonsterSquad(7)="3B2F"
+     MonsterSquad(8)="1H2D1G1C"
+     MonsterSquad(9)="2F"
+     MonsterSquad(10)="2F2A"
+     MonsterSquad(11)="2F2H1E"
+     MonsterSquad(12)="2H2D"
+     MonsterSquad(13)="1H1C1B"
+     MonsterSquad(14)="1H1E1A"
+     MonsterSquad(15)="3E2B4A"
+     MonsterSquad(16)="2B7F3G"
+     MonsterSquad(17)="4A2G3D"
+     MonsterSquad(18)="2D2D3H"
+     MonsterSquad(19)="2F2G2H"
+     MonsterSquadCount=15
+     InitialCountDownValue=1
+     WaveConfigMenu="GUI2K4.UT2K4InvasionWaveConfig"
+     FinalWave=15
+     Waves(0)=(WaveMask=1,WaveMaxMonsters=30)
+     Waves(1)=(WaveMask=7,WaveMaxMonsters=40,WaveDifficulty=0.000000)
+     Waves(2)=(WaveMask=15,WaveMaxMonsters=50,WaveDifficulty=0.000000)
+     Waves(3)=(WaveMask=63,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(4)=(WaveMask=60,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(5)=(WaveMask=64,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(6)=(WaveMask=108,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(7)=(WaveMask=200,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(8)=(WaveMask=496,WaveMaxMonsters=50,WaveDifficulty=0.500000)
+     Waves(9)=(WaveMask=638,WaveMaxMonsters=50)
+     bAdjustSkill=True
+     SpawnProtectionTime=2.000000
+     LoginMenuClass="GUI2K4.UT2K4PlayerLoginMenu"
+     bWeaponStay=False
+     ResetTimeDelay=0
+     GoalScore=0
+     PlayerControllerClassName="KFMod.KFCinematicPlayer"
+}

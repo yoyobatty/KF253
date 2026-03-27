@@ -1,0 +1,225 @@
+// KFMeleeFire
+class KFMeleeFire extends WeaponFire;
+
+var int damageConst;
+var int maxAdditionalDamage;
+var float ProxySize;
+
+var int NumConHits; // Number of successful strikes before a combo.
+var bool bComboTime; // Are we combo-ing?
+var int LastComboStartTime;
+var int LastConHitTime;
+var float ComboConDecay;
+
+var float StopFireTime;
+var float f;
+var float StartFireTime;
+
+var int dmg;
+var int i;
+
+var Name IdleAnim;
+var float IdleAnimRate;
+var float weaponRange;
+
+var float DamagedelayMin;
+var float DamagedelayMax;
+
+var bool bCanHit ;
+var Vector EndTraceS;
+
+var class<damageType> hitDamageClass;
+
+var() vector ImpactShakeRotMag;		   // how far to rot view
+var() vector ImpactShakeRotRate;		  // how fast to rot view
+var() float  ImpactShakeRotTime;		  // how much time to rot the instigator's view
+var() vector ImpactShakeOffsetMag;		// max view offset vertically
+var() vector ImpactShakeOffsetRate;	   // how fast to offset view vertically
+var() float  ImpactShakeOffsetTime;	   // how much time to offset view
+
+var Vector SpawnTrace;
+var Bool bTrigger;
+var Actor SpawnActor;
+
+simulated Function Timer()
+{
+	local Actor HitActor;
+	local vector StartTrace, EndTrace, HitLocation, HitNormal;
+	local rotator PointRot;
+	local int MyDamage;
+
+	MyDamage = damageConst + Rand(MaxAdditionalDamage);
+
+	If( !KFWeapon(Weapon).bNoHit )
+	{
+		MyDamage = damageConst + Rand(MaxAdditionalDamage);
+		StartTrace = Instigator.Location + Instigator.EyePosition();
+		if( Instigator.Controller!=None && PlayerController(Instigator.Controller)==None && Instigator.Controller.Enemy!=None )
+			PointRot = rotator(Instigator.Controller.Enemy.Location-StartTrace); // Give aimbot for bots.
+		else PointRot = Instigator.GetViewRotation();
+		EndTrace = StartTrace + vector(PointRot)*weaponRange;
+		HitActor = Instigator.Trace( HitLocation, HitNormal, EndTrace, StartTrace, true, vect(10,10,10));
+	
+		if (HitActor!=None)  
+		{
+			ImpactShakeView();
+
+			if ( (HitActor.IsA('KFMonster') || HitActor.IsA('KFHumanPawn')) && KFMeleeGun(Weapon).BloodyMaterial!=none )
+			{
+				Weapon.Skins[KFMeleeGun(Weapon).BloodSkinSwitchArray] = KFMeleeGun(Weapon).BloodyMaterial;
+				Weapon.texture = Weapon.default.Texture;
+			}
+			if( (KFMonster(HitActor)!=none) )
+			{
+				HitActor.TakeDamage(MyDamage, Instigator, HitLocation, vector(PointRot), hitDamageClass) ;
+				Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - (Instigator.Location + Instigator.EyePosition())));
+				KFMeleeGun(Weapon).playServerSound();
+			}
+			else
+			{
+				HitActor.TakeDamage(MyDamage, Instigator, HitLocation, vector(PointRot), hitDamageClass) ;
+				Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - StartTrace));
+			}
+		}
+	}
+}
+function float GetFireSpeed()
+{
+	if( KFPawn(Instigator)!=None )
+		Return KFPawn(Instigator).GetVeteran().Static.GetFireSpeedMod(Weapon);
+	Return 1;
+}
+simulated event ModeDoFire()
+{
+	local float Rec;
+
+	if (!AllowFire())
+		return;
+
+	Rec = GetFireSpeed();
+	SetTimer(DamagedelayMin/Rec, False);
+	FireRate = default.FireRate/Rec;
+	FireAnimRate = default.FireAnimRate*Rec;
+	ReloadAnimRate = default.ReloadAnimRate*Rec;
+
+	if (MaxHoldTime > 0.0)
+		HoldTime = FMin(HoldTime, MaxHoldTime);
+
+	// server
+	if (Weapon.Role == ROLE_Authority)
+	{
+		Weapon.ConsumeAmmo(ThisModeNum, Load);
+		DoFireEffect();
+
+		HoldTime = 0;   // if bot decides to stop firing, HoldTime must be reset first
+		if ( (Instigator == None) || (Instigator.Controller == None) )
+			return;
+
+		if ( AIController(Instigator.Controller) != None )
+			AIController(Instigator.Controller).WeaponFireAgain(BotRefireRate, true);
+
+		Instigator.DeactivateSpawnProtection();
+	}
+
+	// client
+	if (Instigator.IsLocallyControlled())
+	{
+		ShakeView();
+		PlayFiring();
+		FlashMuzzleFlash();
+		StartMuzzleSmoke();
+		ClientPlayForceFeedback(FireForce);
+	}
+	else // server
+		ServerPlayFiring();
+
+	Weapon.IncrementFlashCount(ThisModeNum);
+
+	// set the next firing time. must be careful here so client and server do not get out of sync
+	if (bFireOnRelease)
+	{
+		if (bIsFiring)
+			NextFireTime += MaxHoldTime + FireRate;
+		else
+			NextFireTime = Level.TimeSeconds + FireRate;
+	}
+	else
+	{
+		NextFireTime += FireRate;
+		NextFireTime = FMax(NextFireTime, Level.TimeSeconds);
+	}
+
+	Load = AmmoPerFire;
+	HoldTime = 0;
+
+	if (Instigator.PendingWeapon != Weapon && Instigator.PendingWeapon != None)
+	{
+		bIsFiring = false;
+		Weapon.PutDown();
+	}
+
+
+	Weapon.Owner.Velocity.x *= KFMeleeGun(Weapon).ChopSlowRate;
+	Weapon.Owner.Velocity.y *= KFMeleeGun(Weapon).ChopSlowRate;
+}
+
+function DoFireEffect()
+{
+	local KFMeleeGun kf;
+	local int damage ;
+
+	if(KFMeleeGun(Weapon) == none)
+		return;
+
+	kf = KFMeleeGun(Weapon);
+	damage = damageConst + Rand(MaxAdditionalDamage) ;
+}
+
+
+simulated function ShakeView()
+{
+	local PlayerController P;
+
+	if (Instigator == None)
+		return;
+
+	P = PlayerController(Instigator.Controller);
+	if (P != None )
+		P.WeaponShakeView(ShakeRotMag, ShakeRotRate, ShakeRotTime, ShakeOffsetMag, ShakeOffsetRate, ShakeOffsetTime);
+}
+
+function SlowDown();
+
+function SpeedUp();
+
+function ResetRate();
+
+function ImpactShakeView()
+{
+	local PlayerController P;
+
+	P = PlayerController(Instigator.Controller);
+	if ( P != None )
+		P.WeaponShakeView(ImpactShakeRotMag, ImpactShakeRotRate, ImpactShakeRotTime,ImpactShakeOffsetMag,ImpactShakeOffsetRate,ImpactShakeOffsetTime);
+}
+
+defaultproperties
+{
+     maxAdditionalDamage=5
+     ProxySize=0.200000
+     IdleAnim="Idle"
+     IdleAnimRate=1.000000
+     weaponRange=70.000000
+     DamagedelayMin=0.300000
+     DamagedelayMax=0.400000
+     hitDamageClass=Class'KFMod.DamTypeMelee'
+     ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
+     ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
+     ImpactShakeRotTime=2.000000
+     ImpactShakeOffsetMag=(X=10.000000,Y=10.000000,Z=10.000000)
+     ImpactShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
+     ImpactShakeOffsetTime=2.000000
+     FireEndAnim=
+     FireForce="ShockRifleFire"
+     aimerror=100.000000
+}
