@@ -33,7 +33,7 @@ simulated function HitWall(vector HitNormal, Actor Wall)
 {
     local float Speed;
 
-    // Simple pseudo-physics bounce: reflect & damp velocity
+    // Simple pseudo physics bounce with some random spin added in. Not perfectly physically accurate, but good enough for a fun prop.
     Velocity = DampenFactor * ((Velocity dot HitNormal) * HitNormal * (-2.0) + Velocity);
     RandSpin(SpinRate);
     Speed = VSize(Velocity);

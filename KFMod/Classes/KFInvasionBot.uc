@@ -1,8 +1,11 @@
+// A lot of this code is combination of the default KFInvasionBot code from KF2.5 and Marco's KF1 bots mutator
+// I didn't like the behavior of Marco's bots so I ended up mostly using the UT2004 bot behaviour and tweaking it to be way more tailored to KFMod.
+
+
 class KFInvasionBot extends InvasionBot;
 
 var float LastShopTime;
 var float LastShopCash;
-
 var float LastHealTime;
 
 struct FWeldedPath
@@ -12,19 +15,15 @@ struct FWeldedPath
 };
 var array<FWeldedPath> DoorPaths;
 
-var float NextTargetCheck,NextKnifeTime,NextMedicFireTime,NextNadeTimer,NextPipebombTimer,NextAssistTimer,NextGroupTimer,BotSupportTimer,WeldAssistTimer,NextSquadRetreatTime;
+var float NextTargetCheck,NextMedicFireTime,NextNadeTimer,WeldAssistTimer;
 
 var byte HealState,OldMovesCount;
-var float RetreatTime,LastEnemyEncounter;
-var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath,LastBestGroup;
+var float RetreatTime,LastEnemyEncounter,LastChatTime,LastCalloutTime;
+var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
 
 // Internal to state
-var WeaponLocker TargetLocker;
 var NavigationPoint ShoppingPath;
-var vector MeLoc, LockLoc;
-var float LockerDist;
-var float LockerHeight;
 var KFDoorMover TargetDoor;
 
 var Syringe MySyringe;
@@ -37,19 +36,19 @@ var array<class<KFWeaponPickup> > LastDroppedWeaponClasses;
 var bool bTriedRecoverLastDrop;
 
 var KFHumanPawn InjuredAlly;
-var bool bHasChecked;
-
 var KFInvasionBot BeggingTarget,AnswerBegger;
 var PlayerController DonatePlayer;
-var Pawn FollowingPawn,BotSupportActor;
+var PlayerController BeggingPlayer;
 
-var byte Personality,AssistWeldMode;
+var byte AssistWeldMode;
 
 var rotator LastViewRotation;
 var() float SmoothTurnSpeed;
 
-var vector CachedRetreatDest;
-var float NextRetreatDestUpdate;
+var int ShoppingAttempts, RoamingAttempts;
+var float BestShopDist; // Best (closest) distance to ShoppingPath during current trip
+
+var KFNadeHealingExplosion NearbyHealCloud;
 
 function AssignPersonality()
 {
@@ -60,7 +59,6 @@ function AssignPersonality()
 	CombatStyle = -1 + FRand()*2.f;
 	Tactics = FRand();
 	ReactionTime = FRand();
-	Personality = 1; //Follow group
 	Jumpiness = 0.f;
 }
 
@@ -205,7 +203,7 @@ function bool ShouldGoShopping()
     if( PlayerReplicationInfo.Score >= LastShopCash + 150.f )
 	{
 		LastShopCash = PlayerReplicationInfo.Score;
-		log(GetHumanReadableName()$" ShouldGoShopping: Cash injection detected. Current cash: " $PlayerReplicationInfo.Score $ " LastShopCash: " $LastShopCash);
+		//log(GetHumanReadableName()$" ShouldGoShopping: Cash injection detected. Current cash: " $PlayerReplicationInfo.Score $ " LastShopCash: " $LastShopCash);
         return true;
 	}
 	//log(GetHumanReadableName()$" ShouldGoShopping: LastShopTime: " $LastShopTime $ " Level.TimeSeconds: " $Level.TimeSeconds);
@@ -223,6 +221,7 @@ final function bool ShouldBegForCash()
 
 	if( PlayerReplicationInfo.Score<300 && LastShopTime<Level.TimeSeconds ) // Beg if low on dosh and needs to go shop yet.
 	{
+		// First try begging from other bots
 		for( C=Level.ControllerList; C!=None; C=C.nextController )
 			if( KFInvasionBot(C)!=None && KFInvasionBot(C).AnswerBeg(Pawn,PlayerReplicationInfo.Score) && ActorReachable(C.Pawn) )
 			{
@@ -232,6 +231,31 @@ final function bool ShouldBegForCash()
 				GoToState('BeggingCash','Begin');
 				return true;
 			}
+
+		// If no bot can help, try begging from a rich human player
+		for( C=Level.ControllerList; C!=None; C=C.nextController )
+			if( PlayerController(C)!=None && KFPawn(C.Pawn)!=None && C.PlayerReplicationInfo.Score>500 && ActorReachable(C.Pawn) )
+				PC[PC.Length] = PlayerController(C);
+
+		while( PC.Length>0 )
+		{
+			i = Rand(PC.Length);
+			BeggingPlayer = PC[i];
+			PC.Remove(i,1);
+			// Make sure no other bot is already begging this player
+			for( C=Level.ControllerList; C!=None; C=C.nextController )
+				if( C!=Self && KFInvasionBot(C)!=None && KFInvasionBot(C).BeggingPlayer==BeggingPlayer )
+				{
+					BeggingPlayer = None;
+					break;
+				}
+			if( BeggingPlayer!=None )
+			{
+				SendChatMsg("Hey "$BeggingPlayer.PlayerReplicationInfo.PlayerName$", can you spare some dosh?");
+				GoToState('BeggingPlayerCash','Begin');
+				return true;
+			}
+		}
 	}
 	else if( PlayerReplicationInfo.Score>900 )
 	{
@@ -373,7 +397,7 @@ function bool FindInjuredAlly()
 	local float BestDist;
 
 	InjuredAlly = None;
-	if( ManyEnemiesAround(3) )
+	if( ManyEnemiesAround(3, Pawn.Location) )
 		return false;
 	if( MySyringe==none || MySyringe.ChargeBar()<0.6f )
 		return false;
@@ -433,48 +457,44 @@ function bool EnemyReallyScary()
     for (C = Level.ControllerList; C != None; C = C.nextController)
     {
         M = KFMonster(C.Pawn);
-        if (M == None || M.Health <= 0 || !LineOfSightTo(M))
+        if (M == None || M.Health <= 0 || !M.LineOfSightTo(self))
             continue;
 
         D = VSize(M.Location - Pawn.Location);
         // Boss is always scary if shooting bullets/rockets
         if (M.IsA('ZombieBoss'))
         {
-            if (D < 600.f || M.IsInState('FireChaingun') || M.IsInState('FireMissile'))
+            if (D < 600.f || M.IsInState('FireChaingun') || M.IsInState('FireMissile') || M.IsInState('DriveByAttack') )
                 return true;
 			//if (D < 1000.f)
             //    DangerScore += 5.0;
         }
         // Fleshpound: very scary if close
-        else if (M.IsA('ZombieFleshPound'))
-        {
-			if(!bBerserker)
-				if (C.Enemy==Pawn && (D < 200.f || (D < 600.f && M.GroundSpeed > M.default.GroundSpeed))) //if he's too close or enraged and closing in
-					return true;
-			else if (M.GroundSpeed > M.default.GroundSpeed) // Berserker less scared, only if enraged
+		else if (M.IsA('ZombieFleshPound'))
+		{
+			if (C.Enemy==Pawn && (D < 600.f || (D < 1000.f && M.GroundSpeed > M.default.GroundSpeed)))
 				return true;
-            //if (D < 1000.f)
-            //    DangerScore += 3.0;
-        }
+			DangerScore += 5.0; 
+		}
         // Scrake: scary if close
         else if (M.IsA('ZombieScrake'))
         {
             //if (C.Enemy==Pawn && D < 200.f)
             //    return true;
-            if (D < 300.f)
+            if (D < 400.f)
                 DangerScore += 2.0;
         }
         // Siren: scary in groups or close
         else if (M.IsA('ZombieSiren'))
         {
-            if (D < 500.f)
+            if (D < 600.f)
                 DangerScore += 2.0;
         }
         else if (D < 150.f && C.Enemy==Pawn)
             DangerScore += 0.5;
     }
 	// Berserkers are less scared, especially with shields
-	if (bBerserker && Pawn.ShieldStrength > 0.0)
+	if (bBerserker && Pawn.ShieldStrength > 20.0)
 		ScaryThreshold = 20.f;
 	else ScaryThreshold = 10.f;
 
@@ -483,39 +503,19 @@ function bool EnemyReallyScary()
     //return false;
 }
 
-final function RequestAssist()
+function EnemyChanged(bool bNewEnemyVisible)
 {
-	local Controller C;
-	
-	BotSupportActor = None;
-	BotSupportTimer = Level.TimeSeconds+5.f;
-	for( C=Level.ControllerList; C!=None; C=C.nextController )
-		if( C.bIsPlayer && C!=Self && KFInvasionBot(C)!=None && C.Pawn!=None && C.Pawn.Health>0 && VSize(C.Pawn.Location-Pawn.Location)<3000.f )
-		{
-			KFInvasionBot(C).BotSupportActor = Pawn;
-			KFInvasionBot(C).BotSupportTimer = Level.TimeSeconds+4.f+FRand()*4.f;
-		}
-}
-
-function bool SetEnemy( Pawn NewEnemy )
-{
-	if( Enemy==NewEnemy || KFMonster(NewEnemy)==None || NewEnemy.Health<=0 || (Enemy!=None && GetEnemyDesire(KFMonster(Enemy),false)<GetEnemyDesire(KFMonster(NewEnemy),false)) )
-		return false;
-	Enemy = NewEnemy;
-	EnemyChanged(LineOfSightTo(Enemy));
-	if( BotSupportTimer<Level.TimeSeconds )
-		RequestAssist();
-
-	LastEnemyEncounter = Level.TimeSeconds;
-	return true;
+    Super.EnemyChanged(bNewEnemyVisible);
+    LastEnemyEncounter = Level.TimeSeconds;
 }
 
 // Gibber - stripping out vehicle stuff, adding shopping, better item scavaging
 //          using the syringe and all the other little tweaks
 function ExecuteWhatToDoNext()
 {
-	//SetTimer(0.1,true);
-	//SwitchToBestWeapon();
+	local float WeaponRating;
+
+	SwitchToBestWeapon();
 	bHasFired = false;
 	GoalString = "WhatToDoNext at "$Level.TimeSeconds;
 	if ( Pawn == None )
@@ -586,20 +586,34 @@ function ExecuteWhatToDoNext()
 			if ( Pawn == None )
 				return;
 			SwitchToBestWeapon();
-			if(ThrowAwayBadWeaponForBetterPickup()) // While going to squad objective, throw away bad weapon for better pickup
-				GoalString = "WhatToDoNext Throwing away bad weapon for pickup";
 			return;
 		}
 		if ( ShouldPerformScript() )
 			return;
+		if(ThrowAwayBadWeaponForBetterPickup())
+		{
+			GoalString = "FightEnemy - Picking up better weapon";
+			return;
+		}
 		if ( Enemy != None )
 			ChooseAttackMode();
 		else
 		{
-			GoalString = "WhatToDoNext Wander or Camp at "$Level.TimeSeconds;
-			WanderOrCamp(true);
+			WeaponRating = Pawn.Weapon.CurrentRating/2000;
+			if ( FindInventoryGoal(WeaponRating) )
+			{
+				if ( InventorySpot(RouteGoal) == None )
+					GoalString = "fallback - inventory goal is not pickup but "$RouteGoal;
+				else GoalString = "Fallback to better pickup "$InventorySpot(RouteGoal).markedItem$" hidden "$InventorySpot(RouteGoal).markedItem.bHidden;
+				GotoState('FallBack');
+			}
+			else
+			{
+				// No enemy and no ammo to grab. Guess all there is left to do is to chill out
+				GoalString = "WhatToDoNext Wander or Camp at "$Level.TimeSeconds;
+				WanderOrCamp(true);
+			}
 		}
-		SwitchToBestWeapon();
 	}
 }
 
@@ -760,6 +774,38 @@ Done:
 	WhatToDoNext(39);
 }
 
+State BeggingPlayerCash
+{
+Ignores SwitchToBestWeapon;
+
+	function BeginState()
+	{
+		SetTimer(0,false);
+	}
+	function EndState()
+	{
+		BeggingPlayer = None;
+	}
+	function Timer()
+	{
+		// Give up if the player left, died, or we got enough cash
+		if( BeggingPlayer==None || BeggingPlayer.Pawn==None || !ActorReachable(BeggingPlayer.Pawn) || PlayerReplicationInfo.Score>=300 )
+			WhatToDoNext(40);
+	}
+Begin:
+	if( BeggingPlayer!=None && BeggingPlayer.Pawn!=None )
+		MoveToward(BeggingPlayer.Pawn,BeggingPlayer.Pawn);
+	Pawn.Acceleration = vect(0,0,0);
+	if( BeggingPlayer!=None && BeggingPlayer.Pawn!=None )
+		Focus = BeggingPlayer.Pawn;
+	FinishRotation();
+	SetTimer(1.0,true);
+	Sleep(6.f);
+	if( PlayerReplicationInfo.Score>=300 )
+		SendChatMsg("Thanks for the dosh!");
+	WhatToDoNext(41);
+}
+
 //Tosses out the worst weapon in our inventory, or the specified weapon
 final function bool ThrowAwayBadWeapon(KFWeapon WeapToThrow)
 {
@@ -864,9 +910,9 @@ final function bool ThrowAwayBadWeaponForBetterPickup()
     if (BestPk != None && BestDrop != None)
     {
 		FindBestPathToward(BestPk,true,false); 
-		if(MoveTarget != None && VSize(MoveTarget.Location - Pawn.Location) < 60.f)
+		if(MoveTarget != None && VSize(MoveTarget.Location - Pawn.Location) < 200.f) 
 		{
-			SetAttractionState();
+			GoToState('Fallback');
 			if (BestDrop != None && ThrowAwayBadWeapon(BestDrop))
 			{	
 				GoalString = "WhatToDoNext - Dropping bad weapon for better pickup";
@@ -974,7 +1020,7 @@ final function Actor GetRandomDest()
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bHidden )
+		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1011,7 +1057,7 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bHidden )
+		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1039,7 +1085,7 @@ function bool FindBestPathTo( vector Dest )
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bHidden )
+		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1162,7 +1208,7 @@ function bool TeleportBackIn()
 		NumRandomJumps = 0;
 		return true;
 	}
-
+	return false;
 }
 
 final function BuyKevlar()
@@ -1203,7 +1249,9 @@ function DoTrading()
 	P = KFHumanPawn(Pawn);
 	if( P==None )
 		return;
-	log(PlayerReplicationInfo.PlayerName$" Starting Trading. Cash available: " $PlayerReplicationInfo.Score);
+	//log(PlayerReplicationInfo.PlayerName$" Starting Trading. Cash available: " $PlayerReplicationInfo.Score);
+    ShoppingAttempts = 0;
+    BestShopDist = 999999;
 	LastShopTime = Level.TimeSeconds+60+60*FRand();
 	OldCash = PlayerReplicationInfo.Score + 1;
 
@@ -1372,8 +1420,8 @@ function bool GoShopping()
 {
     if (ShouldRecoverDroppedWeapon())
     {
-        GotoState('RecoverDroppedWeapons');
 		GoalString = "RECOVER_DROP";
+        GotoState('RecoverDroppedWeapons');
         return true;
     }
 	if( !GetNearestShop() )
@@ -1476,40 +1524,6 @@ function bool ShouldRecoverDroppedWeapon()
     return (PickupTarget != None);
 }
 
-state RecoverDroppedWeapons extends MoveToGoalNoEnemy
-{
-    function EndState()
-    {
-		Super.EndState();
-        bTriedRecoverLastDrop = true;
-        PickupTarget = None;
-    }
-
-Begin:
-    WaitForLanding();
-KeepMoving:
-    // If pickup disappeared or not enough time, just shop
-    if (PickupTarget == None || PickupTarget.bDeleteMe || PickupTarget.bHidden || KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20)
-        WhatToDoNext(37);
-    if (ActorReachable(PickupTarget))
-        MoveToward(PickupTarget, MoveTarget,, true);
-    else if (FindBestPathToward(PickupTarget, true, true))
-    {
-        MoveToward(MoveTarget, MoveTarget,, false);
-		Goto('KeepMoving');
-    }
-	else 
-	{
-		bTriedRecoverLastDrop = true;
-		WhatToDoNext(38);
-	}
-    Sleep(0.5);
-	bTriedRecoverLastDrop = true;
-    WhatToDoNext(39);
-	if(bSoaking)
-		SoakStop("RECOVER DROPPED WEAPON FAILED");
-}
-
 function bool GoHealing()
 {
 	if( InjuredAlly!=none && LastHealTime<Level.TimeSeconds )
@@ -1530,6 +1544,27 @@ function PawnDied(Pawn P)
 {
 	TempBlockedPaths.Length = 0; // Reset blocked paths list.
 	DoorPaths.Length = 0;
+
+    // Clear stale actor/pawn references
+    InjuredAlly = None;
+    BeggingTarget = None;
+    AnswerBegger = None;
+    DonatePlayer = None;
+    PickupTarget = None;
+    ShopVolumeActor = None;
+    TargetDoor = None;
+    NearbyHealCloud = None;
+
+    // Reset timers so bot shops/heals immediately after respawn
+    LastShopTime = 0;
+    LastShopCash = 0;
+    LastHealTime = 0;
+    LastEnemyEncounter = 0;
+    bTriedRecoverLastDrop = false;
+    LastDroppedWeaponClasses.Length = 0;
+    ShoppingAttempts = 0;
+    BestShopDist = 999999;
+
 	Super.PawnDied(P);
 }
 
@@ -1613,6 +1648,7 @@ ignores WaitForMover;
 	function BeginState()
 	{
 		SetBotSprinting(true);
+		Pawn.bWantsToCrouch = false;
 	}
 	function EndState()
 	{
@@ -1787,13 +1823,16 @@ function ChooseAttackMode()
     if ( (Squad == None) || (Enemy == None) || (Pawn == None) )
         log("HERE 1 Squad "$Squad$" Enemy "$Enemy$" pawn "$Pawn);
 
-	if ( (Pawn.Health / Pawn.HealthMax) <= 0.25 || VSize(Location - Enemy.Location) < 50.f && Pawn.Weapon != none && !Pawn.Weapon.bMeleeWeapon)
+	if ( (Pawn.Health / Pawn.HealthMax) <= 0.25 || VSize(Pawn.Location - Enemy.Location) < 50.f && Pawn.Weapon != none && !Pawn.Weapon.bMeleeWeapon)
+	{
 		DoRetreat();
+		return;
+	}
 
 	if(ThrowAwayBadWeaponForBetterPickup()) // While fighting, throw away bad weapon for better pickup
 		GoalString = "ChooseAttackMode - Throwing away bad weapon for pickup";
-	
-    if ( (Squad.PriorityObjective(self) == 0) && (Pawn.Weapon.CurrentRating < 0.5) )
+
+	if ( (Squad.PriorityObjective(self) == 0) && (Pawn.Weapon.CurrentRating < 0.5) && (Pawn.Weapon.default.AIRating < 0.5) )
     {
         // fallback to better pickup?   No.  you're in a combat sitatuion. 
         // being choosy about pickups should only come at round end. (for bots)
@@ -1808,7 +1847,7 @@ function ChooseAttackMode()
             return;
         } 
     }
-
+	
     GoalString = "ChooseAttackMode FightEnemy";
     FightEnemy(true, RelativeStrength(Enemy));
 }
@@ -2027,8 +2066,48 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 
 final function SendChatMsg( string S )
 {
-	if(Pawn.Health > 0)
+	if(Pawn.Health > 0 && LastChatTime + 3.f < Level.TimeSeconds) // Don't spam chat when dead or more than every 3 seconds
+	{		
+		LastChatTime = Level.TimeSeconds;
 		Level.Game.Broadcast(self, "["$PlayerReplicationInfo.GetCallSign()$"] "$S, 'TeamSayQuiet');
+	}
+}
+
+final function MaybeCalloutEnemy(Pawn SeenEnemy)
+{
+    local KFMonster M;
+    local float D;
+
+    if (LastCalloutTime + 60.f > Level.TimeSeconds)
+        return; // Don't spam callouts
+
+    M = KFMonster(SeenEnemy);
+    if (M == None || M.Health <= 0)
+        return;
+
+    D = VSize(M.Location - Pawn.Location);
+
+    if (M.IsA('ZombieBoss'))
+    {
+        LastCalloutTime = Level.TimeSeconds;
+        switch (Rand(3))
+        {
+            case 0: SendChatMsg("patty here"); break;
+            case 1: SendChatMsg("on me"); break;
+            case 2: SendChatMsg("BOSS"); break;
+        }
+    }
+    else if (M.IsA('ZombieFleshPound'))
+    {
+        LastCalloutTime = Level.TimeSeconds;
+        switch (Rand(4))
+        {
+            case 0: SendChatMsg("fp"); break;
+            case 1: SendChatMsg("FP"); break;
+            case 2: SendChatMsg("fp on me"); break;
+            case 3: SendChatMsg("watch out fp"); break;
+        }
+    }
 }
 
 final function bool TryToHealSelf()
@@ -2050,7 +2129,7 @@ final function int GetMinHealingValue()
 	return 50;
 }
 
-final function bool ManyEnemiesAround(int MinEnemies)
+final function bool ManyEnemiesAround(int MinEnemies, vector Loc)
 {
     local Controller C;
     local int NearbyEnemies;
@@ -2059,7 +2138,7 @@ final function bool ManyEnemiesAround(int MinEnemies)
     {
         if (KFMonster(C.Pawn) != None && KFMonster(C.Pawn).Health > 0)
         {
-            if (VSize(C.Pawn.Location - Pawn.Location) < 800.f && FastTrace(Pawn.Location, C.Pawn.Location))
+            if (VSize(C.Pawn.Location - Loc) < 800.f && FastTrace(Loc, C.Pawn.Location))
             {
                 ++NearbyEnemies;
                 if (NearbyEnemies >= MinEnemies)
@@ -2094,7 +2173,6 @@ function KFHumanPawn NearbyAllyNeedsHealing()
 //Better to rewrite this, make it more suited for KF shit
 function FightEnemy(bool bCanCharge, float EnemyStrength)
 {
-	local vector X,Y,Z;
 	local float enemyDist;
 	local float AdjustedCombatStyle;
 	local bool bFarAway, bOldForcedCharge;
@@ -2109,9 +2187,9 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	}
 	if( Enemy!=None )
 		LastEnemyEncounter = Level.TimeSeconds;
-	if (Pawn.Health < GetMinHealingValue() && !ManyEnemiesAround(2) && StartleActor == None && TryToHealSelf() ) // 5% to 55% chance based on how low health is)
+	if (Pawn.Health < GetMinHealingValue() && !ManyEnemiesAround(2, Pawn.Location) && StartleActor == None && TryToHealSelf() ) // 5% to 55% chance based on how low health is)
 		return;
-	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (Rand(2)==0 || ManyEnemiesAround(5)) && ShouldNadeEnemy() )
+	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (Rand(2)==0 || ManyEnemiesAround(5, Pawn.Location)) && ShouldNadeEnemy() )
 	{
 		NextNadeTimer = Level.TimeSeconds+6.f+FRand()*5.f;
 		GoalString = "NadeEnemy";
@@ -2188,7 +2266,7 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	BlockedPath = None;
 	Target = Enemy;
 
-	if( (Pawn.Weapon.bMeleeWeapon || (bCanCharge && bOldForcedCharge)) )
+	if( Pawn.Weapon.bMeleeWeapon || (bCanCharge && bOldForcedCharge) )
 	{
 		GoalString = "Charge";
 		DoCharge();
@@ -2224,21 +2302,16 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 			return;
 		}
 	}
-	GoalString = "Do tactical move";
-	if ( !Pawn.Weapon.RecommendSplashDamage() && (FRand() < 0.7) && (3*Jumpiness + FRand()*Skill > 3) )
+	if( Pawn.Health<=25 && VSize(Pawn.Location - Enemy.Location)<120.f )
 	{
-		GetAxes(Pawn.Rotation,X,Y,Z);
-		GoalString = "Try to Duck ";
-		if ( FRand() < 0.5 )
-		{
-			Y *= -1;
-			TryToDuck(Y, true);
-		}
-		else
-			TryToDuck(Y, false);
+		GoalString = "Retreat";
+		//DoRetreat();
+		GotoState('FallBack');
 	}
+	GoalString = "Do tactical move";
 	DoTacticalMove();
 }
+
 
 function NotifyKilled(Controller Killer, Controller Killed, pawn KilledPawn)
 {
@@ -2284,18 +2357,45 @@ state MoveToGoalNoEnemy
 	event bool NotifyHitWall(vector HitNormal, actor Wall)
 	{
 		if( KFDoorMover(Wall)!=None && KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld )
+		{
 			UnWeldFromRoom(KFDoorMover(Wall));
+			if(FRand() < 0.5)
+				SendChatMsg("That door is sealed! Let me try to open it.");
+		}
 		return Super.NotifyHitWall(HitNormal,Wall);
 	}
+    function float RateWeapon(Weapon W)
+    {
+        if( KFWeapon(W)==None )
+            return Global.RateWeapon(W);
+        return FMax(10.f-KFWeapon(W).Weight,0.f)*0.75*int(KFWeapon(W).bMeleeWeapon);
+    }
     function EndState()
     {
 		Super.EndState();
         SetBotSprinting(false);
     }
 }
-
+/* 
 state RangedAttack
 {
+	function BeginState()
+	{
+		StopStartTime = Level.TimeSeconds;
+		bHasFired = false;
+		// Only stop if enemies are far enough away
+		if ( VSize(Enemy.Location - Pawn.Location) > 1000.f )
+		{
+			if ( (Pawn.Physics != PHYS_Flying) || (Pawn.MinFlySpeed == 0) )
+				Pawn.Acceleration = vect(0,0,0);
+		}
+		if ( (Pawn.Weapon != None) && Pawn.Weapon.FocusOnLeader(false) )
+			Target = Focus;
+		else if ( Target == None )
+			Target = Enemy;
+		if ( Target == None )
+			log(GetHumanReadableName()$" no target in ranged attack");
+	}
 	final function PickMoveDest()
 	{
 		local bool bScary;
@@ -2309,7 +2409,8 @@ state RangedAttack
 		}
 		if( bScary )
 			PickNextRetMove();
-		Destination = Pawn.Location+VRand()*200.f;
+        //Destination = Pawn.Location+VRand()*200.f;
+		Destination = Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*200.f+Pawn.Location; // Try to keep distance from enemy
 	}
 Begin:
 	bHasFired = false;
@@ -2345,9 +2446,10 @@ Begin:
 	if ( bSoaking )
 		SoakStop("STUCK IN RANGEDATTACK!");
 }
+*/
 state NadeTarget
 {
-	ignores	SetEnemy,NotifyBump;
+	ignores	EnemyChanged,NotifyBump;
 
 	final function TossNade()
 	{
@@ -2385,18 +2487,17 @@ Begin:
 		//SendChatMsg("No valid target for grenade!");
 		WhatToDoNext(153);
 	}
+	Sleep(0.1f);
+	if( KFPawn(Pawn) != none )
+		KFPawn(Pawn).SetAnimAction('NadeToss');
 	if ( NeedToTurn(Target.Location) )
 	{
 		Focus = Target;
 		FinishRotation();
 	}
-	Sleep(0.1f);
-	if( KFPawn(Pawn) != none )
-		KFPawn(Pawn).SetAnimAction('NadeToss');
-	Sleep(0.2);
 	TossNade();
 	Sleep(0.4);
-	if(rand(1)==0 && ManyEnemiesAround(5) && MyGrenades.HasAmmo())
+	if(rand(2)==0 && ManyEnemiesAround(5, Pawn.Location) && MyGrenades.HasAmmo())
 		GoTo'Begin';
 	WhatToDoNext(153);
 	if ( bSoaking )
@@ -2437,6 +2538,8 @@ final function PickNextRetMove()
     local KFMonster M;
     local float Weight, TotalWeight;
     local bool bAnyMonsterHasLOS;
+    local KFNadeHealingExplosion TempCloud;
+	local Vector HN,HL;
 
 	if( CurrentMov==None )
 	{
@@ -2518,20 +2621,36 @@ MoveFound:
                 Dist -= Normal(Squad.SquadLeader.Pawn.Location - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.4f;
             else
                 if ( NextSquadMember != None && NextSquadMember.Pawn != None )
-                    Dist -= Normal(NextSquadMember.Pawn.Location - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.3f; // slightly weaker bias than leader‑following
+                    Dist -= Normal(NextSquadMember.Pawn.Location - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.3f; 
         }
 		if( MoveTarget==None || Dist<BestDist )
 		{
 			MoveTarget = N;
 			BestDist = Dist;
 		}
+		if( Pawn.Health < 60 )
+		{
+			TempCloud = FindNearbyHealCloud();
+			if( TempCloud != None )
+				MoveTarget = TempCloud;
+		}
 	}
 	for( i=0; i<TempBlockedPaths.Length; ++i )
 		TempBlockedPaths[i].bBlocked = false;
 	if( MoveTarget!=None )
 	{
+		if(Trace(HL,HN,Pawn.Location,MoveTarget.Location,false)==Enemy) //If the move is directly towards the enemy, try to pick a different one
+		{	
+			MoveTarget = None;
+			//SendChatMsg("Trying to pick a different move to avoid going directly towards the enemy.");
+		}
 		PreviousNavPath = NavigationPoint(MoveTarget);
 		AddOldMove(CurrentMov);
+	    if( IsPingPonging() )
+		{
+			MoveTarget = None;
+			//SendChatMsg("Ping ponging detected, trying to pick a different move.");
+		}
 		CurrentMov = PreviousNavPath;
 	}
 }
@@ -2560,6 +2679,13 @@ final function AddOldMove( NavigationPoint N )
 			OldMoves[i-1] = OldMoves[i];
 		OldMoves[ArrayCount(OldMoves)-1] = N;
 	}
+}
+
+final function bool IsPingPonging()
+{
+    return OldMovesCount >= 4
+        && OldMoves[0] == OldMoves[2]
+        && OldMoves[1] == OldMoves[3];
 }
  
 function DoRetreat()
@@ -2599,18 +2725,14 @@ Moving:
 			MoveTo(VRand()*300.f+Pawn.Location,None);
 			break;
 		}
-		Timer();
 		PickNextRetMove();
 		if( MoveTarget==None )
 		{
-			if ( PointReachable(Destination) )
-                MoveTo(Destination, Enemy);
-            else
-				MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*200.f+Pawn.Location);
+			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location);
 			break;
 		}
 		else
-			MoveToward(MoveTarget,Enemy,,ShouldStrafeTo(MoveTarget));
+			MoveToward(MoveTarget,Enemy,GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
 	}
 	WhatToDoNext(44);
 	if ( bSoaking )
@@ -2618,43 +2740,187 @@ Moving:
 	goalstring = goalstring$" STUCK IN RETREAT!";
 }
 
+state Charging
+{
+ignores SeePlayer, HearNoise;
+
+	/* MayFall() called by engine physics if walking and bCanJump, and
+		is about to go off a ledge.  Pawn has opportunity (by setting
+		bCanJump to false) to avoid fall
+	*/
+	function MayFall()
+	{
+		if ( MoveTarget != Enemy )
+			return;
+
+		Pawn.bCanJump = ActorReachable(Enemy);
+		if ( !Pawn.bCanJump )
+			MoveTimer = -1.0;
+	}
+
+	function bool TryToDuck(vector duckDir, bool bReversed)
+	{
+		if ( !Pawn.bCanStrafe )
+			return false;
+		if ( FRand() < 0.6 )
+			return Global.TryToDuck(duckDir, bReversed);
+		if ( MoveTarget == Enemy )
+			return TryStrafe(duckDir);
+	}
+
+	function bool StrafeFromDamage(float Damage, class<DamageType> DamageType, bool bFindDest)
+	{
+		local vector sideDir;
+
+		if ( FRand() * Damage < 0.15 * CombatStyle * Pawn.Health )
+			return false;
+
+		if ( !bFindDest )
+			return true;
+
+		sideDir = Normal( Normal(Enemy.Location - Pawn.Location) Cross vect(0,0,1) );
+		if ( (Pawn.Velocity Dot sidedir) > 0 )
+			sidedir *= -1;
+
+		return TryStrafe(sideDir);
+	}
+
+	function bool TryStrafe(vector sideDir)
+	{
+		local vector extent, HitLocation, HitNormal;
+		local actor HitActor;
+
+		Extent = Pawn.GetCollisionExtent();
+		HitActor = Trace(HitLocation, HitNormal, Pawn.Location + MINSTRAFEDIST * sideDir, Pawn.Location, false, Extent);
+		if (HitActor != None)
+		{
+			sideDir *= -1;
+			HitActor = Trace(HitLocation, HitNormal, Pawn.Location + MINSTRAFEDIST * sideDir, Pawn.Location, false, Extent);
+		}
+		if (HitActor != None)
+			return false;
+
+		if ( Pawn.Physics == PHYS_Walking )
+		{
+			HitActor = Trace(HitLocation, HitNormal, Pawn.Location + MINSTRAFEDIST * sideDir - MAXSTEPHEIGHT * vect(0,0,1), Pawn.Location + MINSTRAFEDIST * sideDir, false, Extent);
+			if ( HitActor == None )
+				return false;
+		}
+		Destination = Pawn.Location + 2 * MINSTRAFEDIST * sideDir;
+		GotoState('TacticalMove', 'DoStrafeMove');
+		return true;
+	}
+
+	function NotifyTakeHit(pawn InstigatedBy, vector HitLocation, int Damage, class<DamageType> damageType, vector Momentum)
+	{
+		local float pick;
+		local vector sideDir;
+		local bool bWasOnGround;
+
+		Super.NotifyTakeHit(InstigatedBy,HitLocation, Damage,DamageType,Momentum);
+		LastUnderFire = Level.TimeSeconds;
+
+		bWasOnGround = (Pawn.Physics == PHYS_Walking);
+		if ( Pawn.health <= 0 )
+			return;
+		if ( StrafeFromDamage(damage, damageType, true) )
+			return;
+		else if ( bWasOnGround && (MoveTarget == Enemy) &&
+					(Pawn.Physics == PHYS_Falling) ) //weave
+		{
+			pick = 1.0;
+			if ( bStrafeDir )
+				pick = -1.0;
+			sideDir = Normal( Normal(Enemy.Location - Pawn.Location) Cross vect(0,0,1) );
+			sideDir.Z = 0;
+			Pawn.Velocity += pick * Pawn.GroundSpeed * 0.7 * sideDir;
+			if ( FRand() < 0.2 )
+				bStrafeDir = !bStrafeDir;
+		}
+	}
+
+	event bool NotifyBump(actor Other)
+	{
+		if ( (Other == Enemy)
+			&& (Pawn.Weapon != None) && !Pawn.Weapon.bMeleeWeapon && (FRand() > 0.4 + 0.1 * skill) )
+		{
+			DoRangedAttackOn(Enemy);
+			return false;
+		}
+		return Global.NotifyBump(Other);
+	}
+
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		TimedFireWeaponAtEnemy();
+	}
+
+	function EnemyNotVisible()
+	{
+		WhatToDoNext(15);
+	}
+
+	function EndState()
+	{
+		if ( (Pawn != None) && Pawn.JumpZ > 0 )
+			Pawn.bCanJump = true;
+	}
+
+Begin:
+	if (Pawn.Physics == PHYS_Falling)
+	{
+		Focus = Enemy;
+		Destination = Enemy.Location;
+		WaitForLanding();
+	}
+	if ( Enemy == None )
+		WhatToDoNext(16);
+	if ( !FindBestPathToward(Enemy, false,true) )
+		DoTacticalMove();
+Moving:
+	if ( Pawn.Weapon.bMeleeWeapon ) // FIXME HACK
+		FireWeaponAt(Enemy);
+	MoveToward(MoveTarget,FaceActor(1),,ShouldStrafeTo(MoveTarget));
+	WhatToDoNext(17);
+	if ( bSoaking )
+		SoakStop("STUCK IN CHARGING!");
+}
+
+
 state Fallback2 extends Fallback
 {
+	function BeginState()
+	{
+		Super.BeginState();
+		SetBotSprinting(true);
+	}
 	function bool FireWeaponAt(Actor A)
 	{
 		return Global.FireWeaponAt(A);
+	}
+	function EndState()
+	{
+		Super.EndState();
+		SetBotSprinting(false);
 	}
 Begin:
 	WaitForLanding();
 
 Moving:
-    // If we’re in serious danger, behave like a short retreat step first,
-    // using the same enemy‑avoidance logic as state Retreating.
-    if ( Enemy != None && ( EnemyReallyScary() || ManyEnemiesAround(3) ) )
+    if ( Enemy != None && ( EnemyReallyScary() || ManyEnemiesAround(3, Pawn.Location) ) )
     {
-        // Keep shooting while backing off
-        Timer(); // MoveToGoalWithEnemy.Timer() -> TimedFireWeaponAtEnemy()
-
+        Timer();
         PickNextRetMove();
-
         if ( MoveTarget == None )
-        {
-            // Same fallback as in state Retreating
-            if ( PointReachable(Destination) )
-                MoveTo(Destination, Enemy);
-            else
-                MoveTo(Normal(Pawn.Location - Enemy.Location) * 400.f + VRand() * 200.f + Pawn.Location);
-        }
+            MoveTo(Normal(Pawn.Location - Enemy.Location) * 400.f + VRand() * 200.f + Pawn.Location);
         else
-        {
-            MoveToward(MoveTarget, Enemy,, ShouldStrafeTo(MoveTarget));
-        }
+            MoveToward(MoveTarget, Enemy,, ShouldStrafeTo(MoveTarget)); 
     }
     else
     {
-        // Original fallback behaviour: go for the inventory spot,
-        // but still fire at the enemy while moving.
-        if ( Pawn.bCanPickupInventory && (InventorySpot(MoveTarget) != None) && (Vehicle(Pawn) == None) )
+        if ( Pawn.bCanPickupInventory && (InventorySpot(MoveTarget) != None) )
             MoveTarget = InventorySpot(MoveTarget).GetMoveTargetFor(self,0);
 
         MoveToward(MoveTarget, Enemy, GetDesiredOffset(), ShouldStrafeTo(MoveTarget));
@@ -2664,6 +2930,14 @@ Moving:
     if ( bSoaking )
         SoakStop("STUCK IN FALLBACK!");
     goalstring = goalstring$" STUCK IN FALLBACK!";
+}
+
+function SetAttractionState()
+{
+	if ( Enemy != None )
+		GotoState('FallBack2');
+	else
+		GotoState('Roaming');
 }
 
 function Startle(Actor Feared);
@@ -2892,21 +3166,37 @@ final function bool ShouldNadeEnemy()
 }
 final function float GetEnemyDesire( KFMonster M, bool bCheckedSight )
 {
-	local float Cost;
+    local float Cost;
+    local Controller C;
+    local int AllyCount;
 
-	Cost = VSize(M.Location-Pawn.Location);
-	if( Cost<100 )
-		Cost*=0.5f; // Close range, much bigger threat.
-	Cost*=(1.f/FMax(float(M.ScoringValue)*0.001f,0.7f));
-	if( M.Health<50 )
-		Cost*=0.75f; // Weaklings...
-	if( Enemy==M )
-		Cost*=0.85f;
-	if( !bCheckedSight && !LineOfSightTo(M) )
-		Cost*=2.f;
-	if( M.Controller!=None && M.Controller.Enemy==Self )
-		Cost*=0.85f;
-	return Cost;
+    Cost = VSize(M.Location-Pawn.Location);
+    if( Cost<100 )
+        Cost*=0.5f; // Close range, much bigger threat.
+    Cost*=(1.f/FMax(float(M.ScoringValue)*0.001f,0.7f));
+    if( M.Health<50 )
+        Cost*=0.75f; // Weaklings...
+    if( Enemy==M )
+        Cost*=0.85f;
+    if( !bCheckedSight && !LineOfSightTo(M) )
+        Cost*=2.f;
+    if( M.Controller!=None && M.Controller.Enemy==Self )
+        Cost*=0.85f;
+
+	// Count nearby allies who also have this enemy, to avoid ganging up on a single target.
+    for( C=Level.ControllerList; C!=None; C=C.nextController )
+    {
+        if( C!=Self && C.bIsPlayer && C.Pawn!=None && C.Pawn.Health>0 && C.Enemy==M )
+        {
+            AllyCount++;
+            if( AllyCount>=3 )
+                break;
+        }
+    }
+    if( AllyCount>0 )
+        Cost *= (1.f - FMin(float(AllyCount) * 0.15f, 0.4f)); 
+
+    return Cost;
 }
 /* 
 function HearNoise(float Loudness, Actor NoiseMaker)
@@ -2925,6 +3215,7 @@ event SeePlayer(Pawn SeenPlayer)
 		VisibleEnemy = Enemy;
 		EnemyVisibilityTime = Level.TimeSeconds;
 		bEnemyIsVisible = true;
+		MaybeCalloutEnemy(SeenPlayer);
 	}
 	else if( Enemy==None && WeldAssistTimer<Level.TimeSeconds && KFPawn(SeenPlayer)!=None && SeenPlayer.Health>0 && SeenPlayer.IsHumanControlled() && VSize(SeenPlayer.Location-Pawn.Location)<800.f && Welder(SeenPlayer.Weapon)!=None && ActiveWelder!=None && !IsInState('Shopping') )
 		CheckWelderAssist(SeenPlayer,Welder(SeenPlayer.Weapon));
@@ -3102,9 +3393,7 @@ state WeldAssist
 	}
 	function Timer()
 	{
-		if( TargetDoor.bHidden || !TargetDoor.bClosed 
-		|| !FastTrace(Pawn.Location,TargetDoor.Location) 
-		|| VSize(Pawn.Location-TargetDoor.Location)>ActiveWelder.MeleeWeaponRange )
+		if( TargetDoor.bDoorIsDead )
 		{
 			WhatToDoNext(45);
 			return;
@@ -3123,7 +3412,7 @@ state WeldAssist
 		}
 		else SwitchToBestWeapon();
 	}
-	event bool NotifyHitWall(vector HitNormal, actor Wall)
+	function bool NotifyHitWall(vector HitNormal, actor Wall)
 	{
 		if( Wall==TargetDoor )
 		{
@@ -3145,18 +3434,6 @@ Begin:
 	SwitchToBestWeapon();
 	MoveToward(TargetDoor);
 	WhatToDoNext(43);
-    // If we are close enough to the door and can see it, start welding
-    if ( TargetDoor != None 
-	&& VSize(Pawn.Location - TargetDoor.Location) <= ActiveWelder.MeleeWeaponRange 
-	&& FastTrace(TargetDoor.Location, Pawn.Location) )
-    {
-        GoToState(,'WeldDoor');
-        SetTimer(0.15, true);
-    }
-    else
-    {
-        WhatToDoNext(43);
-    }
 WeldDoor:
 	WeldAssistTimer = Level.TimeSeconds+12.f;
 	Pawn.Acceleration = vect(0,0,0);
@@ -3164,10 +3441,21 @@ WeldDoor:
 	WhatToDoNext(44);
 }
 
+
 state TacticalMove
 {
 ignores SeePlayer, HearNoise;
 
+	function BeginState()
+	{
+		Super.BeginState();
+		SetBotSprinting(true);
+	}
+	function EndState()
+	{
+		Super.EndState();
+		SetBotSprinting(false);
+	}
 	function DoTacticalMove()
 	{
 		TimedFireWeaponAtEnemy();
@@ -3230,7 +3518,7 @@ ignores SeePlayer, HearNoise;
 		else
 			enemydir.Z = FMax(0,enemydir.Z);
 
-		if( (Pawn.Weapon!=None && !Pawn.Weapon.bMeleeWeapon && VSize(Enemy.Location-Pawn.Location)<600.f)) // Back off if enemy is closer than 600 or really scary
+		if( (Pawn.Weapon!=None && !Pawn.Weapon.bMeleeWeapon && VSize(Enemy.Location-Pawn.Location)<600.f)) // Back off if enemy is close
 			if ( EngageDirection(-enemydir, false) )
 				return;
 
@@ -3353,12 +3641,6 @@ state Shopping extends MoveToGoalNoEnemy
 {
 	ignores EnemyNotVisible;
 
-	function float RateWeapon(Weapon W)
-	{
-		if( KFWeapon(W)==None )
-			return Global.RateWeapon(W);
-		return FMax(10.f-KFWeapon(W).Weight,0.f)*0.75*int(KFWeapon(W).bMeleeWeapon);
-	}
 	function EndState()
 	{
 		Super.EndState();
@@ -3367,27 +3649,43 @@ state Shopping extends MoveToGoalNoEnemy
 Begin:
 	WaitForLanding();
 	AssignPersonality(); // Gain new personality on new wave.
-	bHasChecked = False;
 	SwitchToBestWeapon();
-
+	BestShopDist = 999999;
 KeepMoving:
-	if( KFGameType(Level.Game).bWaveInProgress )
-	{
-		LastShopTime = level.TimeSeconds+15+FRand()*15;
-		WhatToDoNext(152);
-	}
-	if( ActorReachable(ShoppingPath) )
-		MoveToward(ShoppingPath,ShopVolumeActor,,true);
-	else if( FindBestPathToward(ShoppingPath,true,false) )
-	{
-		MoveToward(MoveTarget,FaceActor(1),,false );
-		Goto('KeepMoving');
-	}
-	else
-	{
-		LastShopTime = level.TimeSeconds+8+FRand()*10;
-		WhatToDoNext(151);
-	}
+    if( KFGameType(Level.Game).bWaveInProgress )
+    {
+        LastShopTime = level.TimeSeconds+15+FRand()*15;
+        WhatToDoNext(152);
+    }
+    if( ActorReachable(ShoppingPath) )
+        MoveToward(ShoppingPath,ShopVolumeActor,,true);
+    else if( FindBestPathToward(ShoppingPath,true,false) )
+    {
+        if (VSize(Pawn.Location - ShoppingPath.Location) < BestShopDist - 64)
+        {
+            // Making real progress toward the shop - update best distance and reset attempts
+            BestShopDist = VSize(Pawn.Location - ShoppingPath.Location);
+            ShoppingAttempts = 0;
+        }
+        else
+        {
+            ShoppingAttempts++;
+        }
+        if (ShoppingAttempts > 10)
+        {
+            ShoppingAttempts = 0;
+            LastShopTime = Level.TimeSeconds + 1.0;
+            Pawn.SetLocation(RouteCache[1].Location);
+            WhatToDoNext(151);
+        }
+        MoveToward(MoveTarget,FaceActor(1),,false );
+        Goto('KeepMoving');
+    }
+    else
+    {
+        LastShopTime = level.TimeSeconds+8+FRand()*10;
+        WhatToDoNext(151);
+    }
 	Focus = ShopVolumeActor;
 	Pawn.Acceleration = vect(0,0,0);
 	DoTrading();
@@ -3396,6 +3694,175 @@ KeepMoving:
 	WhatToDoNext(152);
 	if ( bSoaking )
 		SoakStop("STUCK IN SHOPPING!");
+}
+
+state RecoverDroppedWeapons extends MoveToGoalNoEnemy
+{
+	ignores EnemyNotVisible;
+
+    function EndState()
+    {
+		Super.EndState();
+        bTriedRecoverLastDrop = true;
+        PickupTarget = None;
+    }
+
+Begin:
+    WaitForLanding();
+	SwitchToBestWeapon();
+
+KeepMoving:
+    // If pickup disappeared or not enough time, just shop
+    if (PickupTarget == None || PickupTarget.bHidden || KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20)
+	{	
+		bTriedRecoverLastDrop = true;
+        WhatToDoNext(37);
+	}
+    if (ActorReachable(PickupTarget))
+        MoveToward(PickupTarget, MoveTarget,, true);
+    else if (FindBestPathToward(PickupTarget, true, true))
+    {
+        MoveToward(MoveTarget, MoveTarget,, false);
+		Goto('KeepMoving');
+    }
+	else 
+	{
+		bTriedRecoverLastDrop = true;
+		WhatToDoNext(38);
+	}
+    Sleep(0.5);
+	bTriedRecoverLastDrop = true;
+    WhatToDoNext(39);
+	if(bSoaking)
+		SoakStop("RECOVER DROPPED WEAPON FAILED");
+}
+
+state Roaming
+{
+    ignores EnemyNotVisible;
+
+    function BeginState()
+    {
+        Super.BeginState();
+        SetBotSprinting(true);
+    }
+    // Must be here too — won't inherit from KFInvasionBot.MoveToGoalNoEnemy
+    event bool NotifyHitWall(vector HitNormal, actor Wall)
+    {
+        if( KFDoorMover(Wall)!=None && KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld )
+        {
+            UnWeldFromRoom(KFDoorMover(Wall));
+            SendChatMsg("That door is sealed! Let me try to open it.");
+        }
+        return Super.NotifyHitWall(HitNormal,Wall);
+    }
+	function float RateWeapon(Weapon W)
+	{
+		if( KFWeapon(W)==None )
+			return Global.RateWeapon(W);
+		if( !KFWeapon(W).bMeleeWeapon )
+			return 0;
+		return FMax(KFWeapon(W).Weight, 1.f) * 0.75;
+	}
+    function EndState()
+    {
+        Super.EndState();
+        RoamingAttempts = 0;
+        SetBotSprinting(false);
+    }
+
+	final function NavigationPoint FindNavNear(Actor A)
+	{
+		local NavigationPoint N, BestNav;
+		local float D, BestDist;
+
+		for (N = Level.NavigationPointList; N != None; N = N.nextNavigationPoint)
+		{
+			if (N.bBlocked)
+				continue;
+			D = VSize(N.Location - A.Location);
+			if (BestNav == None || D < BestDist)
+			{
+				BestNav = N;
+				BestDist = D;
+			}
+		}
+		return BestNav;
+	}
+
+Begin:
+	SwitchToBestWeapon();
+	WaitForLanding();
+	if ( Pawn.bCanPickupInventory && (InventorySpot(MoveTarget) != None) && (Squad.PriorityObjective(self) == 0) && (Vehicle(Pawn) == None) )
+	{
+		MoveTarget = InventorySpot(MoveTarget).GetMoveTargetFor(self,5);
+		if ( (Pickup(MoveTarget) != None) && !Pickup(MoveTarget).ReadyToPickup(0) )
+		{
+			CampTime = MoveTarget.LatentFloat;
+			GoalString = "Short wait for inventory "$MoveTarget;
+			GotoState('RestFormation','ShortWait');
+		}
+	}
+	if(actorReachable(MoveTarget))
+		MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+	else if( FindBestPathToward(MoveTarget,true,true) )
+	{
+		RoamingAttempts++;
+        if(RoamingAttempts >= 10)
+        {
+			if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
+			{
+				if (Pawn.SetLocation(FindNavNear(Squad.SquadLeader.Pawn).Location))
+				{
+					log(self$" Roaming failed, teleporting near squad leader");
+				}
+				else if (RouteCache[1] != None)
+					Pawn.SetLocation(RouteCache[1].Location);
+			}
+			RoamingAttempts = 0;
+            WhatToDoNext(157);
+        }
+		MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+	}
+DoneRoaming:
+	WaitForLanding();
+	WhatToDoNext(12);
+	if ( bSoaking )
+		SoakStop("STUCK IN ROAMING!");
+}
+
+
+// Returns the best nearby heal cloud to drift toward, or None.
+final function KFNadeHealingExplosion FindNearbyHealCloud()
+{
+    local KFNadeHealingExplosion Cloud, Best;
+    local float Dist, BestDist;
+
+    if (Pawn == None || Pawn.Health >= 80)
+        return None;
+
+    foreach DynamicActors(class'KFNadeHealingExplosion', Cloud)
+    {
+        if (Cloud == None || Cloud.HealTime <= 0)
+            continue;
+
+        Dist = VSize(Cloud.Location - Pawn.Location);
+        if (Dist > 800.f)
+            continue;
+
+        // Prefer closer clouds
+        if (Best == None || Dist < BestDist)
+        {
+            Best = Cloud;
+            BestDist = Dist;
+        }
+    }
+
+    // Don't drift toward a cloud surrounded by enemies
+    if (Best != None && ManyEnemiesAround(6, Best.Location))
+        return None;
+
+    return Best;
 }
 
 function MoverFinished()

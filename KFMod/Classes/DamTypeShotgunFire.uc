@@ -1,5 +1,4 @@
-class DamTypeShotgunFire extends DamTypeFlamethrower
-	abstract;
+class DamTypeShotgunFire extends DamTypeFlamethrower;
 
 defaultproperties
 {

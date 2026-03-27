@@ -1,5 +1,14 @@
 class SyringeFire extends SyringeAltFire;
 
+var KFHumanPawn PendingHealTarget;
+
+function DoFireEffect()
+{
+    PendingHealTarget = GetHealee();
+    SetTimer(InjectDelay, False);
+}
+
+
 Function Timer()
 {
 	local PlayerReplicationInfo OtherPRI;
@@ -8,7 +17,8 @@ Function Timer()
 	local KFPlayerController PC;
 	local int HealSum; // for modifying based on perks
 
-	Healed = GetHealee();
+    Healed = PendingHealTarget;
+    PendingHealTarget = None;
 
 	if( Healed!=none && Healed.Health>0 && Healed!=Instigator )
 	{

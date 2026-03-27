@@ -103,7 +103,7 @@ defaultproperties
      AIRating=-5.000000
      CurrentRating=-5.000000
      Description="the frag grenade releases a dense cloud of shrapnel in a large area of effect around its detonation zone. Use with caution. "
-     DisplayFOV=70.000000
+     DisplayFOV=80.000000
      Priority=40
      InventoryGroup=5
      GroupOffset=1

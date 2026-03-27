@@ -1,4 +1,4 @@
-class KFEnemySoldier extends Bot;
+class KFEnemySoldier extends xBot;
  
  simulated function int GetTeamNum()
 {

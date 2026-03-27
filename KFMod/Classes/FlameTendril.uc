@@ -81,18 +81,22 @@ simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
 
 simulated function Explode(vector HitLocation,vector HitNormal)
 {
-	if ( Role == ROLE_Authority )
-		HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
-	if ( EffectIsRelevant(Location,false) )
-	{
-		Spawn(ExplosionDecal,self,, Location);
-		if ( CanSpawnFuelFlameNear(3, 36.0) )
-		{
-			Spawn(class'FuelFlameHurting',Instigator,,Location + vect(0,0,1)).BurnTime = 3.0;
-		}
-	}
-	SetCollisionSize(0.0, 0.0);
-	Destroy();
+    local FuelFlameHurting F;
+
+    if ( Role == ROLE_Authority )
+        HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
+    if ( EffectIsRelevant(Location,false) )
+    {
+        Spawn(ExplosionDecal,self,, Location);
+        if ( CanSpawnFuelFlameNear(3, 36.0) )
+        {
+            F = Spawn(class'FuelFlameHurting',Instigator,,Location + vect(0,0,1));
+            if ( F != None )
+                F.BurnTime = 3.0;
+        }
+    }
+    SetCollisionSize(0.0, 0.0);
+    Destroy();
 }
 
 simulated function Destroyed()

@@ -38,7 +38,7 @@ defaultproperties
      OldCenteredRoll=3000
      Description=".50 calibre action express handgun. This is about as big and nasty as personal weapons are going to get. But with a 7 round magazine, it should be used conservatively.  "
      EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-     DisplayFOV=70.000000
+     DisplayFOV=85.000000
      Priority=5
      SmallViewOffset=(X=13.000000,Y=15.000000,Z=-8.000000)
      CenteredOffsetY=-5.000000

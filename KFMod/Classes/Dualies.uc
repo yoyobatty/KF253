@@ -235,7 +235,7 @@ defaultproperties
      OldCenteredRoll=3000
      Description="A pair of custom 9mm pistols. What they lack in stopping power, they compensate for with a quick refire."
      EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-     DisplayFOV=65.000000
+     DisplayFOV=80.000000
      Priority=4
      SmallViewOffset=(X=15.000000,Y=19.500000,Z=-10.000000)
      CenteredOffsetY=0.000000

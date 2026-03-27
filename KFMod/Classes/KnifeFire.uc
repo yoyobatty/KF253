@@ -52,8 +52,8 @@ defaultproperties
      FireAnims(0)="Fire"
      FireAnims(1)="Fire2"
      FireAnims(2)="fire3"
-     damageConst=25
-     maxAdditionalDamage=10
+     damageConst=40
+     maxAdditionalDamage=15
      DamagedelayMin=0.100000
      DamagedelayMax=0.300000
      hitDamageClass=Class'KFMod.DamTypeKnife'

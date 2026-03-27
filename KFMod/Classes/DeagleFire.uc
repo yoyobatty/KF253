@@ -56,7 +56,7 @@ function bool CanPenetrate (Actor Other, vector HitLocation, vector Dir, int Pen
     }
     return false;
 }
-
+/*
 // Do the trace to find out where bullet really goes
 function DoTrace (Vector InitialStart, Rotator Dir)
 {
@@ -177,6 +177,140 @@ function DoTrace (Vector InitialStart, Rotator Dir)
             break;
         }
     }
+    Weapon.bTraceWater=false;
+}
+*/
+// Do the trace to find out where bullet really goes
+function DoTrace (Vector InitialStart, Rotator Dir)
+{
+    local int						PenCount, WallCount, HitSameCount;
+    local Vector					End, X, HitLocation, HitNormal, Start, WaterHitLoc, LastHitLoc, ExitNormal;
+    local Material					HitMaterial;
+    local float						Dist;
+    local Actor						Other, LastOther;
+    local Actor						HitOwner; // <-- normalize ExtendedZCollision owner
+    local vector					FinalHitLocation, FinalHitNormal;
+    local Actor						FinalHitActor;
+    //local bool					bHitWall;
+
+    // Work out the range
+    Dist = TraceRange;
+
+    Start = InitialStart;
+    X = Normal(Vector(Dir));
+    End = Start + X * Dist;
+    LastHitLoc = End;
+    FinalHitLocation = End;
+    Weapon.bTraceWater=true;
+    while (Dist > 0 && HitSameCount < 10)		// Loop traces in case we need to go through stuff
+    {
+        // Do the trace
+        Other = Trace (HitLocation, HitNormal, End, Start, true, , HitMaterial);
+        Dist -= VSize(HitLocation - Start);
+        if (Level.NetMode == NM_Client && (Other.Role != Role_Authority || Other.bWorldGeometry))
+            continue;
+        if (Other != None)
+        {
+            // If this is an ExtendedZCollision, treat its Owner as the logical hit pawn
+            if ( ExtendedZCollision(Other) != None && ExtendedZCollision(Other).Owner != None )
+                HitOwner = ExtendedZCollision(Other).Owner;
+            else
+                HitOwner = Other;
+
+            // Water
+            if ( (FluidSurfaceInfo(Other) != None) || ((PhysicsVolume(Other) != None) && PhysicsVolume(Other).bWaterVolume) )
+            {
+                if (VSize(HitLocation - Start) > 1)
+                    WaterHitLoc=HitLocation;
+                Start = HitLocation;
+                End = Start + X * Dist;
+                Weapon.bTraceWater=false;
+                continue;
+            }
+            else
+                LastHitLoc=HitLocation;
+            // Got something interesting
+            // Use HitOwner for comparisons that are intended to operate on the pawn/actor owning the collision proxy.
+            if (!Other.bWorldGeometry && HitOwner != LastOther)
+            {
+                // Apply damage to the owner pawn so that ExtendedZCollision will forward it anyway.
+                HitOwner.TakeDamage(Lerp(FRand(), DamageMin, DamageMax), Instigator, HitLocation, Momentum*X, DamageType);
+                //log(HitOwner.GetHumanReadableName()$ " was penetrated at " $HitLocation$ " PenCount " $PenCount);
+                LastOther = HitOwner;
+                HitSameCount = 0;
+
+                //if (Vehicle(HitOwner) != None)
+                //	ImpactEffect (HitLocation, HitNormal, HitMaterial, HitOwner, WaterHitLoc);
+
+                if (CanPenetrate(HitOwner, HitLocation, X, PenCount))
+                {
+                    PenCount++;
+                    Start = HitLocation + (X * FMax(HitOwner.CollisionRadius * 2, 8.0));
+                    End = Start + X * Dist;
+                    //log(HitOwner.GetHumanReadableName()$ " was penetrated at " $HitLocation$ " PenCount " $PenCount);
+                    continue;
+                }
+                else if (Mover(HitOwner) == None)
+                {
+                    FinalHitActor = Other;
+                    FinalHitLocation = HitLocation;
+                    FinalHitNormal = HitNormal;
+                    break;
+                }
+            }
+            // Do impact effect
+            if (Other.bWorldGeometry || Mover(Other) != None)
+            {
+                WallCount++;
+                ExitNormal = X;
+                if (WallCount <= 2 && GoThroughWall(Other, HitLocation, HitNormal, 200, X, Start, ExitNormal))
+                {
+                    // Show hit effects on wall entry and exit points
+                    if (KFWeaponAttachment(Weapon.ThirdPersonActor) != None)
+                    {
+                        Spawn(KFWeaponAttachment(Weapon.ThirdPersonActor).HitEffectType, Other, , HitLocation, Rotator(HitNormal));
+                        Spawn(KFWeaponAttachment(Weapon.ThirdPersonActor).HitEffectType, Other, , Start, Rotator(ExitNormal));
+                    }
+                    End = Start + X * Dist;
+                    continue;
+                }
+                FinalHitActor = Other;
+                FinalHitLocation = HitLocation;
+                FinalHitNormal = HitNormal;
+                //bHitWall = ImpactEffect (HitLocation, HitNormal, HitMaterial, Other, WaterHitLoc);
+                break;
+            }
+            else if(Vehicle(Other)==None)
+            {
+                // Non-vehicle, non-world actor already handled or same as instigator
+            }
+            // Still in the same guy - compare against owner normalized actor
+            if (HitOwner == Instigator || HitOwner == LastOther)
+            {
+                HitSameCount++;
+                Start = HitLocation + (X * FMax(HitOwner.CollisionRadius * 2, 16.0) * 2);
+                End = Start + X * Dist;
+                continue;
+            }
+            FinalHitActor = Other;
+            FinalHitLocation = HitLocation;
+            FinalHitNormal = HitNormal;
+            break;
+        }
+        else
+        {
+            LastHitLoc = End;
+            FinalHitLocation = End;
+            break;
+        }
+    }
+
+    if( KFWeaponAttachment(Weapon.ThirdPersonActor) != None )
+    {
+        KFWeaponAttachment(Weapon.ThirdPersonActor).UpdateHit(FinalHitActor, FinalHitLocation, FinalHitNormal);
+        //Weapon.IncrementFlashCount(ThisModeNum);
+    }
+
     Weapon.bTraceWater=false;
 }
 

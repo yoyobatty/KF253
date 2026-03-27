@@ -11,7 +11,7 @@ simulated function PostBeginPlay()
     SetCollision(true, false, false);
 	SetCollisionSize(HealRadius, HealRadius); 
     if (level.NetMode != NM_Client)
-		SetTimer(1.0, true);
+		SetTimer(0.8, true);
 }
 
 simulated function Tick(float DT)
@@ -55,7 +55,7 @@ simulated function Timer()
 defaultproperties
 {
     HealTime=7.000000
-    Damage=25.000000
+    Damage=30.000000
     HealAmount=10.000000
     HealRadius=175.000000
     DamageType=Class'KFMod.DamTypeMedicNade'

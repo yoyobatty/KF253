@@ -1,8 +1,8 @@
-#exec OBJ LOAD FILE=..\KFMod20\Textures\KillingFloorHUD.utx
-#exec OBJ LOAD FILE=..\KFMod20\Textures\PatchTex.utx
-#exec OBJ LOAD FILE=..\KFMod20\Textures\KFInterfaceContent.utx
-#exec OBJ LOAD FILE=..\KFMod20\Textures\KFKillMeNow.utx
-#exec OBJ LOAD FILE=..\KFMod20\Textures\KFMapEndTextures.utx
+#exec OBJ LOAD FILE=..\KFMod254\Textures\KillingFloorHUD.utx
+#exec OBJ LOAD FILE=..\KFMod254\Textures\PatchTex.utx
+#exec OBJ LOAD FILE=..\KFMod254\Textures\KFInterfaceContent.utx
+#exec OBJ LOAD FILE=..\KFMod254\Textures\KFKillMeNow.utx
+#exec OBJ LOAD FILE=..\KFMod254\Textures\KFMapEndTextures.utx
 #exec OBJ LOAD FILE=Crosshairs.utx
 
 class HUDKillingFloor extends HudBase
@@ -829,8 +829,8 @@ simulated function DrawHudPassA (Canvas C)
 			//C.DrawColor.G = WEIGHTOFF_G;
 			//C.DrawColor.B = WEIGHTOFF_B;
 
-			C.SetPos(C.ClipX*0.97,C.ClipY*0.87 - (i*34)); //draws it right above the nade left icon, just like original
-			C.DrawTile(CarryIcon,27,35,210,65,35,63); //nice and clean, gets the full icon size too
+			C.SetPos(C.ClipX*0.97,C.ClipY*0.87 - (i*29)); //draws it right above the nade left icon, just like original
+			C.DrawTile(CarryIcon,22,30,210,65,35,63); //nice and clean, gets the full icon size too
 		}
 	}
 
@@ -1099,7 +1099,7 @@ simulated function Timer()
 
 simulated function DrawModOverlay( Canvas C )
 {
-	local int FinalR, FinalG, FinalB, FinalAlpha;
+	local int FinalR, FinalG, FinalB;
 	local int MaxRBrighten, MaxGBrighten, MaxBBrighten;
 	local int BaseR, BaseG, BaseB;
 

@@ -182,7 +182,7 @@ exec function Horde()
 
 exec function Horde2(optional int Quantity)
 {
-    local int i, slotsPerRing, ringIndex, slotIndex, spawnedCount;
+    local int slotsPerRing, ringIndex, slotIndex, spawnedCount;
     local float radiusStep, radius, angleStep, angle;
     local vector SpawnLoc, TestLoc, Forward, Right;
     local actor SpawnedActor;
@@ -591,6 +591,7 @@ exec function AllAmmo()
 
 	ReportCheat("AllAmmo");
 }
+
 exec function AllAmmoAll(optional bool bSuper)
 {
 	local Inventory Inv;
@@ -610,6 +611,36 @@ exec function AllAmmoAll(optional bool bSuper)
     
 	ReportCheat("AllAmmoAll");
     ClientMessage("Everyone's ammo maxed out");
+}
+
+exec function NadeFull()
+{
+    local Inventory Inv;
+    if (!areCheatsEnabled()) return;
+
+    for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+        if ( Weapon(Inv)!=None && Frag(Weapon(Inv))!=None )
+            Weapon(Inv).MaxOutAmmo();
+
+    ReportCheat("NadeFull");
+}
+
+exec function NadeFullAll()
+{
+    local Inventory Inv;
+    local KFHumanPawn TeamMatePawn;
+
+    if (!areCheatsEnabled()) return;
+
+    foreach DynamicActors(class'KFHumanPawn', TeamMatePawn)
+    {
+        for( Inv=TeamMatePawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+            if ( Weapon(Inv)!=None && Frag(Weapon(Inv))!=None )
+                Weapon(Inv).MaxOutAmmo();
+    }
+
+    ReportCheat("NadeFullAll");
+    ClientMessage("Everyone's nades maxed out");
 }
 
 exec function GodAll()
@@ -639,6 +670,79 @@ exec function GodAll()
 
     ReportCheat("GodAll");
 }
+
+exec function SuperMan()
+{
+    local Inventory Inv;
+
+    if (!areCheatsEnabled()) return;
+
+    // Adjust speed settings
+	Pawn.AirControl *= 1.4;
+    Pawn.GroundSpeed *= 1.6;
+    Pawn.WaterSpeed *= 1.4;
+    Pawn.AirSpeed *= 1.4;
+    
+	// Jump higher
+	Pawn.JumpZ *= 1.5;
+
+    for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+        if ( Weapon(Inv)!=None )
+            Weapon(Inv).StartBerserk();
+    
+    xPawn(Pawn).bBerserk = true;
+    
+	// Invisible
+	xPawn(Pawn).SetInvisibility(120.0);
+    
+	// UDamage
+	Pawn.EnableUDamage(75);
+
+    ReportCheat("SuperMan");
+    ClientMessage("Superman mode on! You are now faster, jump higher, invisible, and deal more damage.");
+    
+}
+
+exec function SuperManAll()
+{
+    local Controller C;
+    local Inventory Inv;
+
+    if (!AreCheatsEnabled()) return;
+
+    For ( C=Level.ControllerList; C!=None; C=C.NextController )
+    {
+        if ( C.bIsPlayer )
+        {
+            // Adjust speed settings
+            C.Pawn.AirControl *= 1.4;
+            C.Pawn.GroundSpeed *= 1.6;
+            C.Pawn.WaterSpeed *= 1.4;
+            C.Pawn.AirSpeed *= 1.4;
+    
+            // Jump higher
+            C.Pawn.JumpZ *= 1.5;
+
+        for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+            if ( Weapon(Inv)!=None )
+                Weapon(Inv).StartBerserk();
+    
+            xPawn(C.Pawn).bBerserk = true;
+    
+            // Invisible
+            xPawn(C.Pawn).SetInvisibility(120.0);
+    
+            // UDamage
+            C.Pawn.EnableUDamage(75);
+
+            if(PlayerController(C) != None)
+                PlayerController(C).ClientMessage("Superman mode on! You are now faster, jump higher, invisible, and deal more damage.");
+        }
+    }
+
+    ReportCheat("SuperManAll");
+}
+
 
 defaultproperties
 {

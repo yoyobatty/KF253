@@ -14,7 +14,7 @@ function bool HandlePickupQuery( pickup Item )
 	{
 		if( KFHumanPawn(Owner)!=None && !KFHumanPawn(Owner).CanCarry(Class'Dualies'.Default.Weight) )
 		{
-			Pawn(Owner).ClientMessage("You are carrying too much.", 'KFCriticalEvent');
+			Pawn(Owner).ClientMessage("You are carrying too much.", 'CriticalEvent');
 			Return True;
 		}
 		return false; // Allow to "pickup" so this weapon can be replaced with dualies.
@@ -64,7 +64,7 @@ defaultproperties
      CurrentRating=0.300000
      bShowChargingBar=True
      Description="A 9mm Pistol"
-     DisplayFOV=75.000000
+     DisplayFOV=90.000000
      Priority=3
      SmallViewOffset=(X=13.000000,Y=18.000000,Z=-10.000000)
      InventoryGroup=2

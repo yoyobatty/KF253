@@ -26,19 +26,19 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 defaultproperties
 {
-     bRealtimeShadows=True
-     bJumpCapable=False
-     bCanJump=False
-     bCanWalk=False
-     bInvulnerableBody=True
-     ControllerClass=None
-     DrawType=DT_StaticMesh
-     StaticMesh=StaticMesh'GKStaticMeshes.basicShapes.BasicCube'
-     bStasis=False
-     bStaticLighting=True
-     bMovable=False
-     bActorShadows=True
-     bCanBeDamaged=False
-     CollisionRadius=20.000000
-     CollisionHeight=40.000000
+  bRealtimeShadows=True
+  bJumpCapable=False
+  bCanJump=False
+  bCanWalk=False
+  bInvulnerableBody=True
+  ControllerClass=None
+  DrawType=DT_StaticMesh
+  StaticMesh=StaticMesh'GKStaticMeshes.basicShapes.BasicCube'
+  bStasis=False
+  bStaticLighting=True
+  bMovable=False
+  bActorShadows=True
+  bCanBeDamaged=False
+  CollisionRadius=20.000000
+  CollisionHeight=40.000000
 }

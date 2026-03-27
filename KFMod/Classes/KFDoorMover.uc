@@ -1,6 +1,7 @@
 // This is a special Door mover which can be "sealed" if in a closed state.
 // By: Alex
 // Fixed by .:..:
+// Some more fixes by YoYoBatty and Poosh
 class KFDoorMover extends Mover;
 
 #exec OBJ LOAD FILE="..\StaticMeshes\PatchStatics.usx"
@@ -158,7 +159,7 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 	}
 	if (!instigatedBy.IsA('KFMonster') && damageType != class'DamTypeWelder' && damageType != class'DamTypeUnWeld')
 	{
-		if(!bSmallArmsDamage && damageType != class'DamTypeFrag' || Damage < DamageThreshold )
+		if(!bSmallArmsDamage && damageType != class'DamTypeFrag' && damageType != class'DamTypeLAW' || Damage < DamageThreshold )
 			return;
 	}
 

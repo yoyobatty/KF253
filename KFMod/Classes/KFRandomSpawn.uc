@@ -126,29 +126,31 @@ function timer()
 
 function bool PlayersCanSeeMe()
 {
-	local controller C;
+    local controller C;
 
-	for( C=level.ControllerList; C!=none; C=C.nextController)
-	{
-		if( C.bIsPlayer && C.Pawn!=none && VSize(C.Pawn.Location-Location)<2000 )
-		{
-			if( FastTrace(C.Pawn.Location) )
-				return true;
-		}
-	}
-	return false;
+    for (C = Level.ControllerList; C != None; C = C.nextController)
+    {
+        if (C.bIsPlayer && C.Pawn != None)
+        {
+            if (VSize(C.Pawn.Location - Location) < 600 && (C.Pawn.Location.Z - Location.Z) < 200) 
+                return true;  // Close enough, ignore LOS, gives bots/players a chance to get the item if they are near it on similar z levels
+            if (VSize(C.Pawn.Location - Location) < 2000 && FastTrace(C.Pawn.Location))
+                return true;  // Further away, require LOS
+        }
+    }
+    return false;
 }
 
 defaultproperties
 {
-     bForceDefault=True
-     InitialWaitTime=20.000000
-     ReTryWaitTime=5.000000
-     SpawnHeight=0.000000
-     DrawType=DT_Sprite
-     bStatic=False
-     bHidden=True
-     DrawScale=0.500000
-     CollisionRadius=60.000000
-     CollisionHeight=6.000000
+	bForceDefault=True
+	InitialWaitTime=20.000000
+	ReTryWaitTime=5.000000
+	SpawnHeight=0.000000
+	DrawType=DT_Sprite
+	bStatic=False
+	bHidden=True
+	DrawScale=0.500000
+	CollisionRadius=60.000000
+	CollisionHeight=6.000000
 }

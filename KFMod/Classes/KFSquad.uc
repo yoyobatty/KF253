@@ -49,7 +49,7 @@ function bool AssignSquadResponsibility(Bot B)
 		}
 
 		// roam around level?
-		if ( ((B == SquadLeader) && bRoamingSquad) || (GetOrders() == 'Freelance') )
+		if ( ((B == SquadLeader) && bRoamingSquad) || (GetOrders() == 'Freelance') || (B.Pawn.Anchor == None) )
 			return B.FindRoamDest();
 	}
 	return false;
@@ -64,7 +64,8 @@ function bool CheckSquadObjectives(Bot B)
 	if ( B.Pawn == None )
 		return true;
 
-	if ( !KFInvasionBot(B).EnemyReallyScary() && !KFInvasionBot(B).ManyEnemiesAround(4) && B.NeedWeapon() && B.FindInventoryGoal(0) )
+	//Get a weapon if no scary enemies, no enemies around and I need a weapon
+	if ( !KFInvasionBot(B).EnemyReallyScary() && !KFInvasionBot(B).ManyEnemiesAround(5, B.Pawn.Location) && B.NeedWeapon() && B.FindInventoryGoal(0) )
 	{
 		B.GoalString = "Need weapon or ammo";
 		B.SetAttractionState();
@@ -188,18 +189,125 @@ function bool CheckSquadObjectives(Bot B)
 	return false;
 }
 
-//So bots stop trying to follow players when they are charging
 function bool TellBotToFollow(Bot B, Controller C)
 {
-    if( B == None || B.Pawn == None )
+	local Pawn Leader;
+	local GameObjective O, Best;
+	local float NewDist, BestDist;
+
+	if ( (C == None) || C.bDeleteMe )
+	{
+		PickNewLeader();
+		C = SquadLeader;
+	}
+
+	if ( B == C )
+		return false;
+
+	B.GoalString = "Follow Leader";
+	Leader = C.Pawn;
+	if ( Leader == None )
+		return false;
+
+	if ( CloseToLeader(B.Pawn) )
+	{
+		if ( !B.bInitLifeMessage )
+		{
+			B.bInitLifeMessage = true;
+		  	B.SendMessage(SquadLeader.PlayerReplicationInfo, 'OTHER', B.GetMessageIndex('GOTYOURBACK'), 10, 'TEAM');
+		}
+		if ( B.Enemy == None )
+		{
+			// look for destroyable objective
+			for ( O=Team.AI.Objectives; O!=None; O=O.NextObjective )
+			{
+				if ( !O.bDisabled && (DestroyableObjective(O) != None)
+					&& ((Best == None) || (Best.DefensePriority < O.DefensePriority)) )
+				{
+					NewDist = VSize(B.Pawn.Location - O.Location);
+					if ( ((Best == None) || (NewDist < BestDist)) && B.LineOfSightTo(O) )
+					{
+						Best = O;
+						BestDist = NewDist;
+					}
+				}
+			}
+			if ( Best != None )
+			{
+				if (Best.DefenderTeamIndex != Team.TeamIndex)
+				{
+					if (Best.TellBotHowToDisable(B))
+						return true;
+				}
+				else if (BestDist < 1600 && DestroyableObjective(Best).TellBotHowToHeal(B))
+				return true;
+			}
+
+			if ( B.FindInventoryGoal(0.0004) )
+			{
+				B.SetAttractionState();
+				return true;
+			}
+			B.WanderOrCamp(true);
+			return true;
+		}
+		else if ( (B.Pawn.Weapon != None) && (B.Pawn.Weapon.FocusOnLeader(false) || B.Pawn.Weapon.bMeleeWeapon) )
+		{
+			B.FightEnemy(false,0);
+			return true;
+		}
+		return false;
+	}
+	else if ( B.SetRouteToGoal(Leader) )
+		return true;
+	else
+	{
+		B.GoalString = "Can't reach leader";
+		return false;
+	}
+}
+
+/* CloseToLeader()
+Called by bot to see if his pawn is in an acceptable position relative to the squad leader
+*/
+function bool CloseToLeader(Pawn P)
+{
+    local float dist, distZ, FormSize;
+
+    if ( (P == None) || (SquadLeader.Pawn == None) )
+        return true;
+
+    // for certain games, have bots wait for leader for a while
+    if ( (P.Base != None) && (SquadLeader.Pawn.Base != None) && (SquadLeader.Pawn.Base != P.Base) )
         return false;
 
-    if( (B.IsInState('Charging') || B.IsInState('Hunting')) && B.Pawn.Weapon.AIRating >= 0.4 ) //This will work with bats/axe but not knife
+    dist = VSize(P.Location - SquadLeader.Pawn.Location);
+	distZ = P.Location.Z - SquadLeader.Pawn.Location.Z;
+    FormSize = GetRestingFormation().FormationSize;
+
+    // Well within formation range — always considered close
+    if ( dist < FormSize * 0.75 && distZ < 150 )
+        return true;
+
+    // Beyond formation range — not close
+    if ( dist > FormSize )
         return false;
 
-	//KFInvasionBot(B).SendChatMsg("Following leader: "$C.PlayerReplicationInfo.PlayerName);
+    // Outer 25% of formation range: only fail if leader is running AWAY from us.
+    // This prevents bots near the edge from being constantly recalled just because
+    // the player is sprinting around nearby.
+    if ( PhysicsVolume.bWaterVolume )
+    {
+        if ( VSize(SquadLeader.Pawn.Velocity) > 0 )
+            return false;
+    }
+    else if ( VSize(SquadLeader.Pawn.Velocity) > SquadLeader.Pawn.WalkingPct * SquadLeader.Pawn.GroundSpeed )
+    {
+        if ( (Normal(SquadLeader.Pawn.Velocity) dot Normal(SquadLeader.Pawn.Location - P.Location)) > 0.5 )
+            return false;
+    }
 
-    return Super.TellBotToFollow(B, C);
+	return ( P.Controller.LineOfSightTo(SquadLeader.Pawn) );
 }
 
 function bool SetEnemy( Bot B, Pawn NewEnemy )
@@ -336,7 +444,7 @@ function PickNewLeader()
 			LeaderPRI = None;
 		else
 			LeaderPRI = TeamPlayerReplicationInfo(SquadLeader.PlayerReplicationInfo);
-		NetUpdateTime = Level.Timeseconds - 1;
+		NetUpdateTime = Level.TimeSeconds - 1;
 	}
 }
 

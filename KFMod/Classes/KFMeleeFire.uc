@@ -64,7 +64,7 @@ static final function vector GetAimPos( Actor Other )
 	return C.Origin + (P.HeadHeight * P.HeadScale * C.XAxis);
 }
 
-simulated Function Timer()
+simulated function Timer()
 {
 	local Actor HitActor;
 	local vector StartTrace, EndTrace, HitLocation, HitNormal;
@@ -120,7 +120,7 @@ simulated Function Timer()
 			//	log(VSize(Instigator.Velocity));
 
                 HitActor.TakeDamage(MyDamage, Instigator, HitLocation, vector(PointRot), hitDamageClass) ;
-				Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - (Instigator.Location + Instigator.EyePosition())));
+				//Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - (Instigator.Location + Instigator.EyePosition())));
 				KFMeleeGun(Weapon).playServerSound();
 
 				if(VSize(Instigator.Velocity) > 300 && KFMonster(HitActor).Mass <= Instigator.Mass)
@@ -247,8 +247,11 @@ simulated event ModeDoFire()
 		Weapon.PutDown();
 	}
 
-	Weapon.Owner.Velocity.x *= KFMeleeGun(Weapon).ChopSlowRate;
-	Weapon.Owner.Velocity.y *= KFMeleeGun(Weapon).ChopSlowRate;
+    if( Weapon.Owner != none && Weapon.Owner.Physics != PHYS_Falling )
+    {
+        Weapon.Owner.Velocity.x *= KFMeleeGun(Weapon).ChopSlowRate;
+        Weapon.Owner.Velocity.y *= KFMeleeGun(Weapon).ChopSlowRate;
+    }
 }
 
 function DoFireEffect()

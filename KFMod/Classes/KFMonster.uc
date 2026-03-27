@@ -268,6 +268,7 @@ simulated function PostBeginPlay()
 {
 	local vector AttachPos;
 	local float ScalingFactor;
+	local float Difficulty;
 
 	if(ROLE==ROLE_Authority)
 	{
@@ -338,19 +339,21 @@ simulated function PostBeginPlay()
 	// Difficulty Scaling
 	if (Level.Game != none && !bDiffAdjusted)
 	{
+		Difficulty = DeathMatch(Level.Game).AdjustedDifficulty;
+
 		// Some randomization to their walk speeds.
 		GroundSpeed = default.GroundSpeed - (0.5*default.Groundspeed) + (rand(default.groundspeed*0.5) + (0.25 * default.groundspeed));
-		if (Level.Game.GameDifficulty <= 3)
+		if (Difficulty <= 3)
 		{
-			ScalingFactor = 0.75 + (Level.Game.GameDifficulty - 1) * 0.125;
+			ScalingFactor = 0.75 + (Difficulty - 1) * 0.125;
 		}
 		else
 		{
-			ScalingFactor = 1.0 + (Level.Game.GameDifficulty - 3) * 0.3;
+			ScalingFactor = 1.0 + (Difficulty - 3) * 0.3;
 		}
-		GroundSpeed += (Level.Game.GameDifficulty * 3);
-		AirSpeed += (Level.Game.GameDifficulty * 3);
-		WaterSpeed += (Level.Game.GameDifficulty * 3);
+		GroundSpeed += (Difficulty * 3);
+		AirSpeed += (Difficulty * 3);
+		WaterSpeed += (Difficulty * 3);
 		Health *= ScalingFactor;
 		Health *= NumPlayersHealthModifer();
 		HealthMax *= ScalingFactor;
@@ -367,12 +370,11 @@ simulated function PostBeginPlay()
 		ScreamDamage *= ScalingFactor;
 		if ( Level.Game.NumPlayers == 1 ) ScreamDamage *= 0.75;
 		OriginalGroundSpeed = GroundSpeed;
-		if ( Level.Game.GameDifficulty >= 5.0 ) // Hard/Skilled
+		if ( Difficulty >= 5.0 ) // Elite and above
 		{
 			Intelligence = BRAINS_Human;
-			//log(GetHumanReadableName()$" monster Intelligence is: "$Intelligence);
 		}
-	
+
 		bDiffAdjusted = true;
 	}
     if( Level.NetMode!=NM_DedicatedServer )
@@ -397,7 +399,7 @@ function float NumPlayersHealthModifer()
 		{
 			if(Bot(C)!=None)
 			{
-				NumEnemies+= 0.5; // Bots count as half a player
+				NumEnemies+= 0.5; // Bots count as a half of a player
 				continue;
 			}
 			NumEnemies+=1.0;
@@ -620,7 +622,7 @@ simulated function PlayTakeHit(vector HitLocation, int Damage, class<DamageType>
 
 	if( Damage>=5 )
 		PlayDirectionalHit(HitLocation);
-	else if (DamageType.name == 'DamTypeShotgun' || DamageType.name == 'DamTypeDBShotgun' || DamageType.name == 'DamTypeFrag')
+	else if (DamageType.name == 'DamTypeShotgun' || DamageType.name == 'DamTypeDBShotgun' || DamageType.name == 'DamTypeFrag' || DamageType.name == 'DamTypeLAW')
 		PlayDirectionalHit(HitLocation);
 	else if (DamageType.name == 'DamTypeClaws')
 	{
@@ -903,7 +905,7 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 
 	function Landed(vector HitNormal)
 	{
-		SetPhysics(PHYS_None);
+		//SetPhysics(PHYS_None);
 		SetCollision(false, false, false);
 
 		if ( !IsAnimating(0) )
@@ -1055,6 +1057,7 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 					{
 						Destroy();
 					}
+					return;
 				}     
 			}
 
@@ -1272,29 +1275,30 @@ simulated function ProcessHitFX()
 				case 'Bip01 Spine1':
 					if(!bGibbed)
 					{
-						Level.Game.Broadcast(self, "Torso gib on "$GetHumanReadableName());
-						SpawnGiblet(class'KFMod.ClotGibLowerTorso', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
+						//Level.Game.Broadcast(self, "Torso gib on "$GetHumanReadableName());
+						SpawnGiblet(GetGibClass(EGT_Torso), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						GibCountTorso--;
 						PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc,255);
 						bGibbed = true;
 						while( GibCountHead-- > 0 )
-							SpawnGiblet(class'KFMod.ClotGibHead', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
+							SpawnGiblet(GetGibClass(EGT_Head), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						while( GibCountForearm-- > 0 )
-							SpawnGiblet(class'KFMod.ClotGibArm', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
+							SpawnGiblet(GetGibClass(EGT_UpperArm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						while( GibCountTorso-- > 0 )
-							SpawnGiblet(class'KFMod.ClotGibTorso', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
+							SpawnGiblet(GetGibClass(EGT_Forearm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						if ( !Level.bDropDetail && (Level.DetailMode != DM_Low) && PlayerCanSeeMe() )
 						{
 							// extra gibs!!!
 							GibPerterbation = FMin(1.0, 1.5 * GibPerterbation);
 							PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc,255);
-							SpawnGiblet(class'KFMod.ClotGibLeg', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
-							SpawnGiblet(class'KFMod.ClotGibLeg', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
-							SpawnGiblet(class'KFMod.ClotGibArm', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
-							SpawnGiblet(class'KFMod.ClotGibArm', boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
+							SpawnGiblet(GetGibClass(EGT_Calf), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
+							SpawnGiblet(GetGibClass(EGT_Calf), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
+							SpawnGiblet(GetGibClass(EGT_UpperArm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation);
+							SpawnGiblet(GetGibClass(EGT_Forearm), boneCoords.Origin, HitFX[SimHitFxTicker].rotDir, GibPerterbation );
 						}
 					}
-					break;*/
+					break;
+				*/
 			}
 			//HideBone(HitFX[SimHitFxTicker].bone);
 			if( HitFX[SimHitFXTicker].bone != 'Bip01 Spine' && HitFX[SimHitFXTicker].bone != FireRootBone && HitFX[SimHitFXTicker].bone != 'head' && Health <=0 )
@@ -1328,6 +1332,8 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
     GetAxes( Rotation, Dummy, Dummy, Direction );
 
     Giblet.Velocity = Velocity + Normal(Direction) * (512.0 + FRand() * 256.0);
+
+	//log("Spawned Giblet of class "$Giblet$" at location "$Location$" with size: "$Giblet.DrawScale$ " on pawn "$GetHumanReadableName());
 }
 
 simulated function StartDeRes()
@@ -1345,7 +1351,8 @@ simulated function StartDeRes()
 		KSetBlockKarma(true);
 		// Turn off any overlays
 		SetOverlayMaterial(None, 0.0f, true);
-		SetCollision(true, true, true);
+		// Turn off collision when we de-res (avoids rockets etc. hitting corpse!)
+		SetCollision(false, false, false);
 	}
 }
 
@@ -1682,7 +1689,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	LastMomentum = momentum;
 
 	// Zeds and fire dont mix.
-	if( class<Burned>(damageType)!=none ||  class<DamTypeFlamethrower>(damageType)!=none)
+	if( class<Burned>(damageType)!=none || class<DamTypeFlamethrower>(damageType)!=none)
 	{
 		LastBurnDamage = Damage;
 		Damage *= 1.5;
@@ -1692,7 +1699,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			{
 				bBurnified = true;
 				BurnDown = 10;
-				GroundSpeed *= 0.80;
+				SetGroundSpeed(GroundSpeed * 0.8);
 				BurnInstigator = instigatedBy;
 				SetTimer(1.0,true);
 			}
@@ -1739,7 +1746,8 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 		{
 			if( bIsHeadShot )
 			{
-				PlaySound(sound'PlayerSounds.NewGibs.NewGib1', SLOT_None,255);
+				//Level.Game.Broadcast(self, "Headshot!");
+				PlaySound(sound'PlayerSounds.NewGibs.NewGib1', SLOT_None,150);
 				HeadHealth -= LastDamageAmount;
 				if( HeadHealth <= 0 || Damage > Health )
 				{
@@ -2551,6 +2559,22 @@ function Trigger( actor Other, pawn EventInstigator )
 		Controller.Trigger(Other,EventInstigator);
 }
 
+// Laught at victory of boss battle.
+function bool SetBossLaught()
+{
+	Return False; // Normal zeds have no feelings..
+}
+
+// Hack to prevent zed gibbing
+event EncroachedBy( actor Other )
+{
+	if ( Pawn(Other)!=None && Vehicle(Other)==None && KFPawn(Other)==None && KFMonster(Other)==None )
+	{
+		gibbedBy(Other);
+		log(GetHumanReadableName()$ " was gibbed by " $Other.GetHumanReadableName());
+	}
+}
+
 defaultproperties
 {
      MeleeAnims(0)="Claw"
@@ -2637,7 +2661,7 @@ defaultproperties
      JumpZ=320.000000
      WalkingPct=1.000000
      CrouchedPct=1.000000
-	 HiddenGroundSpeed=300.000000
+	 HiddenGroundSpeed=275.000000
      MaxFallSpeed=2500.000000
      //HeadRadius=7.000000
 	 HeadScale=1.100000

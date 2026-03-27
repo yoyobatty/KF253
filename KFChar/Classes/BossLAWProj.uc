@@ -2,7 +2,7 @@ class BossLAWProj extends LAWProj;
 
 simulated function ProcessTouch(Actor Other, Vector HitLocation)
 {
-	// Don't let it hit this player, or blow up on another player
+	// Don't hit ourselves :-) also don't hit zeds (or their extended collision)
 	if ( Other==none || Other==Instigator || Other.Base==Instigator || ExtendedZCollision(Other)!=None || Monster(Other)!=None )
 		return;
 
@@ -13,5 +13,6 @@ function TakeDamage( int Damage, Pawn InstigatedBy, Vector Hitlocation, Vector M
 
 defaultproperties
 {
-    Damage=400.000000
+    Damage=350.000000
+	DamageRadius=400.000000
 }

@@ -12,6 +12,17 @@ function TakeDamage( int Damage, Pawn EventInstigator, Vector Hitlocation, Vecto
 
 defaultproperties
 {
+     DrawType=DT_None
+     bIgnoreEncroachers=True
+     RemoteRole=ROLE_None
+     SurfaceType=EST_Flesh
+     bCollideActors=True
+     bProjTarget=True
+     bUseCylinderCollision=True
+}
+/* 
+defaultproperties
+{
 	RemoteRole=ROLE_None
 	bHidden=False
 	bCollideActors=True
@@ -28,5 +39,6 @@ defaultproperties
 	bBlockKarma=False
 	bIgnoreEncroachers=True
 	bUseCylinderCollision=true
-	bBlockActors=False
+	//bBlockActors=False
 }
+*/

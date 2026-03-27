@@ -15,16 +15,16 @@ static function string GetLocalString(
     return Default.PickupMessage;
 }
 
-
-//function ResetInjuries()
-//{
-
-//Other.GroundSpeed = 210;
-//}
-
 function RespawnEffect()
 {
 // Get rid of the Yellow puff. It's not welcome here.
+}
+
+event float BotDesireability(Pawn Bot)
+{
+    if (Bot.Health >= Bot.HealthMax)
+        return 0;
+    return Super.BotDesireability(Bot);
 }
 
 auto state Pickup
@@ -37,24 +37,22 @@ auto state Pickup
         P = Pawn(Other);
         if(P!=none)
         {
-          PC = PlayerController(P.Controller);
-
-
-          if ( ValidTouch(Other) && (P.Health < P.HealthMax)&&
-            KFHumanPawn(P).HealthToGive == 0 )
-          {
-            // Make sure he's wounded, and not already being affected by a kit.
-
-            if ( P.GiveHealth(HealingAmount, GetHealMax(P)) || (bSuperHeal && !Level.Game.bTeamGame) )
+            PC = PlayerController(P.Controller);
+            if ( ValidTouch(Other) && (P.Health < P.HealthMax) && KFHumanPawn(P).HealthToGive == 0 )
             {
-                AnnouncePickup(P);
-                SetRespawn();
+                // Make sure he's wounded, and not already being affected by a kit.
+                if ( P.GiveHealth(HealingAmount, GetHealMax(P)) || (bSuperHeal && !Level.Game.bTeamGame) )
+                {
+                    AnnouncePickup(P);
+                    SetRespawn();
+                }
             }
-          }
-          else
-            if (P.Health >= P.HealthMax && PlayerController(P.Controller)!=none)
-              PlayerController(P.Controller).ClientMessage("You are already at full health.", 'KFCriticalEvent');
-       }
+            else
+            {
+                if (P.Health >= P.HealthMax && PC!=none)
+                    PC.ClientMessage("You are already at full health.", 'CriticalEvent');
+            }
+        }
     }
 }
 

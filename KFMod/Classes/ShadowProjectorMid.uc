@@ -52,7 +52,6 @@ function Effect_TacLightProjector GetNearbyTacLight()
 
 function UpdateShadow()
 {
-    local coords              C;
     local Plane               BoundingSphere;
     local Effect_TacLightProjector Tac;
     local vector              Dir, ActorCenter;

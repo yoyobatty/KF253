@@ -104,10 +104,33 @@ var array< Class<KFVeterancyTypes> > LoadedSkills;
 var() globalconfig bool bPerksEnabled;
 var() globalconfig int MaxZombiesOnce;
 
-var bool bWaveBossInProgress,bHasSetViewYet;
+var bool bWaveBossInProgress,bHasSetViewYet,bBossHasSaidWord;
 var KFMonster ViewingBoss;
 
 var ShopObjective SO;
+
+function DoBossDeath()
+{
+    local Controller C;
+    local Controller nextC;
+    local int num;
+
+    num = NumMonsters;
+    c = Level.ControllerList;
+
+    // turn off all the other zeds so they don't attack the player
+    while (c != none && num > 0)
+    {
+        nextC = c.NextController;
+        if (KFMonsterController(C)!=None)
+        {
+            C.GotoState('GameEnded');
+            --num;
+        }
+        c = nextC;
+    }
+
+}
 
 function bool BecomeSpectator(PlayerController P)
 {
@@ -174,6 +197,16 @@ function SaveAllStats() // Ultimate lag function.
 		}
 		else ActiveStats[i].SaveConfig();
 	}
+}
+function Logout(Controller Exiting)
+{
+    local KFPlayerController PC;
+    
+    PC = KFPlayerController(Exiting);
+    if (PC != None && PC.MyActiveStats != None)
+        PC.MyActiveStats.SaveConfig();
+    
+    Super.Logout(Exiting);
 }
 function LoadUpMonsterList()
 {
@@ -246,13 +279,14 @@ event InitGame( string Options, out string Error )
 	local KFLevelRules KFLRit;
 	local class<KFVeterancyTypes> V;
 	local ShopVolume SH;
-	local Controller C;
 
 	Super.InitGame(Options, Error);
 
 	FixAFewActors();
 
 	bTradingDoorsOpen = True;
+
+	Level.MaxRagdolls = 100;
 
 	foreach DynamicActors(class'KFLevelRules',KFLRit)
 	{
@@ -281,6 +315,9 @@ event InitGame( string Options, out string Error )
 	//Spawn(Class'KFBotChatManager');
 	AccessControl.AdminClass = class'KFMod.KFAdmin';
 	LoadUpMonsterList();
+
+	if (Level.GetLocalPlayerController() != None)
+		Level.GetLocalPlayerController().ConsoleCommand("nearclip 3");
 }
 
 function FixAFewActors()
@@ -1270,7 +1307,6 @@ State MatchInProgress
 	function DoWaveEnd()
 	{
 		local Controller C;
-		local KFTraderDoor TDoor;
 		local KFDoorMover KFDM;
 
 		// Only reset this at the end of wave 0. That way the sine wave that scales
@@ -1402,6 +1438,41 @@ State MatchOver
 		LastStatsSaveTime = 0; // Force all stats to be saved on end-game.
 		SaveAllStats();
 	}
+    function Timer()
+    {
+        Super.Timer();
+
+        if( !bBossHasSaidWord )
+        {
+            bBossHasSaidWord = True;
+            BossLaughtIt();
+        }
+    }
+
+    function BossLaughtIt()
+    {
+        local Controller C;
+
+        For( C=Level.ControllerList; C!=None; C=C.NextController )
+        {
+            if( KFMonster(C.Pawn)!=None && C.Pawn.Health>0 && KFMonster(C.Pawn).SetBossLaught() )
+                Return;
+        }
+    }
+
+    function bool ChangeTeam(Controller Other, int num, bool bNewTeam)
+    {
+        // prevents DeathMatch.ChangeTeam from being called so that players aren't
+        // blocked from joining a server that is in this state
+        if( Other.PlayerReplicationInfo != none && Other.PlayerReplicationInfo.Team == none )
+        {
+            return Global.ChangeTeam( Other, num, bNewTeam );
+        }
+        else
+        {
+            return Super.ChangeTeam( Other, num, bNewTeam );
+        }
+    }
 }
 
 static function array<string> GetAllLoadHints(optional bool bThisClassOnly)
@@ -1479,7 +1550,7 @@ function SetupWave()
 	WaveMonsters = 0;
 	WaveNumClasses = 0;
 	NewMaxMonsters = Waves[WaveNum].WaveMaxMonsters;
-	NewMaxMonsters *= ((FMin(GameDifficulty,7) + 3)/7 * FClamp((NumPlayers+NumBots)*0.8,2,50));
+	NewMaxMonsters *= ((FMin(GameDifficulty,7) + 3)/7 * FClamp((NumPlayers+NumBots)*0.8,2,50)); //Bots count as 75% towards total monster spawn
 
 	TotalMaxMonsters = Clamp(NewMaxMonsters,5,800);  //11, MAX 800, MIN 5
 
@@ -1692,8 +1763,8 @@ function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector H
     }
 
 	// This stuff cuts thru all the B.S
-	//if(DamageType==class'DamTypeVomit' || DamageType==class'DamTypeWelder' || DamageType==class'SirenScreamDamage' )
-	//	return damage; 
+	if(DamageType==class'DamTypeVomit' || DamageType==class'DamTypeWelder' || DamageType==class'SirenScreamDamage' )
+		return damage; 
  
 	if ( instigatedBy == None ) 
 		return Super(xTeamGame).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType ); 
@@ -1706,7 +1777,7 @@ function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector H
 			if( Class<KFWeaponDamageType>(damageType)!=None && PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) ) 
 				Class<KFWeaponDamageType>(damageType).Static.AwardDamage(PC.MyActiveStats,Clamp(Damage,1,Injured.Health)); 
 		} 
-		return Damage;
+		return Super(UnrealMPGameInfo).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType );
 	}
 
 	if ( MonsterController(InstigatedBy.Controller) != None )
@@ -1764,7 +1835,25 @@ function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector H
 		}
 		Damage *= FriendlyFireScale;
 	}
-	return Super(DeathMatch).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType );
+    // Start code from DeathMatch.uc - Had to override this here because it was reducing
+    // bite damage (which is 1) down to zero when the skill settings were low
+
+    if ( (instigatedBy != None) && (InstigatedBy != Injured) && (Level.TimeSeconds - injured.SpawnTime < SpawnProtectionTime)
+        && (class<WeaponDamageType>(DamageType) != None || class<VehicleDamageType>(DamageType) != None) )
+        return 0;
+
+    Damage = super(UnrealMPGameInfo).ReduceDamage( Damage, injured, InstigatedBy, HitLocation, Momentum, DamageType );
+
+    if ( instigatedBy == None)
+        return Damage;
+
+    if ( Level.Game.GameDifficulty <= 3 )
+    {
+        if ( injured.IsPlayerPawn() && (injured == instigatedby) && (Level.NetMode == NM_Standalone) )
+            Damage *= 0.5;
+    }
+    return (Damage * instigatedBy.DamageScaling);
+    // End code from DeathMatch.uc
 }
 
 static function bool NeverAllowTransloc()
@@ -1969,27 +2058,27 @@ function bool CheckEndGame(PlayerReplicationInfo Winner, string Reason)
 
 	EndTime = Level.TimeSeconds + EndTimeDelay;
 
-	if ( WaveNum > FinalWave )
-	{
-		GameReplicationInfo.Winner = Teams[0];
-		KFGameReplicationInfo(GameReplicationInfo).EndGameType = 2;
-		For( i=0; i<ActiveStats.Length; i++ )
-		{
-			if( ActiveStats[i].CurrentOwner!=None && ActiveStats[i].CurrentOwner.PlayerReplicationInfo!=None
-			 && !ActiveStats[i].CurrentOwner.PlayerReplicationInfo.bOnlySpectator )
-				ActiveStats[i].GamesWon++;
-		}
-	}
-	else
-	{
-		KFGameReplicationInfo(GameReplicationInfo).EndGameType = 1;
-		For( i=0; i<ActiveStats.Length; i++ )
-		{
-			if( ActiveStats[i].CurrentOwner!=None && ActiveStats[i].CurrentOwner.PlayerReplicationInfo!=None
-			 && !ActiveStats[i].CurrentOwner.PlayerReplicationInfo.bOnlySpectator )
-				ActiveStats[i].GamesLost++;
-		}
-	}
+    if ( Reason ~= "LastMan" || WaveNum < FinalWave )
+    {
+        KFGameReplicationInfo(GameReplicationInfo).EndGameType = 1;
+        For( i=0; i<ActiveStats.Length; i++ )
+        {
+            if( ActiveStats[i].CurrentOwner!=None && ActiveStats[i].CurrentOwner.PlayerReplicationInfo!=None
+             && !ActiveStats[i].CurrentOwner.PlayerReplicationInfo.bOnlySpectator )
+                ActiveStats[i].GamesLost++;
+        }
+    }
+    else
+    {
+        GameReplicationInfo.Winner = Teams[0];
+        KFGameReplicationInfo(GameReplicationInfo).EndGameType = 2;
+        For( i=0; i<ActiveStats.Length; i++ )
+        {
+            if( ActiveStats[i].CurrentOwner!=None && ActiveStats[i].CurrentOwner.PlayerReplicationInfo!=None
+             && !ActiveStats[i].CurrentOwner.PlayerReplicationInfo.bOnlySpectator )
+                ActiveStats[i].GamesWon++;
+        }
+    }
 
 	for ( P=Level.ControllerList; P!=None; P=P.nextController )
 	{
@@ -2167,6 +2256,7 @@ defaultproperties
      AvailableChars(7)="Soldier_Kara"
      AvailableChars(8)="Soldier_Powers"
      AvailableChars(9)="Soldier_Masterson"
+	 AvailableChars(10)="Soldier_Quick"
      bPerksEnabled=True
      MaxZombiesOnce=32
      WaveConfigMenu="KFGUI.KFWaveConfigMenu"

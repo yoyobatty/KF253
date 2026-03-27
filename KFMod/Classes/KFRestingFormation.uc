@@ -2,5 +2,5 @@ class KFRestingFormation extends RestingFormation;
 
 defaultproperties
 {
-	FormationSize=950.000000
+	FormationSize=650.000000
 }

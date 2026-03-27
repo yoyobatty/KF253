@@ -52,6 +52,10 @@ function RangedAttack(Actor A)
 
 State RunningState
 {
+   	function bool CanSpeedAdjust()
+    {
+        return false;
+    }
 	function BeginState()
 	{
 		SetGroundSpeed(OriginalGroundSpeed * 1.7);

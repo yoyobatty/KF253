@@ -88,6 +88,7 @@ function DoTrace(Vector Start, Rotator Dir)
 			Other.SetCollision(false);
 			Other.Owner.SetCollision(false);
 			DamageActor = Pawn(Other.Owner);
+			Other = Other.Owner; // Redirect to the actual pawn for correct headshot handling
 		}
 
 		if ( !Other.bWorldGeometry && Other!=Level )

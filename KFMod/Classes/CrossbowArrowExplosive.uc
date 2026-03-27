@@ -30,7 +30,7 @@ var() float  OffsetTime;        // how much time to offset view
     PlaySound(sound'KFWeaponSound.Bang1',,100.5*TransientSoundVolume);
     if ( EffectIsRelevant(Location,false) )
     {
-        Spawn(class'KFMiniExplosion',,,HitLocation + HitNormal*20,rotator(HitNormal));
+        Spawn(class'KFMiniExplosion',,,HitLocation + HitNormal*20,rotator(HitNormal)+rot(-16384,0,0));
         PC = Level.GetLocalPlayerController();
         if ( (PC.ViewTarget != None) && VSize(PC.ViewTarget.Location - Location) < 5000 )
             Spawn(class'ExplosionCrap',,, HitLocation + HitNormal*20, rotator(HitNormal));

@@ -55,7 +55,8 @@ simulated function Explode(vector HitLocation, vector HitNormal)
     PlaySound(sound'ONSVehicleSounds-S.TankFire01',,255+TransientSoundVolume);
     if ( EffectIsRelevant(Location,false) )
     {
-        Spawn(class'KFNadeExplosion',,,HitLocation + HitNormal*16,rotator(HitNormal));
+        Spawn(class'KFNadeExplosion',,,HitLocation + HitNormal*16,rotator(HitNormal) + rot(-16384,0,0)); //Fixes explosion rotation
+        Spawn(class'KFLawFireExplosion',,,HitLocation + HitNormal*16, rotator(HitNormal) + rot(-16384,0,0));
         Spawn(class'ExplosionCrap',,, HitLocation + HitNormal*16, rotator(HitNormal));
         if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer) )
 		    Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
@@ -138,6 +139,8 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
                 Victims.SetDelayedDamageInstigatorController( InstigatorController );
             if ( Victims == LastTouched )
                 LastTouched = None;
+            if( AIController(InstigatorController) != None && Victims == Instigator )
+                DamageScale *= 0.5; // half damage to self from AI weapons
             Victims.TakeDamage
             (
                 damageScale * DamageAmount,
@@ -217,7 +220,7 @@ defaultproperties
     Damage=825.000000 //Was 950
     DamageRadius=450.000000 //Was 400
     MomentumTransfer=125000.000000
-    MyDamageType=Class'KFMod.DamTypeFrag'
+    MyDamageType=Class'KFMod.DamTypeLAW'
     ExplosionDecal=Class'KFMod.KFScorchMark'
     LightHue=25
     LightSaturation=100

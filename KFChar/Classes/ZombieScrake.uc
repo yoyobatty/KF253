@@ -34,6 +34,10 @@ function RangedAttack(Actor A)
 
 State RunningState
 {
+   	function bool CanSpeedAdjust()
+    {
+        return false;
+    }
 	function BeginState()
 	{
 		SetGroundSpeed(OriginalGroundSpeed * 2.5);
@@ -65,7 +69,7 @@ State RunningState
 	     }
 	}
 Begin:
-	While( Controller!=None && Controller.Target!=None && (VSize(Controller.Target.Location-Location)<200 || (Normal(Controller.Target.Location - Location) dot vector(Controller.Target.Rotation) > 0.0)))
+	While( Controller!=None && Controller.Target!=None && (VSize(Controller.Target.Location-Location)<250 || (Normal(Controller.Target.Location - Location) dot vector(Controller.Target.Rotation) > 0.0)))
 		Sleep(0.5+FRand());
 	GoToState('');
 }

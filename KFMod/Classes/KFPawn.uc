@@ -39,8 +39,8 @@ var Emitter ItBUURRNNNS;
 var bool bBurnified;
 var bool bBurnApplied;
 
-var float StunTime, StunnedTime;
-var bool bStunned;
+//var float StunTime, StunnedTime;
+//var bool bStunned;
 
 var() float  CurMusicVolume;
 var() float  CurSoundVolume;	
@@ -77,7 +77,7 @@ var             float           StopDisabledTime;       // When the player can m
 replication
 {
 	reliable if(Role == ROLE_Authority)
-		bBurnified, bStunned, QuickHeal;
+		bBurnified, QuickHeal;
 
 	reliable if(Role < ROLE_Authority)
 		ServerBuyWeapon,ServerSellWeapon,ServerBuyKevlar,ServerBuyFirstAid,ServerBuyAmmo,ServerSellAmmo,SecondaryItem,TossCash;
@@ -731,14 +731,12 @@ simulated function ProcessHitFX()
 						}
 					}
 					break;
-			}
-
-                      // Haxxors!
-
-		      if (LastHitDamType == class 'SirenScreamDamage')
-		       HideBone(HeadBone);
-		      else
-                        HideBone(HitFX[SimHitFxTicker].bone);
+			}			
+			// Haxxors!
+			if (LastHitDamType == class 'SirenScreamDamage')
+				HideBone(HeadBone);
+			else
+                HideBone(HitFX[SimHitFxTicker].bone);
 		}
 	}
 }
@@ -1059,20 +1057,21 @@ function bool DoJump( bool bUpdating )
 
 simulated event Tick(float DeltaTime)
 {
-	local float ratio;
-	local PlayerController	PC;
-	local float tempSoundVolume;
-	local float tempMusicVolume;
-	local float tempAmbientVolume;
-	local float tempVoiceVolume;
+	//local float ratio;
+	//local PlayerController	PC;
+	//local float tempSoundVolume;
+	//local float tempMusicVolume;
+	//local float tempAmbientVolume;
+	//local float tempVoiceVolume;
 
-	if( ratio > 1.0 ) 
-		ratio = 1.0;
+	//if( ratio > 1.0 ) 
+	//	ratio = 1.0;
 
-	if(StunTime <= 0) 
-		StunTime = 0;
+	//if(StunTime <= 0) 
+	//	StunTime = 0;
 
 	// Fog & Field of view
+	/* 
 	PC = PlayerController(Controller);
 	if( PC != None )
 	{
@@ -1103,6 +1102,7 @@ simulated event Tick(float DeltaTime)
 		}
 
 	}
+	*/
 	// IN other words - we're moving, we've got a piece, but we're not firing or reloading, or jumping / falling Faust:Perhaps we need that later: VSize(Acceleration) != 0 &&
     if (level.NetMode != NM_DEDICATEDSERVER)
     {
@@ -2156,8 +2156,11 @@ event bool EncroachingOn( actor Other )
 }
 event EncroachedBy( actor Other )
 {
-	if ( Pawn(Other)!=None && Vehicle(Other)==None && KFPawn(Other)==None )
+	if ( Pawn(Other)!=None && Vehicle(Other)==None && KFPawn(Other)==None && KFMonster(Other)==None )
+	{
 		gibbedBy(Other);
+		log(GetHumanReadableName()$ " was gibbed by " $Other.GetHumanReadableName());
+	}
 }
 
 /* Quickly select syring, alt fire once, select old weapon again */
@@ -2213,7 +2216,7 @@ defaultproperties
 {
 	BileFrequency=0.500000
 	BurnEffect=Class'KFMod.KFMonsterFlame'
-	StunnedTime=7.000000
+	//StunnedTime=7.000000
 	ShieldStrengthMax=100.000000
 	ShieldHitMat=None
 	FootstepVolume=1.000000

@@ -28,7 +28,7 @@ defaultproperties
      OldSmallViewOffset=(X=4.000000,Y=11.000000,Z=-12.000000)
      OldPlayerViewPivot=(Pitch=400)
      Description="A rugged tactical pump action shotgun common to police divisions the world over. It accepts a maximum of 8 shells and can fire in rapid succession. "
-     DisplayFOV=75.000000
+     DisplayFOV=85.000000
      Priority=15
      SmallViewOffset=(X=-35.000000,Y=20.000000,Z=-10.000000)
      InventoryGroup=3

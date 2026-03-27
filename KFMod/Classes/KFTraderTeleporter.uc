@@ -29,7 +29,7 @@ simulated function PostTouch( actor Other )
  {
     //Log("REMOVING SHOP HOG!");
 
-    PlayerController(Pawn(Other).Controller).ClientMessage("You cannot stay in the shop after closing", 'KFCriticalEvent');
+    PlayerController(Pawn(Other).Controller).ClientMessage("You cannot stay in the shop after closing", 'CriticalEvent');
     PlayerController(Pawn(Other).Controller).ClientCloseMenu(true, true);
 
     if( (InStr( URL, "/" ) >= 0) || (InStr( URL, "#" ) >= 0) )

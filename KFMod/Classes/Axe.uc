@@ -19,7 +19,7 @@ defaultproperties
      AIRating=0.510000
      CurrentRating=0.510000
      Description="A common two-handed fireman's axe."
-     DisplayFOV=75.000000
+     DisplayFOV=90.000000
      Priority=4
      SmallViewOffset=(X=10.000000,Y=3.000000,Z=-18.000000)
      GroupOffset=3

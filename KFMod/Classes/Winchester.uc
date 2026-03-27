@@ -220,7 +220,7 @@ defaultproperties
      OldCenteredRoll=3000
      Description="A rugged and reliable single-shot rifle.  "
      EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-     DisplayFOV=65.000000
+     DisplayFOV=80.000000
      Priority=9
      SmallViewOffset=(X=8.000000,Y=20.100000,Z=-4.000000)
      CenteredOffsetY=-5.000000

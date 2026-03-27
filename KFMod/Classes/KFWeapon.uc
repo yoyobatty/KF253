@@ -11,8 +11,6 @@ var bool bzoomed;
 var float ZoomLevel;
 var Bool bSpeedMeUp;
 
-var class<InventorySpot>   InvSpot;  
-
 var() sound ReloadBeginSound, ReloadSound, ReloadEndSound, ToggleSound;
 var() name ReloadAnim;
 var() float ReloadAnimRate;
@@ -71,8 +69,6 @@ var Effect_TacLightProjector FlashLight;
 
 var float NextAmmoCheckTime,LastAmmoResult,LastHasGunMsgTime;
 
-var() bool bRecoilEnabled;
-
 // Keep track of what this weapon is doing on the client while we are throwing a grenade
 var() 		enum 			EClientGrenadeState
 {
@@ -89,7 +85,6 @@ var() range SwingRand;		// Rand range factor for fun
 
 var rotator ViewLag_LastViewRot;
 var vector  ViewLag_Offset;
-var vector  VDiff;
 var() float   ViewLag_StrengthYaw, ViewLag_StrengthPitch;   // How much lag (higher = more lag)
 var() float   MaxLag;
 var() float   TurnSpeed;
@@ -117,76 +112,6 @@ replication
 	reliable if(Role == ROLE_Authority)
 		ClientReload, ClientFinishReloading, ClientReloadEffects, FlashLight, 
 		ClientInterruptReload, ClientForceKFAmmoUpdate;
-}
-
-simulated function PostBeginPlay()
-{
-
-	// Weapon will handle FireMode instantiation
-	Super.PostBeginPlay();
-
-	if ( Level.NetMode == NM_DedicatedServer )
-		return;
-
-	InitFOV();
-}
-
-// Set up the widescreen FOV values for this weapon
-simulated final function InitFOV()
-{
-	local KFPlayerController KFPC;
-	local float ResX, ResY;
-	local float AspectRatio;
-
-	KFPC = KFPlayerController(Level.GetLocalPlayerController());
-
-	if( KFPC == none )
-	{
-		return;
-	}
-
-	ResX = float(GUIController(KFPC.Player.GUIController).ResX);
-	ResY = float(GUIController(KFPC.Player.GUIController).ResY);
-	AspectRatio = ResX / ResY;
-
-	if ( AspectRatio >= 1.60 ) //1.6 = 16/10 which is 16:10 ratio and 16:9 comes to 1.77
-	{
-			DisplayFOV = CalcFOVForAspectRatio(default.DisplayFOV);
-			//default.DisplayFOV = DisplayFOV;
-	}
-	else
-	{
-			DisplayFOV = default.DisplayFOV;
-	}
-}
-
-// For a given 4/3 based FOV, give the proper FOV for the current
-// aspect ratio
-simulated final function float CalcFOVForAspectRatio(float OriginalFOV)
-{
-	local float ResX, ResY;
-	local float AspectRatio;
-	local float OriginalAspectRatio;
-	local float NewFOV;
-	local KFPlayerController KFPC;
-
-	KFPC = KFPlayerController(Level.GetLocalPlayerController());
-
-	if( KFPC != none )
-	{
-		ResX = float(GUIController(KFPC.Player.GUIController).ResX);
-		ResY = float(GUIController(KFPC.Player.GUIController).ResY);
-		AspectRatio = ResX / ResY;
-
-		OriginalAspectRatio = 4/3;
-
-		NewFOV = (ATan((Tan((OriginalFOV*Pi)/360.0)*(AspectRatio/OriginalAspectRatio)),1)*360.0)/Pi;
-
-		return NewFOV;
-
-	}
-
-	return OriginalFOV;
 }
 
 function bool HandlePickupQuery( pickup Item )
@@ -1005,7 +930,7 @@ simulated function Tick(float DeltaTime)
 simulated function UpdateViewModelLag(float DeltaTime)
 {
     local rotator CurViewRot, DeltaRot;
-    local vector  LagMove;
+    local vector  LagMove, VDiff;
     local float LagScale, SpeedScale;
     local float   PitchDeg;
 
@@ -1018,13 +943,10 @@ simulated function UpdateViewModelLag(float DeltaTime)
 
     CurViewRot = Instigator.GetViewRotation();
     DeltaRot = CurViewRot - ViewLag_LastViewRot;
-
 	DeltaRot = Normalize(DeltaRot);
 
-	DeltaRot.Pitch = Clamp(DeltaRot.Pitch, -8192, 8192); // about ±45 degrees
-	DeltaRot.Yaw   = Clamp(DeltaRot.Yaw,   -16384, 16384); // about ±90 degrees
-
-	// HL2-style: lag in view space
+	DeltaRot.Pitch = Clamp(DeltaRot.Pitch, -8192, 8192); 
+	DeltaRot.Yaw   = Clamp(DeltaRot.Yaw,   -16384, 16384); 
 	LagMove.X = 0;
 	LagMove.Y = -float(DeltaRot.Yaw) * ViewLag_StrengthYaw;
 	LagMove.Z = -float(DeltaRot.Pitch) * ViewLag_StrengthPitch;
@@ -1060,7 +982,6 @@ simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
     Super.DisplayDebug(Canvas, YL, YPos);
 	Canvas.DrawText("FOV: " @ string(DisplayFOV));
 	YPos += YL;
-
 }
 
 function AdjustLightGraphic()
@@ -1621,7 +1542,6 @@ defaultproperties
 	UpKick=500
 	TacShineClass=Class'KFMod.TacLightShineAttachment'
 	bSniping=True
-	bRecoilEnabled=True
 	bNoAmmoInstances=False
 	Description="This is a very generic weapon."
 	LightType=LT_Steady

@@ -112,7 +112,7 @@ defaultproperties
 	OldPlayerViewPivot=(Pitch=400)
 	OldCenteredRoll=3000
 	Description="A double barreled shotgun used by big game hunters. It fires two slugs simultaneously and can bring down even the largest targets, quickly."
-	DisplayFOV=55.000000
+	DisplayFOV=70.000000
 	Priority=20
 	SmallViewOffset=(X=8.000000,Y=18.000000,Z=-4.000000)
 	CenteredOffsetY=-5.000000

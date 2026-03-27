@@ -62,17 +62,17 @@ simulated function SpawnEffects()
 
 defaultproperties
 {
-	 HitEffects(0)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.DirtHitEmitter')       	
-	 HitEffects(1)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.RockHitEmitter')      	
-	 HitEffects(2)=(HitDecal=class'KFMod.SnowBulletDecal',HitEffect=class'KFMod.DirtHitEmitter')       	
-	 HitEffects(3)=(HitDecal=class'KFMod.MetalBulletDecal',HitEffect=class'KFMod.MetalHitEmitter')      	
-	 HitEffects(4)=(HitDecal=class'KFMod.WoodBulletDecal',HitEffect=class'KFMod.WoodHitEmitter')       	
-	 HitEffects(5)=(HitDecal=class'KFMod.WoodBulletDecal',HitEffect=class'KFMod.PlantHitEmitter')      	
-	 HitEffects(6)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.FleshHitEmitter')       	
-	 HitEffects(7)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.SnowHitEmitter')       	
-	 HitEffects(8)=(HitDecal=class'KFMod.GlassBulletDecal',HitEffect=class'KFMod.SnowHitEmitter')      	
-	 HitEffects(9)=(HitDecal=class'KFMod.SnowBulletDecal',HitEffect=class'KFMod.WaterHitEmitter')       	
-	 HitEffects(10)=(HitDecal=class'KFMod.GlassBulletDecal',HitEffect=class'KFMod.GlassHitEmitter')       
-     DrawType=DT_None
-     LifeSpan=0.500000
+	HitEffects(0)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.DirtHitEmitter')       	
+	HitEffects(1)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.RockHitEmitter')      	
+	HitEffects(2)=(HitDecal=class'KFMod.SnowBulletDecal',HitEffect=class'KFMod.DirtHitEmitter')     	
+	HitEffects(3)=(HitDecal=class'KFMod.MetalBulletDecal',HitEffect=class'KFMod.MetalHitEmitter')      	
+	HitEffects(4)=(HitDecal=class'KFMod.WoodBulletDecal',HitEffect=class'KFMod.WoodHitEmitter')       	
+	HitEffects(5)=(HitDecal=class'KFMod.WoodBulletDecal',HitEffect=class'KFMod.PlantHitEmitter')      	
+	HitEffects(6)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.FleshHitEmitter')       	
+	HitEffects(7)=(HitDecal=class'KFMod.DefaultBulletDecal',HitEffect=class'KFMod.SnowHitEmitter')       	
+	HitEffects(8)=(HitDecal=class'KFMod.GlassBulletDecal',HitEffect=class'KFMod.SnowHitEmitter')      	
+	HitEffects(9)=(HitDecal=class'KFMod.SnowBulletDecal',HitEffect=class'KFMod.WaterHitEmitter')       	
+	HitEffects(10)=(HitDecal=class'KFMod.GlassBulletDecal',HitEffect=class'KFMod.GlassHitEmitter')       
+	DrawType=DT_None
+	LifeSpan=0.500000
 }

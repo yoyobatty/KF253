@@ -40,7 +40,7 @@ simulated function SpawnTrail()
 {
     if ( Level.NetMode != NM_DedicatedServer )
     {
-		if ( bFlaming && FRand() < 0.7) //Spawn both!
+		if ( bFlaming && FRand() < 0.65) //Spawn both!
 		{
 			TrailFlame = Spawn(class'KFHitFlame', self,,Location,Rotation);
             TrailFlame.SetPhysics( PHYS_Trailer );
@@ -57,7 +57,8 @@ simulated function SpawnTrail()
 
 defaultproperties
 {
-     DampenFactor=0.400000
-     LifeSpan=12.000000
-     Mass=280.000000
+    DampenFactor=0.400000
+    LifeSpan=12.000000
+    Mass=280.000000
+    DrawScale=1.100000
 }

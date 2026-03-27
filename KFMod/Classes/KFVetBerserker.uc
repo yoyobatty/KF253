@@ -35,7 +35,7 @@ static function float GetBodyArmorDamageModifier()
 static function float GetFireSpeedMod( Weapon Other )
 {
 	if( KFMeleeGun(Other)!=None && Welder(Other)==None )
-		Return 1.25; //swing 25% faster because of our training
+		Return 1.3; //swing 30% faster because of our training
 	Return 1;
 }
 static function bool CanBeGrabbed( KFMonster Other )
@@ -48,6 +48,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.Berserker'
 	VeterancyName="Berserker"
-	VeterancyDescription="|BERSERKER||Double damage for all melee weapons|+25% refire speed for all melee weapons|+20% movement speed adjustment when using a melee weapon|+40% resistance to all forms of damage + 80% resistance to vomit damage + 60% resistance to siren scream damage + 25% better armour|Resistance to escape from clot's grabbing"
+	VeterancyDescription="|BERSERKER||Double damage for all melee weapons|+30% refire speed for all melee weapons|+20% movement speed adjustment when using a melee weapon|+40% resistance to all forms of damage + 80% resistance to vomit damage + 60% resistance to siren scream damage + 25% better armour|Resistance to escape from clot's grabbing"
 	VeterancyRequirement="|REQUIREMENTS:||- Deal 10,000 damage with melee weapons"
 }

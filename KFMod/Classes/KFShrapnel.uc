@@ -84,7 +84,7 @@ defaultproperties
     Speed=3500.000000
     MaxSpeed=4000.000000
     Damage=25.000000
-    MyDamageType=Class'KFMod.DamTypeFrag'
+    MyDamageType=Class'KFMod.DamTypeShrapnel'
     DrawScale=5.000000
     AmbientGlow=40
 }

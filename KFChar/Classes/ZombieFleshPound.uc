@@ -65,7 +65,6 @@ function PlayTakeHit(vector HitLocation, int Damage, class<DamageType> DamageTyp
 
 function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
 {
-	local Vector Dir;
 	local int OldHealth;
 
 	//GetAxes(Rotation, X,Y,Z);
@@ -77,33 +76,31 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	
 	// He's impervious to small arms fire (non explosives)
 	// Frags and LAW rockets will bring him down way faster than bullets and shells.
-	if (DamageType != class 'DamTypeFrag')
-		Damage *= 0.5;
+	if (DamageType != class 'DamTypeFrag' && DamageType != class 'DamTypeLAW')
+		Damage *= 0.6;
 	 
-	if (DamageType == class 'DamTypeFrag')
+	if (DamageType == class 'DamTypeFrag' || DamageType == class 'DamTypeLAW')
 		Damage *= 2.0;
 
 	// Shut off his "Device" when dead
 	if (Damage >= Health)
 		PostNetReceive();
 
-	// Calculate whether the shot was coming from in front.
-	Dir = -Normal(Location - hitlocation);
 
 	if (AnimAction == 'PoundBlock')
 		Damage *= BlockDamageReduction;
 
-	if (damageType == class 'DamTypeVomit')
-		Damage = 0; // nulled
+	//if (damageType == class 'DamTypeVomit')
+	//	Damage = 0; // nulled
 
 	if((Health - Damage) > 0)
 		Momentum = vect(0,0,0) ;
 	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType);
 
-	TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage in Balance Round 6(second attempt)
+	TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage
 
 	if (TwoSecondDamageTotal > RageDamageThreshold && !bChargingPlayer || bFrustrated)
-		 StartCharging();
+		StartCharging();
 }
 
 // changes colors on Device (notified in anim)

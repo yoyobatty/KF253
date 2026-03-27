@@ -9,10 +9,17 @@ var bool bZoomed;
 
 var() Sound FireSounds[10];
 
+/* 
 function DoTrace(Vector Start, Rotator Dir)
 {
     DamageType = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.static.GetMAC10DamageType();
 	Super.DoTrace(Start,Dir);
+}
+*/
+event ModeDoFire()
+{
+    DamageType = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.static.GetMAC10DamageType();
+    Super.ModeDoFire();
 }
 
 function PlayFiring()

@@ -26,5 +26,5 @@ defaultproperties
     KDeathUpKick=1200.000000
     bThrowRagdoll=True
     //bAlwaysSevers=True
-    bFlaming=True
+    //bFlaming=True
 }

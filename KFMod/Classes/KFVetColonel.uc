@@ -59,7 +59,10 @@ static function float GetMovementSpeedModifier()
 {
 	Return 1.25;
 }
-
+static function float GetRecoilMovementSpeedModifier()
+{
+	Return 1.0;
+}
 static function bool HealingNades()
 {
 	Return True;
@@ -117,6 +120,6 @@ defaultproperties
 {
 	OnHUDIcon=Texture'KFPatch2.Sergeant'
 	VeterancyName="Colonel"
-	VeterancyDescription="|Coloneel ||+Gives all perk bonuses"
+	VeterancyDescription="|Colonel ||+Gives all perk bonuses on steroids"
 	VeterancyRequirement="|REQUIREMENTS:||- None"
 }

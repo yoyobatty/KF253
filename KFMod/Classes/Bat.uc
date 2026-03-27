@@ -17,7 +17,7 @@ defaultproperties
      AIRating=0.400000
      CurrentRating=0.400000
      Description="This bit of broken pipe looks like it was pried from a gas-line."
-     DisplayFOV=70.000000
+     DisplayFOV=85.000000
      Priority=3
      SmallViewOffset=(X=13.000000,Y=18.000000,Z=-10.000000)
      GroupOffset=2

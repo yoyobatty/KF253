@@ -477,7 +477,8 @@ state ZombieHunt extends Hunting
         if ( !bEnemyInfoValid )
         {
             Enemy = None;
-            GotoState('StakeOut');
+			WanderOrCamp(false);
+            //GotoState('StakeOut');
             return;
         }
 
@@ -589,9 +590,9 @@ Moving:
 
 function CheckIfShouldCrouch(vector StartPosition, vector TargetPosition, float probability);
 
-function InitializeSkill(float InSkill);
+//function InitializeSkill(float InSkill);
 
-function ResetSkill();
+//function ResetSkill();
 
 // Randomize their speeds a bit.
 function SetMaxDesiredSpeed()
@@ -600,6 +601,37 @@ function SetMaxDesiredSpeed()
 }
 
 function SetPeripheralVision();
+
+// Add to BossZombieController — helper to teleport boss to a random ZombieVolume
+function bool TeleportBackIn()
+{
+    local array<ZombieVolume> Volumes;
+    local ZombieVolume ZV;
+    local int i;
+    local vector TeleLoc;
+
+    // Gather all valid zombie volumes
+    foreach AllActors(class'ZombieVolume', ZV)
+    {
+        if ( ZV != None && !ZV.PhysicsVolume.bWaterVolume
+             && VSize(ZV.Location - Pawn.Location) > 500 )
+            Volumes[Volumes.Length] = ZV;
+    }
+    if ( Volumes.Length == 0 )
+        return false;
+
+    // Try a few random ones until we find one that works
+    for ( i = 0; i < 5; i++ )
+    {
+        ZV = Volumes[Rand(Volumes.Length)];
+        TeleLoc = ZV.Location;
+        TeleLoc.Z += Pawn.CollisionHeight;
+        if ( Pawn.SetLocation(TeleLoc) )
+            return true;
+    }
+    return false;
+}
+
 
 // TODO: zombies commit suicide. Is this right that they do so?
 function bool FindRoamDest()
@@ -616,11 +648,16 @@ function bool FindRoamDest()
 				SoakStop("NO PATH AVAILABLE!!!");
 			else
 			{
-				if ( NumRandomJumps > 5 )
+				if ( NumRandomJumps > 5 || PhysicsVolume.bWaterVolume )
 				{
-					Pawn.Health = 0;
-					Pawn.Died( self, class'Suicided', Pawn.Location );
-					return true;
+					if(TeleportBackIn())
+						return true;
+					else 
+					{
+						Pawn.Health = 0;
+						Pawn.Died( self, class'Suicided', Pawn.Location );
+						return true;
+					}
 				}
                 else
                 {
@@ -1180,8 +1217,10 @@ Ignores SeePlayer,HearNoise,Timer,EnemyNotVisible,NotifyBump;
 		if( Pawn!=None )
 		{
 			Pawn.AccelRate = Pawn.Default.AccelRate;
-			Pawn.GroundSpeed = Pawn.Default.GroundSpeed;
-
+			if( KFMonster(Pawn)!=None )
+				Pawn.GroundSpeed = KFMonster(Pawn).OriginalGroundSpeed;
+			else
+				Pawn.GroundSpeed = Pawn.Default.GroundSpeed;
 		}
 		bUseFreezeHack = False;
 	}

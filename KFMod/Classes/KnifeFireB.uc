@@ -3,7 +3,7 @@ class KnifeFireB extends KFMeleeFire;
 
 defaultproperties
 {
-     damageConst=35
+     damageConst=50
      maxAdditionalDamage=20
      DamagedelayMin=0.500000
      DamagedelayMax=0.500000

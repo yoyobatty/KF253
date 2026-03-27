@@ -33,6 +33,11 @@ static function float GetMeleeMovementSpeedModifier()
 {
 	Return 0;
 }
+// How much recoil affects our movement speed
+static function float GetRecoilMovementSpeedModifier()
+{
+	Return 0;
+}
 // Reduce damage zombies can deal to you
 static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
 {

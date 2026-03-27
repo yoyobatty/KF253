@@ -8,7 +8,6 @@ var NavigationPoint MidGoals[2];
 var byte ReachOffset;
 var Actor OldPathsCheck[3];
 
-
 function TimedFireWeaponAtEnemy()
 {
 	if ( (Enemy == None) || FireWeaponAt(Enemy) )

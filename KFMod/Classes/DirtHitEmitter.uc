@@ -3,35 +3,37 @@ class DirtHitEmitter extends KFHitEmitter;
 
 defaultproperties
 {
-     ImpactSounds(0)=Sound'KFWeaponSound.bullethitdirt'
-     ImpactSounds(1)=Sound'KFWeaponSound.bullethitdirt2'
-     ImpactSounds(2)=Sound'KFWeaponSound.bullethitdirt3'
-     ImpactSounds(3)=Sound'KFWeaponSound.bullethitdirt4'
-     Begin Object Class=SpriteEmitter Name=SpriteEmitter0
-         UseDirectionAs=PTDU_Right
-         UseColorScale=True
-         RespawnDeadParticles=False
-         SpinParticles=True
-         UseSizeScale=True
-         UseRegularSizeScale=False
-         UniformSize=True
-         AutomaticInitialSpawning=False
-         ColorScale(0)=(Color=(B=22,G=137,R=241))
-         ColorScale(1)=(RelativeTime=0.300000,Color=(G=64,R=192))
-         ColorScale(2)=(RelativeTime=1.000000)
-         Opacity=0.500000
-         MaxParticles=3
-         DetailMode=DM_High
-         StartLocationShape=PTLS_Sphere
-         SphereRadiusRange=(Max=8.000000)
-         StartSpinRange=(X=(Max=1.000000))
-         SizeScale(0)=(RelativeSize=0.250000)
-         SizeScale(1)=(RelativeTime=1.000000,RelativeSize=1.000000)
-         StartSizeRange=(X=(Min=150.000000,Max=150.000000))
-         InitialParticlesPerSecond=500.000000
-         Texture=Texture'AW-2004Particles.Energy.AirBlast'
-         LifetimeRange=(Min=0.300000,Max=0.300000)
-     End Object
-     Emitters(0)=SpriteEmitter'KFMod.DirtHitEmitter.SpriteEmitter0'
-
+    ImpactSounds(0)=Sound'KFWeaponSound.bullethitdirt'
+    ImpactSounds(1)=Sound'KFWeaponSound.bullethitdirt2'
+    ImpactSounds(2)=Sound'KFWeaponSound.bullethitdirt3'
+    ImpactSounds(3)=Sound'KFWeaponSound.bullethitdirt4'
+    Begin Object Class=SpriteEmitter Name=SpriteEmitter0
+        FadeOut=True
+        FadeIn=True
+        RespawnDeadParticles=False
+        SpinParticles=True
+        UseSizeScale=True
+        UseRegularSizeScale=False
+        UniformSize=True
+        AutomaticInitialSpawning=False
+        UseRandomSubdivision=True
+        Acceleration=(Z=10.000000)
+        ColorMultiplierRange=(X=(Min=0.250000,Max=0.350000),Y=(Min=0.250000,Max=0.300000),Z=(Min=0.200000,Max=0.250000))
+        FadeOutStartTime=0.500000
+        FadeInEndTime=0.100000
+        MaxParticles=3
+        SpinsPerSecondRange=(X=(Min=-0.200000,Max=0.200000))
+        StartSpinRange=(X=(Max=1.000000))
+        SizeScale(0)=(RelativeSize=0.300000)
+        SizeScale(1)=(RelativeTime=1.000000,RelativeSize=1.000000)
+        StartSizeRange=(X=(Min=5.000000,Max=10.000000))
+        InitialParticlesPerSecond=50.000000
+        DrawStyle=PTDS_Brighten
+        Texture=Texture'XEffects.EmitSmoke_t'
+        TextureUSubdivisions=4
+        TextureVSubdivisions=4
+        LifetimeRange=(Min=1.000000,Max=1.500000)
+        StartVelocityRange=(X=(Min=-8.000000,Max=8.000000),Y=(Min=-8.000000,Max=8.000000))
+    End Object
+    Emitters(0)=SpriteEmitter'KFMod.DirtHitEmitter.SpriteEmitter0'
 }

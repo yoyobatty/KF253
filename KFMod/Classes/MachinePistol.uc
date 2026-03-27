@@ -24,7 +24,7 @@ defaultproperties
 	CurrentRating=0.550000
 	bShowChargingBar=True
 	Description="A fully automatic 9mm pistol.."
-	DisplayFOV=70.000000
+	DisplayFOV=85.000000
 	Priority=3
 	SmallViewOffset=(X=13.000000,Y=18.000000,Z=-10.000000)
 	InventoryGroup=2

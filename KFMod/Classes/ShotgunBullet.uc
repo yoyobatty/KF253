@@ -117,28 +117,36 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 simulated function ProcessTouch (Actor Other, vector HitLocation)
 {
     local vector X;
+    local Pawn HitPawn;
 
     X = Vector(Rotation);
-    if ( Other == none || Other == Instigator || Other.Base == Instigator) // dont want to hit ourself :)
+    if ( Other == none || Other == Instigator || Other.Base == Instigator)
         return;
 
     // Don't allow hits on people on the same team
-    if (KFHumanPawn(Other) != none)
+    if( KFHumanPawn(Other) != none && Instigator != none && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
         return;
 
-    if (Pawn(Other) != none && Pawn(Other).IsHeadShot(HitLocation, X, 1.0))
-        Pawn(Other).TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
+    // Resolve ExtendedZCollision to its owner pawn
+    if ( ExtendedZCollision(Other) != None && Pawn(Other.Owner) != None )
+        HitPawn = Pawn(Other.Owner);
+    else
+        HitPawn = Pawn(Other);
+
+    if (HitPawn != none && HitPawn.IsHeadShot(HitLocation, X, 1.0))
+        HitPawn.TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
+    else if (HitPawn != none)
+        HitPawn.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
     else
         Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
+
     if(KFPawn(Instigator).GetVeteran().default.VeterancyName == "Support Specialist")
-        PenDamageReduction = PenDamageReductionPerked; //80% better shotty penetration
+        PenDamageReduction = PenDamageReductionPerked;
     else PenDamageReduction = default.PenDamageReduction;
-    Damage *= PenDamageReduction; // Keep going, but lose effectiveness each time.
-    // if we've struck through more than the max number of foes, destroy.
+    Damage *= PenDamageReduction;
     Speed = VSize(Velocity);
     if ( (Damage / default.Damage <= PenDamageReduction / MaxPenetrations) || Speed < (default.Speed * 0.25))
         Destroy();
-
 }
 
 defaultproperties
@@ -151,8 +159,8 @@ defaultproperties
     Speed=5500.000000
     MaxSpeed=6000.000000
     bSwitchToZeroCollision=True
-    Damage=21.000000
-    DamageRadius=0.000000
+    Damage=22.000000
+    DamageRadius=4.000000
     MomentumTransfer=50000.000000
     MyDamageType=Class'KFMod.DamTypeShotgun'
     ExplosionDecal=Class'KFMod.ShotgunDecal'

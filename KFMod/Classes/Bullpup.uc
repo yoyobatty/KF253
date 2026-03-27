@@ -1,8 +1,10 @@
 //=============================================================================
 // L85 Inventory class
 //=============================================================================
-class Bullpup extends KFWeapon
-	config(user);
+class Bullpup extends KFWeapon;
+
+//var BullpupReflectManager ReflectManager;
+//var BullpupReflectCam ReflectCam;
 
 #exec OBJ LOAD FILE=KillingFloorWeapons.utx
 #exec OBJ LOAD FILE=KillingFloorHUD.utx
@@ -27,6 +29,24 @@ replication
         bAltFire, HealAmmoCharge, ClientSuccessfulHeal;
 }
 
+/* 
+simulated function PostBeginPlay()
+{
+	local vector TempLoc;
+
+	Super.PostBeginPlay();
+	TempLoc = Location;
+	TempLoc.Y -= 50000;
+	ReflectCam = Spawn(class'BullpupReflectCam', self);
+
+	if (Level.NetMode != NM_DedicatedServer)
+	{
+		ReflectManager = Spawn(class'BullpupReflectManager', self, , TempLoc);
+		ReflectManager.CamActor = ReflectCam;
+	}
+
+}
+*/
 // The server lets the client know they successfully healed someone
 simulated function ClientSuccessfulHeal(String HealedName)
 {
@@ -319,7 +339,7 @@ defaultproperties
 	OldCenteredRoll=3000
 	Description="A military grade automatic rifle. Can be fired in semi-auto or full auto firemodes and comes equipped with a scope for increased accuracy."
 	EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-	DisplayFOV=70.000000
+	DisplayFOV=86.000000
 	Priority=4
 	SmallViewOffset=(X=10.000000,Y=20.800000,Z=-23.800000)
 	CenteredOffsetY=-5.000000
@@ -337,6 +357,7 @@ defaultproperties
 	IconCoords=(X1=245,Y1=39,X2=329,Y2=79)
 	ItemName="Bullpup"
 	Mesh=SkeletalMesh'KFWeaponModels.L85'
+	Skins(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
 	DrawScale=0.850000
 	TransientSoundVolume=1.250000
 }

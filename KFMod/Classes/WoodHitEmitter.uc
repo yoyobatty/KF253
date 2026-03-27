@@ -53,7 +53,7 @@ defaultproperties
          SizeScale(1)=(RelativeTime=1.000000,RelativeSize=1.000000)
          StartSizeRange=(X=(Min=150.000000,Max=150.000000))
          InitialParticlesPerSecond=500.000000
-         Texture=Texture'AW-2004Particles.Energy.AirBlast'
+         Texture=None//Texture'AW-2004Particles.Energy.AirBlast'
          LifetimeRange=(Min=0.300000,Max=0.300000)
      End Object
      Emitters(1)=SpriteEmitter'KFMod.WoodHitEmitter.DustSpray'

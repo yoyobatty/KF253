@@ -21,7 +21,7 @@ defaultproperties
      AIRating=0.200000
      CurrentRating=0.200000
      Description="Military Combat Knife"
-     DisplayFOV=75.000000
+     DisplayFOV=90.000000
      Priority=2
      SmallViewOffset=(X=13.000000,Y=18.000000,Z=-10.000000)
      GroupOffset=1

@@ -628,7 +628,7 @@ function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, f
     RealDist = Dist;
     Dist += CameraDeltaRad;
 
-    if( Trace( HitLocation, HitNormal, CameraLocation - Dist * vector(CameraRotation), CameraLocation,false,vect(10,10,10) ) != None )
+    if( Trace( HitLocation, HitNormal, CameraLocation - Dist * vector(CameraRotation), CameraLocation,false,vect(12,12,12) ) != None )
         ViewDist = FMin( (CameraLocation - HitLocation) Dot View, Dist );
     else
         ViewDist = Dist;
@@ -935,7 +935,7 @@ exec function SwitchToBestMeleeWeapon()
 function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 {
 	local int i,j;
-	local Inventory Inv;
+	//local Inventory Inv;
 
 	if( VetSkill==None || MyActiveStats==None )
 		Return;
@@ -949,11 +949,13 @@ function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 		ClientMessage("You are already a '"$VetSkill.Default.VeterancyName$"'");
 		Return;
 	}
+	/* 
 	for(inv=Pawn.Inventory; inv!=None; inv=inv.Inventory)
 	{
 		if(KFWeapon(inv)!=None)
 			KFWeapon(inv).ChangedPerk(VetSkill.Default.VeterancyName);
 	}
+	*/
 	j = MyActiveStats.ActiveStats.Length;
 	for( i=0; i<j; i++ )
 	{

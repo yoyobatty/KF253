@@ -211,6 +211,10 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 	if( bDeleteMe || Health <= 0 )
 		return;
 
+	// Berserkers resist knockback from monsters
+	if( KFMonster(instigatedBy)!=None && GetVeteran().default.VeterancyName=="Berserker" )
+		momentum = vect(0,0,0);
+
 	Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
 	//log("TakeDamage: "$self$" Damage: "$Damage$" InstigatedBy: "$instigatedBy$" HitLocation: "$hitlocation$" Momentum: "$momentum$" DamageType: "$damageType);
 	//Bloody Overlays
@@ -264,13 +268,15 @@ function TakeBileDamage()
 
 simulated function DoHitCamEffects(vector Momentum)
 {
+	//if(!bHitBlurEnabled)
+	//	return;
 	StopBlurTime = Level.TimeSeconds+3;
 	if(!bUsingHitBlur)
 	{
 		//reset to false if need be.
 		SetTimer(1.5,true);
 
-		if( !PlatformIsMacOS() && !PlatformIsUnix())
+		if( bHitBlurEnabled && !PlatformIsMacOS() && !PlatformIsUnix())
 			FindCameraEffect(class 'KFmod.UnderWaterBlur');
 
 		// this cast is OK as long as this is only called from TakeDamage,
@@ -351,9 +357,6 @@ simulated function RemoveCameraEffect(CameraEffect CameraEffect)
     CameraEffectFound = none;
   }
 }
-
-
-
 
 simulated function PrevWeapon()
 {
@@ -565,7 +568,7 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	{
 		CrouchedPct = FClamp(CrouchedPct + (DeltaTime * 200), default.CrouchedPct, InitialCrouchSpeed);
 	}
-	if(VSize(Velocity) < 1.f)
+	if(VSize(Velocity) < 1.f && Bot(Controller) == None) //No sprinting when standing still, except for bots
 		bIsSprinting = False;
 }
 

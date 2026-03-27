@@ -8,6 +8,24 @@ class ZombieClot extends KFMonster;
 #exec OBJ LOAD FILE=PlayerSounds.uax
 
 var KFPawn DisabledPawn;
+var     bool    bGrappling;             // This zombie is grappling someone
+var     float   GrappleEndTime;         // When the current grapple should be over
+var()   float   GrappleDuration;        // How long a grapple by this zombie should last
+
+replication
+{
+	reliable if(bNetDirty && Role == ROLE_Authority)
+		bGrappling;
+}
+
+function BreakGrapple()
+{
+	if( DisabledPawn != none )
+	{
+	     DisabledPawn.bMovementDisabled = false;
+	     DisabledPawn = none;
+	}
+}
 
 function ClawDamageTarget()
 {
@@ -31,7 +49,7 @@ function ClawDamageTarget()
 				     DisabledPawn.bMovementDisabled = false;
 				}
 
-				KFP.DisableMovement(1.5);
+				KFP.DisableMovement(GrappleDuration);
 				DisabledPawn = KFP;
 			}
 		}
@@ -46,11 +64,14 @@ function RangedAttack(Actor A)
 	{
 		bShotAnim = true;
 		SetAnimAction('Claw');
+          return;
 		//PlaySound(sound'Claw2s', SLOT_None); Unsuitable sound for here.
+          /* 
 		Acceleration = Normal(A.Location-Location)*600;
 		Controller.GoToState('WaitForAnim');
 		Controller.MoveTarget = A;
 		Controller.MoveTimer = 1.5;
+          */
 	}
 }
 function RemoveHead()
@@ -65,8 +86,56 @@ function RemoveHead()
     MeleeRange *= 2;
 }
 
+simulated function int DoAnimAction( name AnimName )
+{
+	if( AnimName=='ClotGrapple' )
+	{
+          AnimBlendParams(1, 1.0, 0.1,, FireRootBone);
+          PlayAnim(AnimName,, 0.1, 1);
+
+          bGrappling = true;
+          GrappleEndTime = Level.TimeSeconds + GrappleDuration;
+
+		return 1;
+	}
+
+	return super.DoAnimAction( AnimName );
+}
+
+simulated function Tick(float DeltaTime)
+{
+    super.Tick(DeltaTime);
+
+	if( bShotAnim && Role == ROLE_Authority )
+	{
+		if( Controller.MoveTarget!=None )
+		{
+		    Acceleration = AccelRate * Normal(Controller.MoveTarget.Location - Location);
+		}
+    }
+
+	if( Role == ROLE_Authority && bGrappling )
+	{
+		if( Level.TimeSeconds > GrappleEndTime )
+		{
+		    bGrappling = false;
+		}
+    }
+
+    // if we move out of melee range, stop doing the grapple animation
+    if( bGrappling && Controller.MoveTarget != none )
+    {
+        if( VSize(Controller.MoveTarget.Location - Location) > MeleeRange + CollisionRadius + Controller.MoveTarget.CollisionRadius )
+        {
+            bGrappling = false;
+            AnimEnd(1);
+        }
+    }
+}
+
 defaultproperties
 {
+     GrappleDuration=1.500000
      MeleeAnims(0)="ClotGrapple"
      MeleeAnims(1)="ClotGrapple"
      MeleeAnims(2)="ClotGrapple"

@@ -110,5 +110,6 @@ defaultproperties
      EyeHeight=50.000000
      HealthMax=125.000000
      Health=125
-     ControllerClass=Class'KFMod.KFFriendlyAI'
+     //ControllerClass=Class'KFMod.KFFriendlyAI'
+	 ControllerClass=Class'KFMod.KFEnemySoldier'
 }

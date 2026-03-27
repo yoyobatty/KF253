@@ -30,8 +30,15 @@ static function bool ShowStalkers()
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
 {
 	if( DmgType==Class'DamTypeBullpup' )
-		Return InDamage*1.5;
+		Return InDamage*1.6;
 	Return InDamage;
+}
+
+static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
+{
+    if( Instigator!=None && (Instigator.IsA('ZombieStalker') || Instigator.IsA('ZombieCrawler')) )
+        Return int(float(InDamage) * 0.9);
+    Return InDamage;
 }
 
 static function float AddExtraAmmoFor( Class<Ammunition> AmmoType )
@@ -55,8 +62,13 @@ static function float ModifyRecoilSpread( WeaponFire Other, out float Recoil )
 		Recoil = 0.6;
 		Return Recoil;
 	}
-	Recoil = 1;
+	Recoil = 0.9;
 	Return Recoil;
+}
+
+static function float GetRecoilMovementSpeedModifier()
+{
+	Return 0.65;
 }
 
 static function float GetReloadSpeedModifier( KFWeapon Other )
@@ -76,6 +88,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.Commando'
 	VeterancyName="Commando"
-	VeterancyDescription="|COMMANDO ||+50% damage with 'Bullpup' weapon|-40% recoil/spread with 'Bullpup' weapon|+35% faster reloading with all weapons|+15% Faster firing with 'Bullpup' weapon|+25% extra ammo and mag capacity with Bullpup|Enemy health conditions appear on HUD |Automatically reveal cloaked 'Stalkers' in an AOE"
+    VeterancyDescription="|COMMANDO ||+60% damage with 'Bullpup' weapon|-40% recoil/spread with 'Bullpup' weapon|-10% recoil/spread with all other weapons|+35% faster reloading with all weapons|+15% Faster firing with 'Bullpup' weapon|+25% extra ammo and mag capacity with Bullpup|10% damage resistance vs Stalkers and Crawlers|Enemy health conditions appear on HUD|Automatically reveal cloaked 'Stalkers' in an AOE|+65% reduction in recoil movement penalty"
 	VeterancyRequirement="|REQUIREMENTS:||- Kill at least 20 stalkers|- Deal 10,000 damage with 'Bullpup'"
 }

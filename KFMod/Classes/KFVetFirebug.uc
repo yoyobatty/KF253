@@ -13,14 +13,14 @@ static function bool FlamingNades()
 
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
 {
-	if( DmgType==Class'DamTypeFlamethrower' || DmgType==Class'Burned'  )
+	if( DmgType==Class'DamTypeFlamethrower' || DmgType==Class'DamTypeShotgunFire' || DmgType==Class'Burned' )
 		Return InDamage*1.5;
 	Return InDamage;
 }
 
 static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
 {
-	if( DmgType==Class'DamTypeFlamethrower' || DmgType==Class'Burned'  )
+	if( DmgType==Class'DamTypeFlamethrower' || DmgType==Class'DamTypeShotgunFire' || DmgType==Class'Burned'  )
 		Return 0;
 	Return InDamage;
 }
@@ -28,7 +28,7 @@ static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage,
 static function float AddExtraAmmoFor( Class<Ammunition> AmmoType )
 {
 	if( AmmoType==Class'FlameAmmo' )
-		Return 1.6;   // 60% more fuel
+		Return 1.75;   // 75% more fuel
 	Return 1;
 }
 
@@ -62,6 +62,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFPatch2.Firebug'
 	VeterancyName="Firebug"
-	VeterancyDescription="|FIREBUG ||Grenades become Incendiary|Immunity to burn damage |+50% Flamethrower damage|+50% Flamethrower range |+60% more ammo for Flamethrower|Shotgun and Bullpup get fire rounds."
+	VeterancyDescription="|FIREBUG ||Grenades become Incendiary|Immunity to burn damage |+50% Flamethrower damage|+50% Flamethrower range |+75% more ammo for Flamethrower|Shotgun and Bullpup get fire rounds."
 	VeterancyRequirement="|REQUIREMENTS:||- Deal 20,000 damage with the Flamethrower."
 }

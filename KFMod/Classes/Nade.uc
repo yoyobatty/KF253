@@ -103,7 +103,7 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 
 		if ( EffectIsRelevant(Location,false) )
 		{
-			Spawn(Class'KFmod.KFNadeExplosion',,, HitLocation, rotator(vect(0,0,1)));
+			Spawn(Class'KFmod.KFNadeExplosion',,, HitLocation);
 			Spawn(ExplosionDecal,self,,HitLocation, rotator(-HitNormal));
 		}
 		// Shake nearby players screens
@@ -198,7 +198,7 @@ simulated function ProcessTouch( actor Other, vector HitLocation )
 simulated function HitWall( vector HitNormal, actor Wall )
 {
 	Super.HitWall(HitNormal, Wall);
-	if( VSize(Velocity) < 20.0 && Fear == none )
+	if( VSize(Velocity) < 20.0 )
 	{
 		Fear = Spawn(class'KFAvoidMarker');
 		Fear.SetCollisionSize(DamageRadius,DamageRadius);
@@ -269,7 +269,7 @@ defaultproperties
 	NumGroundFires=8
 	Speed=160.000000
 	MaxSpeed=850.000000
-	Damage=300.000000
+	Damage=400.000000
 	DamageRadius=420.000000
 	MomentumTransfer=150000.000000
 	MyDamageType=Class'KFMod.DamTypeFrag'

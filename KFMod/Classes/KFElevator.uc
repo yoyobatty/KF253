@@ -1,5 +1,7 @@
 // By: Alex
 // Major fixes by Marco.
+// More fixes by YoYobatty, especially support for legacy elevators without floor tags (2026).
+//=============================================================================
 class KFElevator extends Mover;
 
 var() float ElevatorMoveSpeed;
@@ -16,6 +18,7 @@ var LiftExit MyExits[ArrayCount(ElevatorFloorTags)]; // Our desired lift exits f
 var byte GoalKeyFrame,NumberOfFloors;
 var bool bElevatorActive;
 var bool bUseElevator;
+var bool bLegacyElevator;
 
 function PostBeginPlay()
 {
@@ -70,22 +73,47 @@ function PostBeginPlay()
 			}
 		}
 	}
-
-	// If we didn't find any valid elevator floors, fall back to stock mover behavior
-	if( !bFoundFloor )
-	{
-		bUseElevator = false;
-		// If mapper left InitialState as Elevator, switch to a normal mover state
-		if( InitialState=='Elevator' )
-			InitialState='TriggerToggle';
-		GotoState(InitialState);
-		return;
-	}
 	for( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
 	{
 		if( LiftExit(N)!=None && LiftExit(N).MyLift==Self && LiftExit(N).KeyFrame<ArrayCount(ElevatorFloorTags) )
 			MyExits[LiftExit(N).KeyFrame] = LiftExit(N);
 	}
+    // If we didn't find any valid elevator floors, check for legacy setup
+    if( !bFoundFloor )
+    {
+        if( NumKeys >= 2 )
+        {
+            // Legacy mode: no floor tags, toggle between keyframe 0 and 1
+            NumberOfFloors = 1;
+            bLegacyElevator = true;
+
+            // If no center trigger was linked via ElevatorCenterTriggerTag,
+            // try to find an orphaned KFElevatorTrigger based on our own Tag
+            if( ElevCenterTrigger == None && Tag != '' )
+            {
+                ForEach DynamicActors(class'KFElevatorTrigger', T)
+                {
+                    if( T.MyElevator == None && (T.Tag == Tag || T.Event == Tag) )
+                    {
+                        ElevCenterTrigger = T;
+                        T.MyElevator = Self;
+                        T.SetBase(Self);
+                        T.MyFloorNum = 255;
+                        break;
+                    }
+                }
+            }
+            Log("KFElevator: Legacy mode detected (no floor tags), toggling between keyframe 0 and 1");
+        }
+        else
+        {
+            bUseElevator = false;
+            if( InitialState == 'Elevator' )
+                InitialState = 'TriggerToggle';
+            GotoState(InitialState);
+            return;
+        }
+    }
 }
 
 
@@ -183,7 +211,21 @@ function GoToFloor( byte FloorNum, Actor Other, Pawn EventInstigator )
 // Toggle when triggered.
 state() Elevator
 {
-Ignores Trigger;
+    // Handle Trigger() calls - only respond in legacy mode
+    function Trigger(Actor Other, Pawn EventInstigator)
+    {
+        local byte TargetFloor;
+
+        if( !bLegacyElevator || bElevatorActive )
+            return;
+
+        // Toggle between keyframe 0 and 1
+        if( KeyNum == 0 )
+            TargetFloor = 1;
+        else
+            TargetFloor = 0;
+        GoToFloor(TargetFloor, Other, EventInstigator);
+    }
 
 	function bool SelfTriggered()
 	{
@@ -255,7 +297,7 @@ Close:
 
 defaultproperties
 {
-    ElevatorMoveSpeed=350.000000
+    ElevatorMoveSpeed=500.000000
     MoverEncroachType=ME_IgnoreWhenEncroach
     InitialState="Elevator"
     TransientSoundVolume=100.000000

@@ -22,6 +22,7 @@ defaultproperties
      TransientSoundRadius=500.000000
      FireSound=Sound'KFWeaponSound.HuntingFire'
      FireRate=1.100000
+     FireAnimRate=0.900000
      AmmoClass=Class'KFMod.ShotgunAmmo'
      ProjectileClass=Class'KFMod.ShotgunBullet'
      BotRefireRate=0.700000

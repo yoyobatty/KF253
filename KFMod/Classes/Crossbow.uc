@@ -274,7 +274,7 @@ defaultproperties
      OldPlayerViewPivot=(Pitch=400)
      OldCenteredRoll=3000
      Description="A recreational hunting weapon, featuring a firing trigger and an a powerful integrated scope. "
-     DisplayFOV=65.000000
+     DisplayFOV=80.000000
      Priority=10
      SmallViewOffset=(X=-5.000000,Y=18.000000,Z=-15.000000)
      CenteredOffsetY=-5.000000

@@ -23,6 +23,10 @@ var rotator ViewPunchVelocity;    // Velocity at which the punch returns to zero
 var rotator LastPunchOffset;	  // Last offset applied to the view (for smooth return)
 var() float   ViewPunchDamping;     // Damping factor for smooth return
 var() float   ViewPunchSpring;      // Spring force for return
+var() float RecoilMovePenaltySlow;       
+var() float RecoilMovePenaltyFast;        
+var() float BotRecoilMovePenaltySlow;     
+var() float BotRecoilMovePenaltyFast;     
 
 function float GetFireSpeed()
 {
@@ -104,9 +108,9 @@ function PlayFiring()
     FireCount++;
 }
 
-function StartBerserk();
+//function StartBerserk();
 
-function StopBerserk();
+//function StopBerserk();
 
 simulated function InitEffects()
 {
@@ -133,7 +137,7 @@ function FlashMuzzleFlash()
 
 event ModeDoFire()
 {
-	local float Rec;
+	local float Rec, PenaltyFactor;
 
 	if (!AllowFire())
 		return;
@@ -166,23 +170,40 @@ event ModeDoFire()
 	Rec = 1;
 
 	if( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+	{
 		Spread*=KFPawn(Instigator).GetVeteran().Static.ModifyRecoilSpread(Self,Rec);
+		KFWeapon(Weapon).UpKick*=KFPawn(Instigator).GetVeteran().Static.ModifyRecoilSpread(Self,Rec);
+	}
 
 	LastFireTime = Level.TimeSeconds;
 
-	if (Weapon.Owner != none && AllowFire() && !bFiringDoesntAffectMovement && Weapon.Owner.Physics != PHYS_Falling )
-	{
-		if (FireRate > 0.25)
-		{
-			Weapon.Owner.Velocity.x *= 0.1;
-			Weapon.Owner.Velocity.y *= 0.1;
-		}
-		else
-		{
-			Weapon.Owner.Velocity.x *= 0.5;
-			Weapon.Owner.Velocity.y *= 0.5;
-		}
-	}
+    if (Weapon.Owner != none && AllowFire() && !bFiringDoesntAffectMovement && Weapon.Owner.Physics != PHYS_Falling )
+    {
+        // Determine velocity retention factor based on fire rate and controller type
+        if (Bot(Instigator.Controller) != None)
+        {
+            if (FireRate > 0.25)
+                PenaltyFactor = BotRecoilMovePenaltySlow;
+            else
+                PenaltyFactor = BotRecoilMovePenaltyFast;
+        }
+        else
+        {
+            if (FireRate > 0.25)
+                PenaltyFactor = RecoilMovePenaltySlow;
+            else
+                PenaltyFactor = RecoilMovePenaltyFast;
+        }
+
+        if (KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none &&
+            KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none)
+        {
+            PenaltyFactor = Lerp(KFPawn(Instigator).GetVeteran().Static.GetRecoilMovementSpeedModifier(), PenaltyFactor, 1.0);
+        }
+
+        Weapon.Owner.Velocity.x *= PenaltyFactor;
+        Weapon.Owner.Velocity.y *= PenaltyFactor;
+    }
 	//log("ModeDoFire called on "$Weapon.GetHumanReadableName());
 	Super.ModeDoFire();
 
@@ -190,7 +211,6 @@ event ModeDoFire()
     if (Instigator.IsLocallyControlled())
     {
         HandleRecoil();
-        
     }
 }
 
@@ -235,10 +255,8 @@ function HandleRecoil()
         return;
 
 	ViewPunchReset(5000.f);
-    DurationFactor = FClamp(FireCount / 6.f, 0.0, 2.0);
-
-    // Scale between 1.0x (tap fire) and 2.0x (full auto after RampTime)
-    DurationFactor = 1.0 + DurationFactor;  // 1.0 -> 2.0
+    DurationFactor = FClamp(FireCount/6.f,0.0,2.0);
+    DurationFactor = 1.0 + DurationFactor;
 
     PunchPitch = Clamp(0.5*KFWeapon(Weapon).UpKick * (0.5 + FRand()*0.5), 80, 5000); 
     PunchYaw   = (FRand() - 0.5) * 100; 
@@ -275,41 +293,47 @@ function ViewPunchReset( float tolerance )
 
 function DoTrace(Vector Start, Rotator Dir)
 {
-	local Vector X, End, HitLocation, HitNormal;
-	local Actor Other;
-	local KFWeaponAttachment WeapAttach;
+    local Vector X, End, HitLocation, HitNormal;
+    local Actor Other;
+    local Actor DamageTarget;
+    local KFWeaponAttachment WeapAttach;
 
-	MaxRange();
-	//log("Weapon fired max range: " $MaxRange());
-	X = Normal(Vector(Dir));
-	End = Start + TraceRange * X;
-	Other = Instigator.Trace(HitLocation, HitNormal, End, Start, true);
-	if ( Other != None && Other != Instigator && Other.Base != Instigator )
-	{
-		WeapAttach = KFWeaponAttachment(Weapon.ThirdPersonActor);
-		if ( !Other.bWorldGeometry )
-		{
-			// Update hit effect except for pawns
-			if ( !Other.IsA('Pawn') && !Other.IsA('HitScanBlockingVolume') && !Other.IsA('ExtendedZCollision') )
-			{
-				if( WeapAttach != None )
+    MaxRange();
+    X = Normal(Vector(Dir));
+    End = Start + TraceRange * X;
+    Other = Instigator.Trace(HitLocation, HitNormal, End, Start, true);
+    if ( Other != None && Other != Instigator && Other.Base != Instigator )
+    {
+        WeapAttach = KFWeaponAttachment(Weapon.ThirdPersonActor);
+
+        // Resolve ExtendedZCollision to its owner pawn
+        if ( ExtendedZCollision(Other) != None && Other.Owner != None )
+            DamageTarget = Other.Owner;
+        else
+            DamageTarget = Other;
+
+        if ( !Other.bWorldGeometry )
+        {
+            // Update hit effect except for pawns
+            if ( !Other.IsA('Pawn') && !Other.IsA('HitScanBlockingVolume') && !Other.IsA('ExtendedZCollision') )
+            {
+                if( WeapAttach != None )
                     WeapAttach.UpdateHit(Other, HitLocation, HitNormal);
-			}
-			Other.TakeDamage(Lerp(FRand(), DamageMin, DamageMax), Instigator, HitLocation, Momentum*X, DamageType);
-		}
-		else
-		{
-			HitLocation = HitLocation + 2.0 * HitNormal;
-			if ( WeapAttach != None )
-				WeapAttach.UpdateHit(Other,HitLocation,HitNormal);
-		}
-	}
-	else
-	{
-		HitLocation = End;
-		HitNormal = Normal(Start - End);
-	}
-
+            }
+            DamageTarget.TakeDamage(Lerp(FRand(), DamageMin, DamageMax), Instigator, HitLocation, Momentum*X, DamageType);
+        }
+        else
+        {
+            HitLocation = HitLocation + 2.0 * HitNormal;
+            if ( WeapAttach != None )
+                WeapAttach.UpdateHit(Other,HitLocation,HitNormal);
+        }
+    }
+    else
+    {
+        HitLocation = End;
+        HitNormal = Normal(Start - End);
+    }
 }
 
 // Accuracy update based on pawn velocity
@@ -336,4 +360,8 @@ defaultproperties
 	ViewPunchDamping=6.000000
 	ViewPunchSpring=75.000000
 	MaxFireBurst=0
+    RecoilMovePenaltySlow=0.100000
+    RecoilMovePenaltyFast=0.250000
+    BotRecoilMovePenaltySlow=0.250000
+    BotRecoilMovePenaltyFast=0.500000
 }
