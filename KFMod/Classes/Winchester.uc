@@ -1,11 +1,7 @@
 //=============================================================================
 // Winchester Inventory class
 //=============================================================================
-<<<<<<< HEAD
 class Winchester extends KFWeaponShotgun;      // Bullpup
-=======
-class Winchester extends KFWeaponShotgun;  
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 exec function ReloadMeNow()
 {
@@ -21,7 +17,6 @@ exec function ReloadMeNow()
 	Super.ReloadMeNow();
 }
 
-<<<<<<< HEAD
 
 //I'll just copy and paste the damn things if you want them
 //so badly.
@@ -74,8 +69,6 @@ function float SuggestAttackStyle()
     return 0.8;
 }
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function BringUp(optional Weapon PrevWeapon)
 {
 	if ( PlayerController(Instigator.Controller) != None )
@@ -178,10 +171,6 @@ simulated function PlayAnimZoom( bool bZoomNow )
 		FireMode[0].FireAnim = 'AimFire';
 		FireMode[0].FireLoopAnim = 'AimFire';
 		PrePivot=vect(0,0,0);
-<<<<<<< HEAD
-=======
-		Upkick = default.UpKick * 0.5;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		BobDamping=1.0;
 		bZooming = True;
 		ZoomingInTimer = Level.TimeSeconds+0.3;
@@ -196,10 +185,6 @@ simulated function PlayAnimZoom( bool bZoomNow )
 		TweenAnim(IdleAnim,0.5);
 		bZooming = False;
 		ZoomLevel=0.0;
-<<<<<<< HEAD
-=======
-		Upkick = default.UpKick;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		BobDamping=default.BobDamping;
 		if (WinchesterFire(FireMode[0]) != none) 
 			WinchesterFire(FireMode[0]).NormalSpeed();
@@ -217,95 +202,6 @@ function ServerSetAiming(bool IsAiming)
 	else WinchesterFire(FireMode[0]).NormalSpeed();
 }
 
-<<<<<<< HEAD
-defaultproperties
-{
-	ClipCount=10
-	ReloadRate=0.900000
-	ReloadAnim="Reload"
-	ReloadAnimRate=1.000000
-	IdleAimAnim="'"
-	Weight=6.000000
-	FireModeClass(0)=Class'KFMod.WinchesterFire'
-	FireModeClass(1)=Class'KFMod.WinchesterAltFire'
-	PutDownAnim="PutDown"
-	BringUpTime=1.000000
-	SelectSound=Sound'KFPlayerSound.getweaponout'
-	AIRating=0.560000
-	CurrentRating=0.560000
-	bSniping=True
-	bShowChargingBar=True
-	OldCenteredOffsetY=0.000000
-	OldPlayerViewOffset=(X=-8.000000,Y=5.000000,Z=-6.000000)
-	OldSmallViewOffset=(X=4.000000,Y=11.000000,Z=-12.000000)
-	OldPlayerViewPivot=(Pitch=800)
-	OldCenteredRoll=3000
-	Description="A rugged and reliable single-shot rifle.  "
-	EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-	DisplayFOV=70.000000
-	Priority=20
-	SmallViewOffset=(X=8.000000,Y=18.000000,Z=-4.000000)
-	CenteredOffsetY=-5.000000
-	CenteredRoll=3000
-	CenteredYaw=-1500
-	CustomCrosshair=-1
-	CustomCrossHairColor=(B=0,G=0,R=0,A=0)
-	CustomCrossHairTextureName=
-	InventoryGroup=3
-	GroupOffset=2
-	PickupClass=Class'KFMod.WinchesterPickup'
-	BobDamping=6.000000
-	AttachmentClass=Class'KFMod.WinchesterAttachment'
-	ItemName="Winchester"
-	bUseDynamicLights=True
-	Mesh=SkeletalMesh'KFWeaponModels.Winchester'
-	DrawScale=0.900000
-	TransientSoundVolume=50.000000
-=======
-function float GetAIRating()
-{
-	local Bot B;
-	local float ZDiff, dist, Result;
-
-	B = Bot(Instigator.Controller);
-	if ( B == None )
-		return AIRating;
-	if ( B.IsShootingObjective() )
-		return AIRating - 0.15;
-	if ( B.Enemy == None )
-	{
-		if ( (B.Target != None) && VSize(B.Target.Location - B.Pawn.Location) > 8000 )
-			return 0.95;
-		return AIRating;
-	}
-
-	if ( B.Stopped() )
-		result = AIRating + 0.1;
-	else
-		result = AIRating - 0.1;
-	if ( Vehicle(B.Enemy) != None )
-		result -= 0.2;
-	ZDiff = Instigator.Location.Z - B.Enemy.Location.Z;
-	if ( ZDiff < -200 )
-		result += 0.1;
-	dist = VSize(B.Enemy.Location - Instigator.Location);
-	if ( dist > 2000 )
-	{
-		if ( !B.EnemyVisible() )
-			result = result - 0.15;
-		return ( FMin(2.0,result + (dist - 2000) * 0.0002) );
-	}
-	if ( !B.EnemyVisible() )
-		return AIRating - 0.1;
-
-	return result;
-}
-
-function bool RecommendRangedAttack()
-{
-	return true;
-}
-
 defaultproperties
 {
      ClipCount=10
@@ -314,14 +210,14 @@ defaultproperties
      ReloadAnimRate=1.000000
      IdleAimAnim="'"
      Weight=6.000000
-	 UpKick=800.000000
      FireModeClass(0)=Class'KFMod.WinchesterFire'
      FireModeClass(1)=Class'KFMod.WinchesterAltFire'
      PutDownAnim="PutDown"
      BringUpTime=1.000000
      SelectSound=Sound'KFPlayerSound.getweaponout'
-     AIRating=0.600000
-     CurrentRating=0.600000
+     AIRating=0.560000
+     CurrentRating=0.560000
+     bSniping=True
      bShowChargingBar=True
      OldCenteredOffsetY=0.000000
      OldPlayerViewOffset=(X=-8.000000,Y=5.000000,Z=-6.000000)
@@ -330,22 +226,23 @@ defaultproperties
      OldCenteredRoll=3000
      Description="A rugged and reliable single-shot rifle.  "
      EffectOffset=(X=100.000000,Y=25.000000,Z=-10.000000)
-     DisplayFOV=65.000000
-     Priority=9
-     SmallViewOffset=(X=8.000000,Y=20.100000,Z=-4.000000)
+     DisplayFOV=70.000000
+     Priority=45
+     SmallViewOffset=(X=8.000000,Y=18.000000,Z=-4.000000)
      CenteredOffsetY=-5.000000
      CenteredRoll=3000
      CenteredYaw=-1500
-     InventoryGroup=3
-     GroupOffset=2
+     CustomCrosshair=-1
+     CustomCrossHairColor=(B=0,G=0,R=0,A=0)
+     CustomCrossHairTextureName=
+     InventoryGroup=4
+     GroupOffset=1
      PickupClass=Class'KFMod.WinchesterPickup'
-     PlayerViewOffset=(X=15.000000,Y=20.100000,Z=-3.500000)
-     BobDamping=4.000000
+     BobDamping=6.000000
      AttachmentClass=Class'KFMod.WinchesterAttachment'
      ItemName="Winchester"
      bUseDynamicLights=True
      Mesh=SkeletalMesh'KFWeaponModels.Winchester'
      DrawScale=0.900000
      TransientSoundVolume=50.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

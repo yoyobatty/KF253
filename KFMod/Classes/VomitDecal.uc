@@ -11,17 +11,9 @@ simulated function BeginPlay()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	ProjTexture=Texture'KFX.VomSplat'
-	bClipStaticMesh=True
-	CullDistance=7000.000000
-	LifeSpan=5.000000
-	DrawScale=0.500000
-=======
      ProjTexture=Texture'KFX.VomSplat'
      bClipStaticMesh=True
      CullDistance=7000.000000
      LifeSpan=5.000000
      DrawScale=0.500000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -5,14 +5,12 @@ Class KFPlayerStats extends Object
 var() config string UserName,CurrentVeterancy;
 var() config int	TotalMeleeDamage,
 			TotalKills,
-			GameKills,
-                        TotalHealed,
+			TotalHealed,
 			TotalWelded,
 			DecaptedKills,
 			MeleeKills,
 			PowerWpnKills,
 			BullpupDamage,
-			FlameThrowerDamage,
 			StalkerKills,
 			TotalPlaytime,
 			GamesWon,
@@ -33,8 +31,6 @@ function InitFor( KFPlayerController Other )
 	local int i,j;
 
 	CurrentOwner = Other;
-	GameKills = 0;
-	
 	if( CurrentVeterancy!="" )
 	{
 		KFPlayerReplicationInfo(Other.PlayerReplicationInfo).ClientVeteranSkill = Class<KFVeterancyTypes>(DynamicLoadObject(CurrentVeterancy,Class'Class',True));
@@ -59,7 +55,6 @@ function InitFor( KFPlayerController Other )
 function ReceiveKill( bool bWasMelee, bool bWasRanged, bool bWasPower, bool bStalker )
 {
 	TotalKills++;
-	GameKills++;
 	if( bWasMelee )
 		MeleeKills++;
 	if( bWasRanged )
@@ -70,13 +65,10 @@ function ReceiveKill( bool bWasMelee, bool bWasRanged, bool bWasPower, bool bSta
 		StalkerKills++;
 	CheckStatsAvailable(True);
 }
-function ReceiveDamage( int Dmg, bool bWasBullpup, bool bWasFlameThrower )
+function ReceiveDamage( int Dmg, bool bWasBullpup )
 {
 	if( bWasBullpup )
 		BullpupDamage+=Dmg;
-        else
-        if( bWasFlameThrower )
-		FlameThrowerDamage+=Dmg;
 	else TotalMeleeDamage+=Dmg;
 	CheckStatsAvailable(True);
 }

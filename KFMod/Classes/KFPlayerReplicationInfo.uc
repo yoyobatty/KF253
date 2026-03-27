@@ -1,4 +1,5 @@
 // Custom KF Player Rep info. Now including experience levels.
+
 class KFPlayerReplicationInfo extends xPlayerReplicationInfo;
 
 //var float CurrentExperience, ExperienceLevel, ExpThreshold,
@@ -14,24 +15,11 @@ var class<KFVeterancyTypes> ClientVeteranSkill;
 
 var int CashThrowAmount; // Amount of cash a player throws per keypress.   Set in the player settings menu
 
-var FakePlayerPawn BlamePawn;
-
-<<<<<<< HEAD
-=======
-var int KillAssists;
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	// Things the server should send to the client.
 	reliable if ( bNetDirty && (Role == Role_Authority) )
-<<<<<<< HEAD
-		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff,bStartingEquipmentChosen,ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill;
-=======
-		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff,bStartingEquipmentChosen,
-		ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill,
-		KillAssists;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff, bStartingEquipmentChosen, ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill;
 }
 
 simulated function PostNetBeginPlay()
@@ -64,50 +52,15 @@ function Timer()
 	if( C.Pawn==None )
 		PlayerHealth = 0;
 	else PlayerHealth = C.Pawn.Health;
-
 	if( !bBot )
 	{
 		if ( !bReceivedPing )
 			Ping = Min(int(0.25 * float(C.ConsoleCommand("GETPING"))),255);
 	}
 }
-function Reset()
-{
-	if( KFGameType(Level.Game)!=None )
-	{
-		Score = KFGameType(Level.Game).StartingCash;
-		Deaths = 0;
-		HasFlag = None;
-		bReadyToPlay = false;
-		NumLives = 1;
-		bOutOfLives = True;
-	}
-	else Super.Reset();
-}
-simulated function Destroyed()
-{
-	if( BlamePawn!=None )
-		BlamePawn.Destroy();
-	Super.Destroyed();
-}
-function FakePlayerPawn GetBlamePawn()
-{
-	if( BlamePawn!=None )
-		Return BlamePawn;
-	BlamePawn = Spawn(Class'FakePlayerPawn',,,vect(0,0,0));
-	if( BlamePawn==None )
-		Return None;
-	BlamePawn.PlayerReplicationInfo = Self;
-	BlamePawn.Controller = Controller(Owner);
-}
 
 defaultproperties
 {
-<<<<<<< HEAD
-	PlayerHealth=100
-	VoiceTypeName="KFCoreVoice.AussieVoice"
-=======
      PlayerHealth=100
      VoiceTypeName="KFCoreVoice.AussieVoice"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

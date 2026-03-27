@@ -29,31 +29,6 @@ state Ticking
 
 defaultproperties
 {
-<<<<<<< HEAD
-	FlameSpawnInterval=0.500000
-	mParticleType=PT_Stream
-	mLifeRange(0)=1.000000
-	mLifeRange(1)=1.500000
-	mRegenRange(0)=60.000000
-	mRegenRange(1)=60.000000
-	mMassRange(0)=0.500000
-	mMassRange(1)=1.000000
-	mSizeRange(0)=4.000000
-	mSizeRange(1)=8.000000
-	mGrowthRate=-52.000000
-	mAttenKa=0.000000
-	mAttenKb=0.000000
-	mRandTextures=True
-	mAttraction=100.000000
-	Physics=PHYS_Trailer
-	AmbientSound=Sound'PatchSounds.OnFire'
-	Skins(0)=Texture'KFX.KFFlames'
-	Style=STY_Additive
-	SoundVolume=255
-	TransientSoundVolume=0.000000
-	TransientSoundRadius=50.000000
-	bNotOnDedServer=False
-=======
      FlameSpawnInterval=0.500000
      mParticleType=PT_Stream
      mLifeRange(0)=1.000000
@@ -77,5 +52,4 @@ defaultproperties
      TransientSoundVolume=0.000000
      TransientSoundRadius=50.000000
      bNotOnDedServer=False
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

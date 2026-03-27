@@ -97,13 +97,7 @@ function SceneEnded()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bWideScreenOverlay=True
-	bNoDelete=True
-	Texture=Texture'Engine.S_SceneManager'
-=======
      bWideScreenOverlay=True
      bNoDelete=True
      Texture=Texture'Engine.S_SceneManager'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

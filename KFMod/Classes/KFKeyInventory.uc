@@ -2,7 +2,11 @@ class KFKeyInventory extends Inventory;
   
 var KFKeyPickup MyPickup;
 
-function UnLock();
+function UnLock(LockedObjective O)
+{
+    if ( !UnrealMPGameInfo(Level.Game).CanDisableObjective( O ) )
+        O.DisableObjective(Pawn(Owner));
+}
 
 function Destroyed()
 {

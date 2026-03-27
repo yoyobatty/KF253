@@ -10,7 +10,7 @@ var array<KFDoorMover> DoorOwners;
 var () int ReFireDelay;
 var int LastAttempt;
 
-var  float WeldStrength,LastMessageTimer;
+var  float WeldStrength;
 var() float MaxWeldStrength;
 
 var() float CombatSealReduction; // How much do we weaken the effectiveness of the Players' welder by when the door is being attacked?
@@ -18,6 +18,8 @@ var() float CombatSealReduction; // How much do we weaken the effectiveness of t
 var () bool bAlwaysShowMessage; // Show a text message to nearby players even when the doors are sealed /  the trigger is not useable
 var () string LockedMessage,UnLockedMessage,WeldedShutMessage;
 var () sound LockedSound,UnLockedSound ;  // The SFX for trying to open a locked door, and unlocking it.
+
+
 
 function AddDoor( KFDoorMover Other )
 {
@@ -52,11 +54,20 @@ function UsedBy( Pawn user )
 				PlayerController(user.controller).ClientMessage(WeldedShutMessage, 'CriticalEvent');
 			LastAttempt = Level.TimeSeconds;
 		}
-		if( DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden && DoorOwners[i].bClosed )
+
+
+		if( DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden && DoorOwners[i].bClosed)
+		{
+			if( PlayerController(user.controller)!=None )
+				PlayerController(user.controller).ClientMessage(LockedMessage, 'CriticalEvent');
+			PlaySound(LockedSound,,255,,100);
+			LastAttempt = Level.TimeSeconds;
+		}
+		if( DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden && !DoorOwners[i].bClosed )
 		{
 			for( inv=user.Inventory; inv!=None; inv=inv.Inventory)
 			{
-				if( KFKeyInventory(inv)!=None && inv.tag==DoorOwners[i].tag )
+				if( inv.IsA('KFKeyInventory') && inv.tag==DoorOwners[i].tag )
 				{
 					DoorOwners[i].Trigger(Self,User);
 					if( PlayerController(user.controller)!=None )
@@ -64,7 +75,6 @@ function UsedBy( Pawn user )
 					PlaySound(UnLockedSound,,255,,100);
 					DoorOwners[i].bKeyLocked = false;
 					LastAttempt = Level.TimeSeconds;
-					KFKeyInventory(inv).UnLock();
 				}
 			}
 		}
@@ -82,7 +92,7 @@ function Touch( Actor Other )
 	{
 		if( KFMonster(Other)!=none || KFInvasionBot(Pawn(Other).Controller) != none )
 		{
-			if( !DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden && DoorOwners[i].KeyNum==0 )
+			if( !DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden )
 				DoorOwners[i].GotoState( , 'Open' );
 		}
 		else if ( !DoorOwners[i].bSealed && !DoorOwners[i].bHidden )
@@ -90,21 +100,14 @@ function Touch( Actor Other )
 			// Send a string message to the toucher.
 			if(PlayerController(Pawn(Other).Controller)!=none)
 			{
-				if( LastMessageTimer<Level.TimeSeconds && Message!="" )
-				{
-					LastMessageTimer = Level.TimeSeconds+0.6;
+				if( Message!="" )
 					PlayerController(Pawn(Other).Controller).ClientMessage(Message, 'CriticalEvent');
-				}
 			}
 			else if ( DoorOwners[i].bClosed && Pawn(Other).Controller!=None )
 				UsedBy(Pawn(Other));
 		}
-		else if( !DoorOwners[i].bHidden && bAlwaysShowMessage && LastMessageTimer<Level.TimeSeconds
-		 && PlayerController(Pawn(Other).Controller)!=none && Message!="" )
-		{
-			LastMessageTimer = Level.TimeSeconds+0.6;
+		else if( !DoorOwners[i].bHidden && bAlwaysShowMessage && PlayerController(Pawn(Other).Controller)!=none && Message!="" )
 			PlayerController(Pawn(Other).Controller).ClientMessage(Message, 'CriticalEvent');
-		}
 	}
 }
 
@@ -135,29 +138,18 @@ function AddWeld( float ExtraWeld, bool bZombieAttacking, Pawn WelderInst )
 		DoorOwners[i].SetWeldStrength(WeldStrength);
 }
 
-function UnWeld(float DeWeldage,bool bZombieAttacking, Pawn WelderInst)
+function UnWeld(float DeWeldage,bool bZombieAttacking)
 {
 	local int i;
-	local KFPlayerController PC;
 
 	if (bZombieAttacking)
 		DeWeldage *= CombatSealReduction;
-		
 
 //	if( DeWeldage<WeldStrength )
 	//	DeWeldage = WeldStrength;
 	if( DeWeldage==0 )
 		Return;
-
-	if( WelderInst!=None )
-	{
-		PC = KFPlayerController(WelderInst.Controller);
-		if( PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) )  
-			PC.MyActiveStats.ReceiveWelded(DeWeldage * 0.5); // Award for unwelding.
-	}
-
 	WeldStrength -=DeWeldage;
-
 
 	For( i=0; i<DoorOwners.Length; i++ )
 		DoorOwners[i].SetWeldStrength(WeldStrength);
@@ -192,16 +184,6 @@ function DamageWeld(float WeldDamage,pawn instigatedBy, Vector hitlocation,Vecto
 
 defaultproperties
 {
-<<<<<<< HEAD
-	ReFireDelay=2
-	MaxWeldStrength=400.000000
-	CombatSealReduction=0.500000
-	LockedMessage="This door is locked. Looks like it needs a key.."
-	UnLockedMessage="Your Key unlocked the door."
-	WeldedShutMessage="This door is welded shut..."
-	LockedSound=Sound'PatchSounds.LockedDoorSound'
-	UnLockedSound=Sound'PatchSounds.DoorUnlockSound'
-=======
      ReFireDelay=2
      MaxWeldStrength=400.000000
      CombatSealReduction=0.500000
@@ -210,5 +192,4 @@ defaultproperties
      WeldedShutMessage="This door is welded shut..."
      LockedSound=Sound'PatchSounds.LockedDoorSound'
      UnLockedSound=Sound'PatchSounds.DoorUnlockSound'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

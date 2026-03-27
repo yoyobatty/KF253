@@ -1,10 +1,6 @@
 // Zombie Monster for KF Invasion gametype
 
-<<<<<<< HEAD
 class ZombieFleshpound extends KFMonster ;
-=======
-class ZombieFleshpound extends KFMonster;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 #exec OBJ LOAD FILE=KFCharacters.utx
 #exec OBJ LOAD FILE=KFCharacterModels.ukx
@@ -13,9 +9,9 @@ class ZombieFleshpound extends KFMonster;
 #exec OBJ LOAD FILE=PlayerSounds.uax
 
 var () float BlockDamageReduction;
-var bool bChargingPlayer,bClientCharge;
+var bool bChargingPlayer;
 var int TwoSecondDamageTotal;
-var float LastDamagedTime,RageStartTime;
+var float LastDamagedTime;
 
 var() vector RotMag;						// how far to rot view
 var() vector RotRate;					 // how fast to rot view
@@ -26,19 +22,8 @@ var() float	OffsetTime;				// how much time to offset view
 
 var name ChargingAnim;		// How he runs when charging the player.
 
-<<<<<<< HEAD
 var ONSHeadlightCorona DeviceGlow;
 
-var () int RageDamageThreshold;  // configurable.
-
-=======
-//var ONSHeadlightCorona DeviceGlow;
-
-var () int RageDamageThreshold;  // configurable.
-
-var bool bFrustrated;
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 replication
 {
 	reliable if(Role == ROLE_Authority)
@@ -59,10 +44,13 @@ simulated Function PostNetBeginPlay()
 // with only the gloves on his hands, deserves more respect than that!
 function PlayTakeHit(vector HitLocation, int Damage, class<DamageType> DamageType)
 {
+	local int StunChance;
+
+	StunChance = rand(5);
 	if( Level.TimeSeconds - LastPainAnim < MinTimeBetweenPainAnims )
 		return;
 
-	if( Damage>=150 || (DamageType.name=='DamTypeStunNade' && rand(5)>3) || (DamageType.name=='DamTypeCrossbowHeadshot' && Damage>=200) )
+	if( Damage>=150 || (DamageType.name=='DamTypeStunNade' && StunChance>3) || (DamageType.name=='DamTypeCrossbowHeadshot' && Damage>=200) )
 		PlayDirectionalHit(HitLocation);
 
 	LastPainAnim = Level.TimeSeconds;
@@ -74,29 +62,38 @@ function PlayTakeHit(vector HitLocation, int Damage, class<DamageType> DamageTyp
 	PlaySound(HitSound[Rand(4)], SLOT_Pain,2*TransientSoundVolume,,400);
 }
 
-function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
+state ZombieCharge
 {
-<<<<<<< HEAD
+	function bool StrafeFromDamage(float Damage, class<DamageType> DamageType, bool bFindDest)
+	{
+		return false;
+	}
+
+	function Timer()
+	{
+		disable('NotifyBump');
+		//Target = Enemy;
+		//TimedFireWeaponAtEnemy();
+	}
+
+	// I suspect this function causes bloats to get confused
+	function bool TryStrafe(vector sideDir)
+	{
+		return false;
+	}
+}
+
+simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
+{
 	local int BlockSlip;
 	local float BlockChance, RageChance;
 	local Vector X,Y,Z, Dir;
 
 	GetAxes(Rotation, X,Y,Z);
-=======
-	local Vector Dir;
-	local int OldHealth;
+	//hitlocation.Z = Location.Z;
 
-	//GetAxes(Rotation, X,Y,Z);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-
-	if( LastDamagedTime<Level.TimeSeconds )
-		TwoSecondDamageTotal = 0;
-	LastDamagedTime = Level.TimeSeconds+2;
-<<<<<<< HEAD
+	LastDamagedTime = Level.TimeSeconds;
 	TwoSecondDamageTotal += Damage;
-=======
-	OldHealth = Health;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	
 	// He's impervious to small arms fire (non explosives)
 	// Frags and LAW rockets will bring him down way faster than bullets and shells.
@@ -110,27 +107,21 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	if (Damage >= Health)
 		PostNetReceive();
 
-<<<<<<< HEAD
 	// Damage Berserk responses...
 	// Start a charge.
 	// The Lower his health, the less damage needed to trigger this response.
 	RageChance = (( HealthMax / Health * 300) - TwoSecondDamageTotal );
 
-	if (TwoSecondDamageTotal > RageDamageThreshold && !bChargingPlayer)
+	if (TwoSecondDamageTotal > 300 && !bChargingPlayer)
 		 StartCharging();
 
 	// Calculate whether the shot was coming from in front.
 	Dir = -Normal(Location - hitlocation);
 	BlockSlip = rand(5);
-=======
-	// Calculate whether the shot was coming from in front.
-	Dir = -Normal(Location - hitlocation);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	if (AnimAction == 'PoundBlock')
 		Damage *= BlockDamageReduction;
 
-<<<<<<< HEAD
 	if (Dir Dot X > 0.7 || Dir == vect(0,0,0))
 		BlockChance = (Health / HealthMax * 100 ) - Damage * 0.25;
 
@@ -139,38 +130,46 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// only 40% damage is done in this circumstance.
 	//TODO - bring this back?
 
+	/*
+	if (BlockChance > Damage && BlockSlip > 2)
+	{
+		Damage *= BlockDamageReduction;
+		//Log("Blocked!");
+		SetAnimAction('PoundBlock');
+		Controller.bPreparingMove = true;
+		Acceleration = vect(0,0,0);
+
+
+	}
+	*/
 	// Log (Damage);
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if (damageType == class 'DamTypeVomit')
 		Damage = 0; // nulled
 
 	if((Health - Damage) > 0)
 		Momentum = vect(0,0,0) ;
-<<<<<<< HEAD
 	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType) ;
-=======
-	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType);
-
-	TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage in Balance Round 6(second attempt)
-
-	if (TwoSecondDamageTotal > RageDamageThreshold && !bChargingPlayer || bFrustrated)
-		 StartCharging();
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 // changes colors on Device (notified in anim)
-simulated function DeviceGoRed()
+function DeviceGoRed()
 {
 	Skins[2]=FinalBlend'KFCharacters.RedPoundMeter';
 	Skins[3]=Shader'KFCharacters.FPRedBloomShader';
 }
-simulated function DeviceGoNormal()
+
+// Resets the fleshpound when he's done his rage.
+simulated function StopCharging()
 {
-	Skins[2] = FinalBlend'KFCharacters.YellowPoundMeter';
-	Skins[3] = Shader'KFCharacters.FPAmberBloomShader';
+	GroundSpeed = default.GroundSpeed;
+	DamageConst = default.DamageConst;
+	SpinDamConst = default.DamageConst;
+	controller.bgodmode = False;
+	bChargingPlayer = false;
+	ClientChargingAnims();
 }
+
 
 function RangedAttack(Actor A)
 {
@@ -185,197 +184,67 @@ function RangedAttack(Actor A)
 	}
 }
 
-<<<<<<< HEAD
 // Sets the FP in a berserk charge state until he either strikes his target, or hits timeout
-function StartCharging()
-{
-=======
-function BlockDamage()
-{
-	if (bShotAnim || Physics == PHYS_Swimming)
-		return;
-	else
-	{
-		//Level.Game.Broadcast(self, 'FleshPoundBlock');
-		bShotAnim = true;
-		SetAnimAction('PoundBlock');
-		return;
-	}
-}
 
-// Sets the FP in a berserk charge state until he either strikes his target, or hits timeout
 function StartCharging()
 {
-    if( Health <= 0 )
-    {
-        return;
-    }
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	SetAnimAction('PoundRage');
 	Acceleration = vect(0,0,0);
-	bShotAnim = true;
-	Velocity.X = 0;
-	Velocity.Y = 0;
-	Controller.GoToState('WaitForAnim');
-	KFMonsterController(Controller).bUseFreezeHack = True;
-<<<<<<< HEAD
-	GoToState('RageCharging');
-=======
-    FleshpoundZombieController(Controller).SetPoundRageTimout(1.5);
-	GoToState('BeginRaging');
+
+	DamageConst *= 1.5;
+	SpinDamConst *=1.5;
+	GroundSpeed *= 2.0;
+	KFMonsterController(Controller).ChargeStart = Level.TimeSeconds;
+	controller.bgodmode = True;
+	bChargingPlayer = true;
+	ClientChargingAnims();
 }
 
-state BeginRaging
-{
-    Ignores StartCharging;
-
-	function Tick( float Delta )
-	{
-        Acceleration = vect(0,0,0);
-
-        global.Tick(Delta);
-	}
-
-Begin:
-    Sleep(1.5);
-    GotoState('RageCharging');
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-}
-
-State RageCharging
-{
-Ignores StartCharging;
-
-	function BeginState()
-	{
-<<<<<<< HEAD
-		bChargingPlayer = true;
-		if( Level.NetMode!=NM_DedicatedServer )
-			ClientChargingAnims();
-		RageStartTime = Level.TimeSeconds+5+FRand()*6;
-=======
-		local float DifficultyModifier;
-
-		bChargingPlayer = true;
-		if( Level.NetMode!=NM_DedicatedServer )
-			ClientChargingAnims();
-
-		// Scale rage length by difficulty
-		if( Level.Game.GameDifficulty < 2.0 )
-		{
-			DifficultyModifier = 0.85;
-		}
-		else if( Level.Game.GameDifficulty < 4.0 )
-		{
-			DifficultyModifier = 1.0;
-		}
-		else if( Level.Game.GameDifficulty < 5.0 )
-		{
-			DifficultyModifier = 1.25;
-		}
-		else // Hardest difficulty
-		{
-			DifficultyModifier = 3.0; 
-		}
-		RageStartTime = (Level.TimeSeconds + 5 * DifficultyModifier) + (FRand() * 6 * DifficultyModifier);
-		NetUpdateTime = Level.TimeSeconds - 1;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-	}
-	function EndState()
-	{
-		bChargingPlayer = False;
-<<<<<<< HEAD
-		if( Health>0 )
-		{
-			GroundSpeed = default.GroundSpeed;
-			if( Level.NetMode!=NM_DedicatedServer )
-				ClientChargingAnims();
-=======
-		bFrustrated = false;
-		FleshPoundZombieController(Controller).RageFrustrationTimer = 0;
-		if( Health>0 )
-		{
-			SetGroundSpeed(OriginalGroundSpeed);
-			if( Level.NetMode!=NM_DedicatedServer )
-				ClientChargingAnims();
-			NetUpdateTime = Level.TimeSeconds - 1;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-		}
-	}
-	function Tick( float Delta )
-	{
-		if( !bShotAnim )
-		{
-<<<<<<< HEAD
-			GroundSpeed = Default.GroundSpeed*2;
-			if( Level.TimeSeconds>RageStartTime )
-=======
-			SetGroundSpeed(OriginalGroundSpeed * 2.1);//2.0;
-			if( !bFrustrated && Level.TimeSeconds>RageStartTime )
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-				GoToState('');
-		}
-	}
-	function Bump( Actor Other )
-	{
-		if( !bShotAnim && Pawn(Other)!=None && ZombieFleshPound(Other)==None && Pawn(Other).Health>0 )
-		{
-			Controller.Target = Other;
-			Controller.Focus = Other;
-			Acceleration = vect(0,0,0);
-			bShotAnim = true;
-			SetAnimAction('Claw');
-			PlaySound(sound'Claw2s', SLOT_None);
-		}
-		else Global.Bump(Other);
-	}
-	// If fleshie hits his target on a charge, then he should settle down for abit.
-	function bool MeleeDamageTarget(int hitdamage, vector pushdir)
-	{
-		local bool RetVal,bWasEnemy;
-
-		bWasEnemy = (Controller.Target==Controller.Enemy);
-		RetVal = Super.MeleeDamageTarget(hitdamage*1.75, pushdir*3);
-		if( RetVal && bWasEnemy )
-			GoToState('');
-		return RetVal;
-	}
-}
 
 simulated function PostNetReceive()
 {
-	if( bClientCharge!=bChargingPlayer )
+	if (bChargingPlayer)
 	{
-		bClientCharge = bChargingPlayer;
-		if( Health<=0 )
-			Return;
-		if (bChargingPlayer)
-		{
-			MovementAnims[0]=ChargingAnim;
-			MeleeAnims[0]='FPRageAttack';
-			MeleeAnims[1]='FPRageAttack';
-			MeleeAnims[2]='FPRageAttack';
-			DeviceGoRed();
-		}
-		else
-		{
-			MovementAnims[0]=default.MovementAnims[0];
-			MeleeAnims[0]=default.MeleeAnims[0];
-			MeleeAnims[1]=default.MeleeAnims[1];
-			MeleeAnims[2]=default.MeleeAnims[2];
-			DeviceGoNormal();
-		}
+		MovementAnims[0]=ChargingAnim;
+		MeleeAnims[0]='FPRageAttack';
+		MeleeAnims[1]='FPRageAttack';
+		MeleeAnims[2]='FPRageAttack';
+		Skins[2]=FinalBlend'KFCharacters.RedPoundMeter';
+		Skins[3]=Shader'KFCharacters.FPRedBloomShader';
 	}
+	else if (!bChargingPlayer && Health > 0)
+	{
+		MovementAnims[0]=default.MovementAnims[0];
+		MeleeAnims[0]=default.MeleeAnims[0];
+		MeleeAnims[1]=default.MeleeAnims[1];
+		MeleeAnims[2]=default.MeleeAnims[2];
+		Skins[2]=FinalBlend'KFCharacters.YellowPoundMeter';
+		Skins[3]=Shader'KFCharacters.FPAmberBloomShader';
+	}
+	else
+	{
+		Skins[2]=Texture'KillingFloorLabTextures.LabCommon.voidtex' ;
+		Skins[3]= Texture'KillingFloorLabTextures.LabCommon.voidtex' ;
+	} 
 }
-simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
-{
-	Super.PlayDyingAnimation(DamageType,HitLoc);
-	if( Level.NetMode!=NM_DedicatedServer )
-		DeviceGoNormal();
-}
+
 simulated function ClientChargingAnims()
 {
 	PostNetReceive();
+}
+
+// If fleshie hits his target on a charge, then he should settle down for abit.
+
+function bool MeleeDamageTarget(int hitdamage, vector pushdir)
+{
+	local bool RetVal;
+
+	Super.MeleeDamageTarget(hitdamage,pushdir);
+	
+	RetVal = super.MeleeDamageTarget(hitdamage, pushdir);
+	if(bChargingPlayer==true && RetVal==true)
+		StopCharging();
+	return RetVal;
 }
 
 function ClawDamageTarget()
@@ -430,11 +299,7 @@ function SpinDamage(actor Target)
 
 	if (Target !=none && Target.IsA('KFDoorMover'))
 	{
-<<<<<<< HEAD
 		Target.TakeDamage(DamageAmount , self ,HitLocation,pushdir, class 'KFmod.ZombieMeleeDamage');
-=======
-		Target.TakeDamage(DamageAmount , self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		PlayZombieAttackHitSound();
 	}
 
@@ -445,22 +310,13 @@ function SpinDamage(actor Target)
 			HumanTarget.Controller.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 
 		//TODO - line below was KFPawn. Does this whole block need to be KFPawn, or is it OK as KFHumanPawn?
-<<<<<<< HEAD
 		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFmod.ZombieMeleeDamage');
-=======
-		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 		if (KFHumanPawn(Target).Health <=0)
 		{
 			KFHumanPawn(Target).SpawnGibs(rotator(pushdir), 1);
 			TearBone=KFPawn(Target).GetClosestBone(HitLocation,Velocity,dummy);
-<<<<<<< HEAD
 			HideBone(TearBone);
-=======
-			KFHumanPawn(Controller.Target).HideBone(TearBone);
-			//HideBone(TearBone);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 }
@@ -493,7 +349,8 @@ simulated event SetAnimAction(name NewAction)
 		}
 		else if ( AnimAction == 'PoundRage' )
 		{
-			PlayAnim(NewAction);
+			fleshpoundZombieController(controller).GotoState('Rage');
+			bShotAnim = true;
 		}
 		else if ( AnimAction == 'PoundAttack1' )
 		{
@@ -516,8 +373,8 @@ simulated event SetAnimAction(name NewAction)
 			SetAnimAction(AnimAction);
 			return;
 		}
-		if( AnimAction=='PoundAttack3' && Controller!=None )
-			Controller.GotoState('spinattack');
+		if(AnimAction=='PoundAttack3')
+			fleshpoundZombieController(controller).GotoState('spinattack');
 		else if(NewAction == 'ZombieFeed')
 		{
 			AnimAction = NewAction;
@@ -525,11 +382,6 @@ simulated event SetAnimAction(name NewAction)
 		}
 		else AnimAction = NewAction;
 
-<<<<<<< HEAD
-=======
-		CurrentDamtype = ZombieDamType[Rand(3)];
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		if ( PlayAnim(AnimAction,,0.1) && AnimAction != KFHitFront 
 			&& AnimAction != KFHitBack
 			&& AnimAction != KFHitLeft
@@ -543,95 +395,13 @@ simulated event SetAnimAction(name NewAction)
 		}
 	}
 }
-simulated function int DoAnimAction( name AnimName )
-{
-	if( AnimName=='PoundAttack1' || AnimName=='PoundAttack2' || AnimName=='FPRageAttack' || AnimName=='ZombieFireGun' )
-	{
-		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
-		PlayAnim(AnimName,, 0.0, 1);
-		Return 1;
-	}
-	Return Super.DoAnimAction(AnimName);
-}
 function bool FlipOver()
 {
 	Return False;
 }
-function bool SameSpeciesAs(Pawn P)
-{
-	return (ZombieFleshPound(P)!=None);
-}
 
 defaultproperties
 {
-<<<<<<< HEAD
-	BlockDamageReduction=0.400000
-	RotMag=(X=400.000000,Y=400.000000)
-	RotRate=(X=400.000000,Y=400.000000,Z=400.000000)
-	RotTime=2.500000
-	OffsetMag=(X=35.000000,Y=35.000000,Z=35.000000)
-	OffsetRate=(X=300.000000,Y=300.000000,Z=300.000000)
-	OffsetTime=3.500000
-	ChargingAnim="PoundRun"
-	RageDamageThreshold=360
-	MeleeAnims(0)="PoundAttack1"
-	MeleeAnims(1)="PoundAttack2"
-	MeleeAnims(2)="PoundAttack3"
-	MoanVoice(0)=Sound'KFPlayerSound.Flesh1'
-	MoanVoice(1)=Sound'KFPlayerSound.Flesh2'
-	MoanVoice(2)=Sound'KFPlayerSound.Flesh3'
-	MoanVoice(3)=Sound'KFPlayerSound.Flesh4'
-	damageRand=15
-	damageConst=25
-	damageForce=150000
-	bFatAss=True
-	KFRagdollName="FleshPoundRag"
-	SpinDamConst=20.000000
-	SpinDamRand=20.000000
-	bMeleeStunImmune=True
-	Intelligence=BRAINS_Stupid
-	bUseExtendedCollision=True
-	ColOffset=(Z=42.000000)
-	ColRadius=36.000000
-	ColHeight=46.000000
-	bBoss=True
-	HitSound(0)=Sound'KFPlayerSound.zpain1'
-	HitSound(1)=Sound'KFPlayerSound.zpain2'
-	HitSound(2)=Sound'KFPlayerSound.zpain3'
-	HitSound(3)=Sound'KFPlayerSound.zpain4'
-	ScoringValue=10
-	IdleHeavyAnim="PoundIdle"
-	IdleRifleAnim="PoundIdle"
-	RagDeathVel=100.000000
-	RagDeathUpKick=100.000000
-	MeleeRange=55.000000
-	GroundSpeed=130.000000
-	WaterSpeed=120.000000
-	HealthMax=2000.000000
-	Health=2000
-	MenuName="Flesh Pound"
-	ControllerClass=Class'KFChar.FleshpoundZombieController'
-	MovementAnims(0)="PoundWalk"
-	MovementAnims(1)="PoundWalk"
-	MovementAnims(2)="PoundWalk"
-	MovementAnims(3)="PoundWalk"
-	WalkAnims(0)="PoundWalk"
-	WalkAnims(1)="PoundWalk"
-	WalkAnims(2)="PoundWalk"
-	WalkAnims(3)="PoundWalk"
-	IdleCrouchAnim="PoundIdle"
-	IdleWeaponAnim="PoundIdle"
-	IdleRestAnim="PoundIdle"
-	AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
-	Mesh=SkeletalMesh'KFCharacterModels.ZombieBoss'
-	PrePivot=(Z=8.000000)
-	Skins(0)=Texture'KFCharacters.PoundSkin'
-	Skins(1)=Shader'KFCharacters.PoundBitsShader'
-	Skins(2)=FinalBlend'KFCharacters.YellowPoundMeter'
-	Skins(3)=Shader'KFCharacters.FPAmberBloomShader'
-	Mass=600.000000
-	RotationRate=(Yaw=45000,Roll=0)
-=======
      BlockDamageReduction=0.400000
      RotMag=(X=400.000000,Y=400.000000)
      RotRate=(X=400.000000,Y=400.000000,Z=400.000000)
@@ -640,7 +410,6 @@ defaultproperties
      OffsetRate=(X=300.000000,Y=300.000000,Z=300.000000)
      OffsetTime=3.500000
      ChargingAnim="PoundRun"
-     RageDamageThreshold=360
      MeleeAnims(0)="PoundAttack1"
      MeleeAnims(1)="PoundAttack2"
      MeleeAnims(2)="PoundAttack3"
@@ -650,17 +419,12 @@ defaultproperties
      MoanVoice(3)=Sound'KFPlayerSound.Flesh4'
      damageRand=15
      damageConst=25
-     damageForce=15000
+     damageForce=150000
      bFatAss=True
      KFRagdollName="FleshPoundRag"
      SpinDamConst=20.000000
      SpinDamRand=20.000000
      bMeleeStunImmune=True
-     Intelligence=BRAINS_Mammal
-     bUseExtendedCollision=True
-     ColOffset=(Z=42.000000)
-     ColRadius=36.000000
-     ColHeight=46.000000
      bBoss=True
      HitSound(0)=Sound'KFPlayerSound.zpain1'
      HitSound(1)=Sound'KFPlayerSound.zpain2'
@@ -674,9 +438,8 @@ defaultproperties
      MeleeRange=55.000000
      GroundSpeed=130.000000
      WaterSpeed=120.000000
-     HealthMax=1500.000000
-     Health=1500
-	 HeadHealth=800
+     HealthMax=2000.000000
+     Health=2000
      MenuName="Flesh Pound"
      ControllerClass=Class'KFChar.FleshpoundZombieController'
      MovementAnims(0)="PoundWalk"
@@ -692,12 +455,12 @@ defaultproperties
      IdleRestAnim="PoundIdle"
      AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
      Mesh=SkeletalMesh'KFCharacterModels.ZombieBoss'
-     PrePivot=(Z=8.000000)
      Skins(0)=Texture'KFCharacters.PoundSkin'
      Skins(1)=Shader'KFCharacters.PoundBitsShader'
      Skins(2)=FinalBlend'KFCharacters.YellowPoundMeter'
      Skins(3)=Shader'KFCharacters.FPAmberBloomShader'
+     CollisionRadius=40.000000
+     CollisionHeight=64.000000
      Mass=600.000000
      RotationRate=(Yaw=45000,Roll=0)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

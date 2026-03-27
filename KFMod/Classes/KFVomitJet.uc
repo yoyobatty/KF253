@@ -2,16 +2,6 @@ class KFVomitJet extends AlienBloodJet;
 
 defaultproperties
 {
-<<<<<<< HEAD
-	mMaxParticles=50
-	mSpeedRange(0)=100.000000
-	mSpeedRange(1)=180.000000
-	mCollision=True
-	mGrowthRate=50.000000
-	LifeSpan=2.000000
-	Skins(0)=Texture'KFX.VomitSplash'
-	bUnlit=False
-=======
      mMaxParticles=50
      mSpeedRange(0)=100.000000
      mSpeedRange(1)=180.000000
@@ -20,5 +10,4 @@ defaultproperties
      LifeSpan=2.000000
      Skins(0)=Texture'KFX.VomitSplash'
      bUnlit=False
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

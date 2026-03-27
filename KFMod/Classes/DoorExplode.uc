@@ -55,19 +55,10 @@ simulated static function SpawnDoorGib( Actor Spawner, Vector SLoc, Rotator SRot
 
 defaultproperties
 {
-<<<<<<< HEAD
-	GibSpeed=256.000000
-	NumPieces=1
-	NumGibClasses=1
-	DoorGibClasses(0)=Class'KFMod.DoorGibMetalA'
-	SpreadFactor=0.300000
-	BoomSound=Sound'PatchSounds.MetalCrash'
-=======
      GibSpeed=256.000000
      NumPieces=1
      NumGibClasses=1
      DoorGibClasses(0)=Class'KFMod.DoorGibMetalA'
      SpreadFactor=0.300000
      BoomSound=Sound'PatchSounds.MetalCrash'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -164,25 +164,6 @@ if( (other != self) && (other.Role == ROLE_Authority) && (!other.IsA('FluidSurfa
 
 defaultproperties
 {
-<<<<<<< HEAD
-	MyDamageType=Class'KFMod.DamTypeAxe'
-	ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
-	ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
-	ImpactShakeRotTime=2.000000
-	ImpactShakeOffsetMag=(X=10.000000,Y=10.000000,Z=10.000000)
-	ImpactShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
-	ImpactShakeOffsetTime=2.000000
-	DrawType=DT_StaticMesh
-	StaticMesh=StaticMesh'Editor.TexPropSphere'
-	bHidden=True
-	bAlwaysRelevant=True
-	DrawScale=0.200000
-	DrawScale3D=(Y=0.500000)
-	CollisionRadius=0.000000
-	CollisionHeight=0.000000
-	bCollideActors=True
-	bCollideWorld=True
-=======
      MyDamageType=Class'KFMod.DamTypeAxe'
      ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
      ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
@@ -200,5 +181,4 @@ defaultproperties
      CollisionHeight=0.000000
      bCollideActors=True
      bCollideWorld=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

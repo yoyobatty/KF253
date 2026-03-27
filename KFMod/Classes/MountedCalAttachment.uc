@@ -77,17 +77,9 @@ simulated event ThirdPersonEffects()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	mShellEmitterOffset=(X=28.000000,Y=-20.000000,Z=92.000000)
-	LightBrightness=0.000000
-	LightRadius=0.000000
-	bDynamicLight=True
-	Mesh=SkeletalMesh'KFVehicleModels.50CalFrame'
-=======
      mShellEmitterOffset=(X=28.000000,Y=-20.000000,Z=92.000000)
      LightBrightness=0.000000
      LightRadius=0.000000
      bDynamicLight=True
      Mesh=SkeletalMesh'KFVehicleModels.50CalFrame'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

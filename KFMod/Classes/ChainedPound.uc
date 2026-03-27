@@ -74,21 +74,6 @@ simulated function PostNetReceive()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DrawType=DT_StaticMesh
-	bStatic=False
-	bNoDelete=True
-	bStasis=False
-	bSkipActorPropertyReplication=True
-	RemoteRole=ROLE_SimulatedProxy
-	Mesh=SkeletalMesh'KFCharactersB.LabPound'
-	bMovable=False
-	bCanBeDamaged=False
-	bShouldBaseAtStartup=False
-	bCollideActors=True
-	bBlockActors=True
-	bBlockKarma=True
-=======
      DrawType=DT_StaticMesh
      bStatic=False
      bNoDelete=True
@@ -102,5 +87,4 @@ defaultproperties
      bCollideActors=True
      bBlockActors=True
      bBlockKarma=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

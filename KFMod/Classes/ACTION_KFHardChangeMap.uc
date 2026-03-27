@@ -19,9 +19,5 @@ function string GetActionString()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	ActionString="Main menu"
-=======
      ActionString="Main menu"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

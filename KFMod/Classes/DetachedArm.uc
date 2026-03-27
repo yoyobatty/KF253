@@ -38,15 +38,8 @@ simulated function Destroyed()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bStatic=False
-	bStasis=False
-	bReplicateAnimations=True
-	Mesh=SkeletalMesh'KFMapObjects.NastyArm'
-=======
      bStatic=False
      bStasis=False
      bReplicateAnimations=True
      Mesh=SkeletalMesh'KFMapObjects.NastyArm'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

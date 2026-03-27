@@ -14,26 +14,6 @@ simulated function RenderPickupImage(Canvas C)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	Weight=6.000000
-	cost=300
-	AmmoCost=10
-	BuyClipSize=40
-	PowerValue=24
-	SpeedValue=90
-	RangeValue=60
-	Description="Standard issue military rifle. Equipped with an integrated 2X scope."
-	ItemName="Bullpup"
-	AmmoItemName="5.56 NATO Ammo"
-	showMesh=SkeletalMesh'KFWeaponModels.L853P'
-	AmmoMesh=StaticMesh'KillingFloorStatics.L85Ammo'
-	InventoryType=Class'KFMod.Bullpup'
-	PickupMessage="You got the Bullpup"
-	PickupForce="AssaultRiflePickup"
-	StaticMesh=StaticMesh'KillingFloorStatics.3PL85_Ground'
-	CollisionRadius=25.000000
-	CollisionHeight=5.000000
-=======
      Weight=6.000000
      cost=300
      AmmoCost=10
@@ -52,7 +32,4 @@ defaultproperties
      StaticMesh=StaticMesh'KillingFloorStatics.3PL85_Ground'
      CollisionRadius=25.000000
      CollisionHeight=5.000000
-     CorrespondingVeterancyName="Commando"
-     MaxDesireability=0.650000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

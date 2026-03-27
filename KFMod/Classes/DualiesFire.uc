@@ -67,7 +67,6 @@ function FlashMuzzleFlash()
     //  z.Pitch = 16000;
 
 }
-<<<<<<< HEAD
  /*
 function Recoil()
 {
@@ -84,8 +83,6 @@ function Recoil()
 	Instigator.SetViewRotation(NewRotation);}
 }
 */
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 event ModeDoFire()
 {
@@ -103,7 +100,6 @@ event ModeDoFire()
 	InitEffects();
 }
 
-<<<<<<< HEAD
 function StartBerserk()
 {
 	DamageMin = default.DamageMin * 1.33;
@@ -127,8 +123,6 @@ function StartSuperBerserk()
 }
 
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function DoFireEffect()
 {
     local Vector StartTrace;
@@ -153,63 +147,31 @@ function DoFireEffect()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	FireAnim2="FireLeft"
-	DamageType=Class'KFMod.DamTypeDualies'
-	DamageMin=25
-	DamageMax=35
-	Momentum=10500.000000
-	bPawnRapidFireAnim=True
-	bAttachSmokeEmitter=True
-	TransientSoundVolume=50.000000
-	FireAnim="FireRight"
-	FireLoopAnim=
-	FireEndAnim=
-	FireSound=Sound'PatchSounds.9mmShot'
-	FireForce="AssaultRifleFire"
-	FireRate=0.250000
-	AmmoClass=Class'KFMod.SingleAmmo'
-	AmmoPerFire=1
-	ShakeRotMag=(X=90.000000,Y=90.000000,Z=90.000000)
-	ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
-	ShakeRotTime=2.000000
-	ShakeOffsetMag=(X=15.000000,Y=15.000000,Z=15.000000)
-	ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
-	ShakeOffsetTime=2.000000
-	BotRefireRate=0.250000
-	FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
-	aimerror=30.000000
-	Spread=0.015000
-	SpreadStyle=SS_Random
-=======
-    FireAnim2="FireLeft"
-    DamageType=Class'KFMod.DamTypeDualies'
-    DamageMin=30
-    DamageMax=40
-    Momentum=10500.000000
-    bPawnRapidFireAnim=True
-    bWaitForRelease=True
-    bAttachSmokeEmitter=True
-    TransientSoundVolume=50.000000
-    FireAnim="FireRight"
-    FireAnimRate=1.200000
-    FireLoopAnim=
-    FireEndAnim=
-    FireSound=Sound'PatchSounds.9mmShot'
-    FireForce="AssaultRifleFire"
-    FireRate=0.150000
-    AmmoClass=Class'KFMod.SingleAmmo'
-    AmmoPerFire=1
-    ShakeRotMag=(X=90.000000,Y=90.000000,Z=90.000000)
-    ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
-    ShakeRotTime=2.000000
-    ShakeOffsetMag=(X=15.000000,Y=15.000000,Z=15.000000)
-    ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
-    ShakeOffsetTime=2.000000
-    BotRefireRate=0.850000
-    FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
-    aimerror=25.000000
-    Spread=0.007500
-    SpreadStyle=SS_Random
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     FireAnim2="FireLeft"
+     DamageType=Class'KFMod.DamTypeDualies'
+     DamageMin=25
+     DamageMax=35
+     Momentum=10500.000000
+     bPawnRapidFireAnim=True
+     bAttachSmokeEmitter=True
+     TransientSoundVolume=50.000000
+     FireAnim="FireRight"
+     FireLoopAnim=
+     FireEndAnim=
+     FireSound=Sound'PatchSounds.9mmShot'
+     FireForce="AssaultRifleFire"
+     FireRate=0.250000
+     AmmoClass=Class'KFMod.SingleAmmo'
+     AmmoPerFire=1
+     ShakeRotMag=(X=90.000000,Y=90.000000,Z=90.000000)
+     ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
+     ShakeRotTime=2.000000
+     ShakeOffsetMag=(X=15.000000,Y=15.000000,Z=15.000000)
+     ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
+     ShakeOffsetTime=2.000000
+     BotRefireRate=0.250000
+     FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
+     aimerror=30.000000
+     Spread=0.015000
+     SpreadStyle=SS_Random
 }

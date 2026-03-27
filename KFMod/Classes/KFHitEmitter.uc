@@ -1,10 +1,6 @@
 class KFHitEmitter extends Emitter
-<<<<<<< HEAD
 	abstract
 	hidedropdown;
-=======
-	abstract;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 var() array<Sound> ImpactSounds;
 
@@ -14,11 +10,7 @@ simulated function PostBeginPlay()
 	local vector MinVel, MaxVel;
 
 	Super.PostBeginPlay();
-<<<<<<< HEAD
 
-=======
-	
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if(Emitters.Length>0)
 	{
 		MinVel.X = Emitters[0].StartVelocityRange.X.Min;
@@ -68,17 +60,9 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	AutoDestroy=True
-	bNoDelete=False
-	LifeSpan=5.000000
-	TransientSoundVolume=150.000000
-	TransientSoundRadius=80.000000
-=======
      AutoDestroy=True
      bNoDelete=False
      LifeSpan=5.000000
      TransientSoundVolume=150.000000
      TransientSoundRadius=80.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

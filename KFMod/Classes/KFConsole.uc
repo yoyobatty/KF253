@@ -376,30 +376,6 @@ state SpeechMenuVisible
 
 defaultproperties
 {
-<<<<<<< HEAD
-	SMStateName(2)="Need Support"
-	SMStateName(3)="Form Up"
-	SMStateName(4)="Take This"
-	SMStateName(5)="Going Trading"
-	SMStateName(6)="MEDIC!"
-	SMStateName(7)="I'm Welding"
-	SMStateName(8)="I'm Covering"
-	SMStateName(9)="Taunt Anim"
-	Favorites(0)=(IP="69.114.228.143",Port=7777,QueryPort=7778)
-	Favorites(1)=(IP="192.168.0.2",Port=7777,QueryPort=7778)
-	Favorites(2)=(IP="83.248.173.224",Port=7777,QueryPort=7778)
-	SavedPasswords(0)=(Server="67.81.133.150",Password="alpha")
-	SavedPasswords(1)=(Server="192.168.0.2",Password="alpha")
-	SavedPasswords(2)=(Server="209.195.155.183",Password="fear")
-	SavedPasswords(3)=(Server="83.248.173.224",Password="alpha")
-	SavedPasswords(4)=(Server="192.168.0.5",Password="alpha")
-	SavedPasswords(5)=(Server="80.222.224.171",Password="kfadmin")
-	SavedPasswords(6)=(Server="192.168.0.4",Password="alpha")
-	SavedPasswords(7)=(Server="192.168.1.64",Password="alpha")
-	SavedPasswords(8)=(Server="72.189.189.72")
-	SavedPasswords(9)=(Server="72.189.189.72")
-	SavedPasswords(10)=(Server="213.22.168.84",Password="alpha")
-=======
      SMStateName(2)="Need Support"
      SMStateName(3)="Form Up"
      SMStateName(4)="Take This"
@@ -409,5 +385,17 @@ defaultproperties
      SMStateName(8)="I'm Covering"
      SMStateName(9)="Taunt Anim"
      Favorites(0)=(IP="69.114.228.143",Port=7777,QueryPort=7778)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     Favorites(1)=(IP="192.168.0.2",Port=7777,QueryPort=7778)
+     Favorites(2)=(IP="83.248.173.224",Port=7777,QueryPort=7778)
+     SavedPasswords(0)=(Server="67.81.133.150",Password="alpha")
+     SavedPasswords(1)=(Server="192.168.0.2",Password="alpha")
+     SavedPasswords(2)=(Server="209.195.155.183",Password="fear")
+     SavedPasswords(3)=(Server="83.248.173.224",Password="alpha")
+     SavedPasswords(4)=(Server="192.168.0.5",Password="alpha")
+     SavedPasswords(5)=(Server="80.222.224.171",Password="kfadmin")
+     SavedPasswords(6)=(Server="192.168.0.4",Password="alpha")
+     SavedPasswords(7)=(Server="192.168.1.64",Password="alpha")
+     SavedPasswords(8)=(Server="72.189.189.72")
+     SavedPasswords(9)=(Server="72.189.189.72")
+     SavedPasswords(10)=(Server="213.22.168.84",Password="alpha")
 }

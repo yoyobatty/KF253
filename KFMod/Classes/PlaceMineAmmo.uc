@@ -7,9 +7,9 @@ class PlaceMineAmmo extends KFAmmunition;
 
 defaultproperties
 {
-	MaxAmmo=5
-	InitialAmount=1
-	PickupClass=Class'KFMod.DeagleAmmoPickup'
-	IconCoords=(X1=338,Y1=40,X2=393,Y2=79)
-	ItemName="You picked up a mine."
+     MaxAmmo=5
+     InitialAmount=1
+     PickupClass=Class'KFMod.DeagleAmmoPickup'
+     IconCoords=(X1=338,Y1=40,X2=393,Y2=79)
+     ItemName="You picked up a mine."
 }

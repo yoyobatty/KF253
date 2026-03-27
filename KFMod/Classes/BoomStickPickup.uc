@@ -11,25 +11,6 @@ function ShowShotgunInfo(Canvas C)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	cost=450
-	AmmoCost=25
-	BuyClipSize=6
-	PowerValue=90
-	SpeedValue=30
-	RangeValue=12
-	Description="A double barreled shotgun used by big game hunters."
-	ItemName="Hunting Shotgun"
-	AmmoItemName="12-gauge Hunting shells"
-	showMesh=SkeletalMesh'KFWeaponModels.BoomStick3P'
-	AmmoMesh=StaticMesh'KillingFloorStatics.DBShotgunAmmoPickup'
-	InventoryType=Class'KFMod.BoomStick'
-	PickupMessage="You got the Hunting Shotgun"
-	PickupForce="AssaultRiflePickup"
-	StaticMesh=StaticMesh'KillingFloorStatics.BoomStickGround'
-	CollisionRadius=35.000000
-	CollisionHeight=5.000000
-=======
      cost=450
      AmmoCost=25
      BuyClipSize=6
@@ -47,6 +28,4 @@ defaultproperties
      StaticMesh=StaticMesh'KillingFloorStatics.BoomStickGround'
      CollisionRadius=35.000000
      CollisionHeight=5.000000
-     CorrespondingVeterancyName="Support Specialist"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

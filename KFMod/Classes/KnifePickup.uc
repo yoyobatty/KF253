@@ -13,28 +13,11 @@ function ShowKnifeInfo(Canvas C)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	Weight=0.000000
-	cost=50
-	PowerValue=5
-	SpeedValue=60
-	RangeValue=-20
-	Description="Basic kitchen utensil. Sharp."
-	ItemName="Knife"
-	showMesh=SkeletalMesh'KFWeaponModels.Knife3P'
-	InventoryType=Class'KFMod.Knife'
-	PickupMessage="You got the Kitchen Knife."
-	PickupSound=Sound'KFWeaponSound.knife_deploy1'
-	PickupForce="AssaultRiflePickup"
-	StaticMesh=StaticMesh'KillingFloorStatics.3PKnife_Ground'
-	CollisionHeight=5.000000
-=======
      Weight=0.000000
      cost=50
      PowerValue=5
      SpeedValue=60
      RangeValue=-20
-     MaxDesireability=0.2
      Description="Basic kitchen utensil. Sharp."
      ItemName="Knife"
      showMesh=SkeletalMesh'KFWeaponModels.Knife3P'
@@ -44,6 +27,4 @@ defaultproperties
      PickupForce="AssaultRiflePickup"
      StaticMesh=StaticMesh'KillingFloorStatics.3PKnife_Ground'
      CollisionHeight=5.000000
-     CorrespondingVeterancyName="Berserker"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

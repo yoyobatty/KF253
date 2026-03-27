@@ -11,11 +11,11 @@ static function AwardKill( KFPlayerStats Other, bool bDecapited, bool bWasStalke
 static function AwardDamage( KFPlayerStats Other, int dmg )
 {
 	if( Default.bIsMeleeDamage )
-		Other.ReceiveDamage(dmg,False,False);
+		Other.ReceiveDamage(dmg,False);
 }
 
 defaultproperties
 {
-	HeadShotDamageMult=1.100000
-	GibPerterbation=0.250000
+     HeadShotDamageMult=1.100000
+     GibPerterbation=0.250000
 }

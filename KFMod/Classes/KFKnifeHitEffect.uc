@@ -83,22 +83,6 @@ simulated function SpawnEffects()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	HitEffectClasses(0)=Class'KFMod.KnifeDirtHitEmitter'
-	HitEffectClasses(1)=Class'KFMod.KnifeRockHitEmitter'
-	HitEffectClasses(2)=Class'KFMod.KnifeDirtHitEmitter'
-	HitEffectClasses(3)=Class'KFMod.KnifeMetalHitEmitter'
-	HitEffectClasses(4)=Class'KFMod.KnifeWoodHitEmitter'
-	HitEffectClasses(5)=Class'KFMod.PlantHitEmitter'
-	HitEffectClasses(6)=Class'KFMod.FleshHitEmitter'
-	HitEffectClasses(7)=Class'KFMod.SnowHitEmitter'
-	HitEffectClasses(8)=Class'KFMod.SnowHitEmitter'
-	HitEffectClasses(9)=Class'KFMod.WaterHitEmitter'
-	HitEffectClasses(10)=Class'KFMod.GlassHitEmitter'
-	CullDistance=7000.000000
-	bHidden=True
-	LifeSpan=10.000000
-=======
      HitEffectClasses(0)=Class'KFMod.KnifeDirtHitEmitter'
      HitEffectClasses(1)=Class'KFMod.KnifeRockHitEmitter'
      HitEffectClasses(2)=Class'KFMod.KnifeDirtHitEmitter'
@@ -113,5 +97,4 @@ defaultproperties
      CullDistance=7000.000000
      bHidden=True
      LifeSpan=10.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

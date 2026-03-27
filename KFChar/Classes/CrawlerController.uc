@@ -1,20 +1,6 @@
 class CrawlerController extends KFMonsterController;
 
 var float LastPounceTime;
-var	bool	bDoneSpottedCheck;
-
-state ZombieHunt
-{
-	event SeePlayer(Pawn SeenPlayer)
-	{
-		if ( !bDoneSpottedCheck && PlayerController(SeenPlayer.Controller) != none )
-		{
-			bDoneSpottedCheck = true;
-		}
-
-		super.SeePlayer(SeenPlayer);
-	}
-}
 
 function bool IsInPounceDist(actor PTarget)
 {
@@ -52,6 +38,7 @@ function bool FireWeaponAt(Actor A)
 {
 	local vector aFacing,aToB;
 	local float RelativeDir;
+	local rotator newrot;
 
     if ( A == None )
 		A = Enemy;
@@ -64,6 +51,7 @@ function bool FireWeaponAt(Actor A)
 	  Monster(Pawn).RangedAttack(Target);
     }
     else
+    {
       //TODO - base off land time rather than launch time?
       if(LastPounceTime+1 < Level.TimeSeconds )
       {
@@ -80,8 +68,32 @@ function bool FireWeaponAt(Actor A)
             if(ZombieCrawler(Pawn).DoPounce()==true )
               LastPounceTime = Level.TimeSeconds;
           }
+          else
+          {
+            //TODO: if the DoPounce borks, undo rot change?
+            //      or can we guarantee no borkage?
+            if(frand() < 0.5 )
+              newrot = pawn.Rotation + rot(0, 10920,0);//8190,0);
+            else
+              newrot = pawn.Rotation + rot(0,54616,0); // 57346,0);
+            pawn.SetRotation( newrot );
+            if(ZombieCrawler(Pawn).DoPounce()==true )
+              LastPounceTime = Level.TimeSeconds;
+          }
         }
-	  }
+        /*
+        else if(RelativeDir > 0.3)
+        {
+          // Partly facing enemy
+          if(!IsInPounceDist(A) )
+          {
+            if(ZombieCrawler(Pawn).DoPounce()==true )
+              LastPounceTime = Level.TimeSeconds;
+          }
+        }
+        */
+      }
+    }
     return false;
 }
 

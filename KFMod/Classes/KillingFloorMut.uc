@@ -9,9 +9,5 @@ function bool CheckReplacement(Actor Other, out byte bSuperRelevant)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	GroupName="KF"
-=======
      GroupName="KF"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -401,11 +401,6 @@ function Timer()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	Pitch=1.000000
-	TransientSoundVolume=0.900000
-=======
      Pitch=1.000000
      TransientSoundVolume=0.900000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

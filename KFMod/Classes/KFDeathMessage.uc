@@ -112,11 +112,6 @@ static function ClientReceive(
 
 defaultproperties
 {
-<<<<<<< HEAD
-	KilledString="was slaughtered by"
-	DrawColor=(B=50,G=50)
-=======
      KilledString="was slaughtered by"
      DrawColor=(B=50,G=50)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

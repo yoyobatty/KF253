@@ -53,20 +53,6 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DampenFactor=0.500000
-	HitSounds(0)=Sound'PlayerSounds.Final.Giblets1'
-	HitSounds(1)=Sound'PlayerSounds.Final.Giblets2'
-	ScaleFactor=0.700000
-	Physics=PHYS_Falling
-	RemoteRole=ROLE_None
-	LifeSpan=15.000000
-	TransientSoundVolume=100.000000
-	bCollideWorld=True
-	bBounce=True
-	bFixedRotationDir=True
-	Mass=120.000000
-=======
      DampenFactor=0.500000
      HitSounds(0)=Sound'PlayerSounds.Final.Giblets1'
      HitSounds(1)=Sound'PlayerSounds.Final.Giblets2'
@@ -79,5 +65,4 @@ defaultproperties
      bBounce=True
      bFixedRotationDir=True
      Mass=120.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

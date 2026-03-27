@@ -1,13 +1,18 @@
-// By : Alex.
-// Support for non Survival based gameplay.
-
 class KFSPLevelInfo extends LevelGameRules;
 
+var () bool bStartingPlayerEquipment; // Gun, welder, Syringe.
 var () int PlayerStartHealth; // Amount of starting HP for all players
-var () int PlayerStartArmor; // Amount of starting armor for all players.
-var () bool bUseVisionOverlay;  // Enable / disable Zone-Modulated HUD colors .
-var () bool bHUDShowCash; // Enable / Disable Cash display on HUD .
-var () array< Class<Inventory> > RequiredPlayerEquipment;  // Defines starting equipment for players
+var () bool bUseVisionOverlay;
+
+// Actor bans
+// KEEPS IN MIND that these actor bans only take effect when the game starts. 
+// Actors spawned after game start will not be taken into account.
+
+var () class<Actor> EasyBannedClasses [10];   // Actors of this class are banned from Easy Play
+var () class<Actor> NormalBannedClasses [10];   // Actors of this class are banned from Normal Play
+var () class<Actor> SkilledBannedClasses [10];   // Actors of this class are banned from Skilled Play
+var () class<Actor> EliteBannedClasses [10];   // Actors of this class are banned from Elite Play
+var () class<Actor> SuicidalBannedClasses [10];   // Actors of this class are banned from Suicidal Play
 
 var () Array<String> MissionObjectives;
 
@@ -23,41 +28,8 @@ simulated function SetGRI(GameReplicationInfo GRI)
 		KFSGameReplicationInfo(GRI).KFPLevel = Self;
 }
 
-function ModifyPlayer( Pawn Other )
-{
-	if( PlayerStartHealth>0 )
-		Other.Health = PlayerStartHealth;
-	if( PlayerStartArmor>0 )
-		Other.AddShieldStrength(PlayerStartArmor);
-}
-function AddGameInv( Pawn Other )
-{
-	local int i;
-	local Inventory Inv;
-
-	For( i=0; i<RequiredPlayerEquipment.Length; i++ )
-	{
-		if( RequiredPlayerEquipment[i]==None )
-			Continue;
-		if( Other.FindInventoryType(RequiredPlayerEquipment[i])==None )
-		{
-			Inv = Spawn(RequiredPlayerEquipment[i]);
-			if( Inv != None )
-			{
-				Inv.GiveTo(Other);
-				if ( Inv != None )
-					Inv.PickupFunction(Other);
-			}
-		}
-	}
-}
-
 defaultproperties
 {
-	bUseVisionOverlay=True
-<<<<<<< HEAD
-=======
-	RemoteRole=ROLE_None
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-	bNoDelete=True
+     bUseVisionOverlay=True
+     bNoDelete=True
 }

@@ -96,11 +96,6 @@ state() TimedCountDown
 
 defaultproperties
 {
-<<<<<<< HEAD
-	CountDownInterval=1
-	TimeUpMessage="TIME UP"
-=======
      CountDownInterval=1
      TimeUpMessage="TIME UP"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

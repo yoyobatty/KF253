@@ -10,7 +10,7 @@ static function string GetString(
     optional Object OptionalObject
     )
 {
-	if( RelatedPRI_1==None )
+    if( RelatedPRI_1==None )
 		Return "";
 	else if( RelatedPRI_2!=None && RelatedPRI_2!=RelatedPRI_1 )
 		Return RelatedPRI_1.PlayerName@Default.SameTeamKill@RelatedPRI_2.PlayerName;
@@ -40,17 +40,9 @@ static function bool ShouldUseAn( string S )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	SameTeamKill="was team-killed by"
-	KilledByMonster="was killed by"
-	OutMessage="has died."
-	DrawColor=(B=75,G=75,R=255,A=230)
-	FontSize=0
-=======
      SameTeamKill="was team-killed by"
      KilledByMonster="was killed by"
      OutMessage="has died."
      DrawColor=(B=75,G=75,R=255,A=230)
      FontSize=0
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

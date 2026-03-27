@@ -7,10 +7,18 @@ var Emitter             mMuzFlash3rd;
 
 var class<Emitter>      mTracerClass;
 var() editinline Emitter mTracer;
+var float               mTracerInterval;
+var() float             mTracerIntervalPrimary;
+var() float             mTracerIntervalSecondary;
 var() float             mTracerPullback;
 var() float             mTracerMinDistance;
 var() float             mTracerSpeed;
+var float               mLastTracerTime;
 var byte                OldSpawnHitCount;
+
+var float               mCurrentRoll;
+var float               mRollInc;
+var float               mRollUpdateTime;
 
 var class<xEmitter>     mShellCaseEmitterClass;
 var xEmitter            mShellCaseEmitter;
@@ -18,25 +26,15 @@ var() vector            mShellEmitterOffset;
 
 var vector  mOldHitLocation;
 
-<<<<<<< HEAD
 var () class<KFHitEffect> HitEffectType;
-=======
-var () class<Actor> HitEffectType;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
                                                         
 var() array<name> TPAnims,TPAnimsB; // Custom third person animations.
 var() name WeaponIdleMovementAnim,SecondaryWeaponIdleMovementAnim; // Custom holding weapon animation.
 var Pawn LastInstig;
 
-var vector OlComprVect;
-
 simulated function name GetThirdPersonAnim()
 {
-<<<<<<< HEAD
         if( FiringMode==1 && TPAnimsB.Length>0 )
-=======
-    if( FiringMode==1 && TPAnimsB.Length>0 )
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		Return TPAnimsB[Rand(TPAnimsB.Length)];
 	if( TPAnims.Length==0 )
 		Return '';
@@ -46,89 +44,64 @@ simulated function name GetThirdPersonAnim()
 }
 simulated function PostNetReceive()
 {
-	if( Instigator!=LastInstig )
+        if( Instigator!=LastInstig )
 	{
 		LastInstig = Instigator;
 		if( KFPawn(Instigator)!=None )
 		{
-			KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
-			KFPawn(Instigator).WeaponAttachment = Self;
-		}
+                  	if (FiringMode == 0)
+                          KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
+
+                }
+
 	}
-<<<<<<< HEAD
-	else if( mHitLocation!=vect(0,0,0) )
-	{
-		AddHitFX();
-		mHitLocation = vect(0,0,0);
-	}
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 simulated function PostNetBeginPlay()
 {
 	Super.PostNetBeginPlay();
-<<<<<<< HEAD
 	LastInstig = Instigator;
-	mHitLocation = vect(0,0,0);
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if( KFPawn(Instigator)!=None )
 	{
-		KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
-		KFPawn(Instigator).WeaponAttachment = Self;
+		if (FiringMode == 0)
+                          KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
 	}
-<<<<<<< HEAD
-=======
-	LastInstig = Instigator;
-	mHitLocation = vect(0,0,0);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	bNetNotify = True;
 }
 
-simulated function ChangeIdleToPrimary()
-{
-	WeaponIdleMovementAnim = Default.WeaponIdleMovementAnim;
-	if( KFPawn(Instigator)!=None )
-		KFPawn(Instigator).UpdateClientAnim(WeaponIdleMovementAnim);
-}
+
 simulated function ChangeIdleToSecondary()
 {
-	WeaponIdleMovementAnim = SecondaryWeaponIdleMovementAnim;
+ LastInstig = Instigator;
 	if( KFPawn(Instigator)!=None )
-		KFPawn(Instigator).UpdateClientAnim(SecondaryWeaponIdleMovementAnim);
-}
-simulated function UpdateTacBeam( float Dist );
-simulated function TacBeamGone();
+	{
+         KFPawn(Instigator).UpdateClientAnim(SecondaryWeaponIdleMovementAnim);
+         bNetNotify = True;
+        }        
 
-simulated function AddHitFX()
+}
+
+simulated function UpdateTracer()
 {
 	local vector SpawnLoc, SpawnDir, SpawnVel;
 	local float hitDist;
-<<<<<<< HEAD
-	local Actor A;
 
-	if( Instigator!=None )
-	{
-		A = Spawn(HitEffectType,,,mHitLocation);
-		if( A!=None )
-			A.RemoteRole = ROLE_None;
-	}
-
-	CheckForSplash();
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+	if (Level.NetMode == NM_DedicatedServer)
+		return;
 
 	if (mTracer == None)
 		mTracer = Spawn(mTracerClass);
 
-	if( mTracer != None )
+	if (mTracer != None && Level.TimeSeconds > mLastTracerTime + mTracerInterval)
 	{
 		SpawnLoc = GetTracerStart();
 		mTracer.SetLocation(SpawnLoc);
 
 		hitDist = VSize(mHitLocation - SpawnLoc) - mTracerPullback;
 
-		SpawnDir = Normal(mHitLocation - SpawnLoc);
+		// If we have a hit but the hit location has not changed
+		if(mHitLocation == mOldHitLocation)
+			SpawnDir = vector( Instigator.GetViewRotation() );
+		else SpawnDir = Normal(mHitLocation - SpawnLoc);
 
 		if(hitDist > mTracerMinDistance)
 		{
@@ -145,7 +118,9 @@ simulated function AddHitFX()
 
 			mTracer.SpawnParticle(1);
 		}
+		mLastTracerTime = Level.TimeSeconds;
 	}
+	mOldHitLocation = mHitLocation;
 }
 
 function Destroyed()
@@ -171,8 +146,6 @@ simulated function vector GetTracerStart()
 	if ( (p != None) && p.IsFirstPerson() && p.Weapon != None )
 		return p.Weapon.GetEffectStart();
 
-	if( Instigator!=None && (Level.TimeSeconds-LastRenderTime)>2 )
-		Return Instigator.Location;
 	// 3rd person
 	if ( mMuzFlash3rd != None )
 		return mMuzFlash3rd.Location;
@@ -181,32 +154,11 @@ simulated function vector GetTracerStart()
 
 function UpdateHit(Actor HitActor, vector HitLocation, vector HitNormal)
 {
-<<<<<<< HEAD
-	local vector V;
-
-	if( Level.NetMode!=NM_StandAlone ) // Skip some processing on single player games
-	{
-		V.X = int(HitLocation.X);
-		V.Y = int(HitLocation.Y);
-		V.Z = int(HitLocation.Z);
-		if( OlComprVect==V ) // Make sure it dosent replicate same location twice.
-			V.Z+=1;
-		OlComprVect = V;
-		NetUpdateTime = Level.TimeSeconds - 1;
-	}
-	if( Level.NetMode!=NM_DedicatedServer )
-	{
-		mHitLocation = HitLocation;
-		AddHitFX();
-	}
-	mHitLocation = V;
-=======
+	NetUpdateTime = Level.TimeSeconds - 1;
 	SpawnHitCount++;
 	mHitLocation = HitLocation;
 	mHitActor = HitActor;
 	mHitNormal = HitNormal;
-	NetUpdateTime = Level.TimeSeconds - 1;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated event ThirdPersonEffects()
@@ -216,26 +168,9 @@ simulated event ThirdPersonEffects()
 	if ( (Level.NetMode == NM_DedicatedServer) || (Instigator == None) )
 		return;
 
-<<<<<<< HEAD
-=======
-		// new Trace FX - Ramm
-	if (FiringMode == 0)
-	{
-		if ( OldSpawnHitCount != SpawnHitCount )
-		{
-			OldSpawnHitCount = SpawnHitCount;
-			GetHitInfo();
-			PC = Level.GetLocalPlayerController();
-			if ( ((Instigator != None) && (Instigator.Controller == PC)) || (VSize(PC.ViewTarget.Location - mHitLocation) < 4000) )
-			{
-				Spawn(HitEffectType,mHitActor,, mHitLocation, Rotator(mHitNormal));
-				CheckForSplash();
-				AddHitFX();
-			}
-		}
-	}
 
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+
+  
   	if ( FlashCount>0 )
 	{
 		if( KFPawn(Instigator)!=None )
@@ -245,15 +180,42 @@ simulated event ThirdPersonEffects()
 			else KFPawn(Instigator).StartFiringX(bHeavy,bAltRapidFire,GetThirdPersonAnim());
 		}
 		PC = Level.GetLocalPlayerController();
+		if ( OldSpawnHitCount != SpawnHitCount )
+		{
+			OldSpawnHitCount = SpawnHitCount;
+			GetHitInfo();
+			PC = Level.GetLocalPlayerController();
+			if ( (Instigator.Controller == PC) || (VSize(PC.ViewTarget.Location - mHitLocation) < 2000) )
+			{
+				if ( FiringMode == 0 )
+					Spawn(HitEffectType,,, mHitLocation, rotator(mHitLocation - (Instigator.Location + Instigator.EyePosition())));
+				else
+					Spawn(HitEffectType,,, mHitLocation, rotator(mHitLocation - (Instigator.Location + Instigator.EyePosition())));
+				CheckForSplash();
+			}
+		}
 
 		if ( (Level.TimeSeconds - LastRenderTime > 0.2) && (Instigator.Controller != PC) )
 			return;
 
 		WeaponLight();
-<<<<<<< HEAD
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+		if (FiringMode == 0)
+		{
+			mTracerInterval = mTracerIntervalPrimary;
+			mRollInc = 65536.f*3.f;
+		}
+		else
+		{
+			mTracerInterval = mTracerIntervalSecondary;
+			mRollInc = 65536.f;
+		}
+
+		if ( Level.bDropDetail || Level.DetailMode == DM_Low )
+			mTracerInterval *= 2.0;
+
+		UpdateTracer();
+
 		DoFlashEmitter();
 
 		if ( (mShellCaseEmitter == None) && (Level.DetailMode != DM_Low) && !Level.bDropDetail )
@@ -304,19 +266,6 @@ simulated function DoFlashEmitter()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	mTracerPullback=50.000000
-	mTracerSpeed=7500.000000
-	HitEffectType=Class'KFMod.KFHitEffect'
-	WeaponIdleMovementAnim="Idle_Rifle"
-	LightType=LT_Steady
-	LightEffect=LE_NonIncidence
-	LightHue=30
-	LightSaturation=150
-	LightBrightness=255.000000
-	LightRadius=10.000000
-	LightPeriod=3
-=======
      mTracerPullback=50.000000
      mTracerSpeed=7500.000000
      HitEffectType=Class'KFMod.KFHitEffect'
@@ -328,5 +277,4 @@ defaultproperties
      LightBrightness=255.000000
      LightRadius=10.000000
      LightPeriod=3
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

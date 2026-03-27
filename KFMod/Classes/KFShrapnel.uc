@@ -78,25 +78,13 @@ function Tick( float DeltaTime )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	VelocityDecayAmount=3500.000000
-	MinSpeed=300.000000
-	GlowTime=0.800000
-	Speed=3500.000000
-	MaxSpeed=4000.000000
-	Damage=25.000000
-	MyDamageType=Class'KFMod.DamTypeFrag'
-	DrawScale=5.000000
-	AmbientGlow=40
-=======
-    VelocityDecayAmount=3500.000000
-    MinSpeed=300.000000
-    GlowTime=0.800000
-    Speed=3500.000000
-    MaxSpeed=4000.000000
-    Damage=25.000000
-    MyDamageType=Class'KFMod.DamTypeFrag'
-    DrawScale=5.000000
-    AmbientGlow=40
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     VelocityDecayAmount=3500.000000
+     MinSpeed=300.000000
+     GlowTime=0.800000
+     Speed=3500.000000
+     MaxSpeed=4000.000000
+     Damage=25.000000
+     MyDamageType=Class'KFMod.DamTypeFrag'
+     DrawScale=5.000000
+     AmbientGlow=40
 }

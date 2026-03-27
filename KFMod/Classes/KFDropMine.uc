@@ -170,22 +170,22 @@ event Trigger( Actor Other, Pawn EventInstigator )
 
 defaultproperties
 {
-	ExplosionDamage=600
-	DamageRadius=150.000000
-	MomentumFloat=200000.000000
-	ShrapnelClass=Class'KFMod.KFShrapnel'
-	ChuckVelocity=(Z=900.000000)
-	BlowupEffect=Class'KFMod.KFNadeExplosion'
-	BlowupSound=Sound'ONSVehicleSounds-S.Tank.TankFire01'
-	DrawType=DT_StaticMesh
-	StaticMesh=StaticMesh'PatchStatics.Mine'
-	bHidden=False
-	bOrientOnSlope=True
-	Physics=PHYS_Falling
-	RemoteRole=ROLE_SimulatedProxy
-	DrawScale=0.450000
-	SurfaceType=EST_Metal
-	CollisionRadius=15.000000
-	CollisionHeight=3.000000
-	bCollideWorld=True
+     ExplosionDamage=600
+     DamageRadius=150.000000
+     MomentumFloat=200000.000000
+     ShrapnelClass=Class'KFMod.KFShrapnel'
+     ChuckVelocity=(Z=900.000000)
+     BlowupEffect=Class'KFMod.KFNadeExplosion'
+     BlowupSound=Sound'ONSVehicleSounds-S.Tank.TankFire01'
+     DrawType=DT_StaticMesh
+     StaticMesh=StaticMesh'PatchStatics.Mine'
+     bHidden=False
+     bOrientOnSlope=True
+     Physics=PHYS_Falling
+     RemoteRole=ROLE_SimulatedProxy
+     DrawScale=0.450000
+     SurfaceType=EST_Metal
+     CollisionRadius=15.000000
+     CollisionHeight=3.000000
+     bCollideWorld=True
 }

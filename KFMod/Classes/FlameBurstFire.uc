@@ -1,10 +1,6 @@
 //
 //=============================================================================
-<<<<<<< HEAD
 class FlameBurstFire extends CrossbowFire ;
-=======
-class FlameBurstFire extends CrossbowFire;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 var byte FlockIndex;
 var int MaxLoad;
@@ -71,62 +67,24 @@ function DoFireEffect()
 	}
 }
 
-function float MaxRange()
-{
-<<<<<<< HEAD
-    return 1500;
-=======
-    return 2000;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-}
-
 defaultproperties
 {
-<<<<<<< HEAD
-	MaxLoad=3
-	EffectiveRange=1500.000000
-	ProjSpawnOffset=(X=0.000000)
-	bSplashDamage=True
-	bRecommendSplashDamage=True
-	bAttachSmokeEmitter=True
-	TransientSoundVolume=95.000000
-	TransientSoundRadius=500.000000
-	FireSound=Sound'KFWeaponSound.FlameThrowerFire'
-	FireRate=0.070000
-	AmmoClass=Class'KFMod.FlameAmmo'
-	ShakeRotMag=(X=0.000000,Y=0.000000,Z=0.000000)
-	ShakeRotRate=(X=0.000000,Y=0.000000,Z=0.000000)
-	ShakeOffsetMag=(X=0.000000,Y=0.000000,Z=0.000000)
-	ShakeOffsetRate=(X=0.000000,Y=0.000000,Z=0.000000)
-	ProjectileClass=Class'KFMod.FlameTendril'
-	BotRefireRate=0.070000
-	FlashEmitterClass=Class'KFMod.KFFlameMuzzFlash'
-	aimerror=0.000000
-	Spread=0.000000
-	SpreadStyle=SS_Random
-=======
-    MaxLoad=3
-    ProjSpawnOffset=(X=65.000000,Y=10.000000,Z=-15.000000)
-    bSplashDamage=True
-    bRecommendSplashDamage=True
-    bAttachSmokeEmitter=True
-    TransientSoundVolume=95.000000
-    TransientSoundRadius=500.000000
-    FireSound=Sound'KFWeaponSound.FlameThrowerFire'
-    FireRate=0.070000
-    AmmoClass=Class'KFMod.FlameAmmo'
-    ShakeRotMag=(X=0.000000,Y=0.000000,Z=0.000000)
-    ShakeRotRate=(X=0.000000,Y=0.000000,Z=0.000000)
-    ShakeOffsetMag=(X=0.000000,Y=0.000000,Z=0.000000)
-    ShakeOffsetRate=(X=0.000000,Y=0.000000,Z=0.000000)
-    ProjectileClass=Class'KFMod.FlameTendril'
-    BotRefireRate=0.990000
-    FlashEmitterClass=Class'KFMod.KFFlameMuzzFlash'
-    aimerror=0.000000
-    Spread=0.000000
-    SpreadStyle=SS_Random
-    bWaitForRelease=False
-    ViewPunchDamping=4.000000
-    ViewPunchSpring=50.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     MaxLoad=3
+     ProjSpawnOffset=(X=0.000000)
+     bAttachSmokeEmitter=True
+     TransientSoundVolume=95.000000
+     TransientSoundRadius=500.000000
+     FireSound=Sound'KFWeaponSound.FlameThrowerFire'
+     FireRate=0.070000
+     AmmoClass=Class'KFMod.FlameAmmo'
+     ShakeRotMag=(X=0.000000,Y=0.000000,Z=0.000000)
+     ShakeRotRate=(X=0.000000,Y=0.000000,Z=0.000000)
+     ShakeOffsetMag=(X=0.000000,Y=0.000000,Z=0.000000)
+     ShakeOffsetRate=(X=0.000000,Y=0.000000,Z=0.000000)
+     ProjectileClass=Class'KFMod.FlameTendril'
+     BotRefireRate=0.070000
+     FlashEmitterClass=Class'KFMod.KFFlameMuzzFlash'
+     aimerror=0.000000
+     Spread=0.000000
+     SpreadStyle=SS_Random
 }

@@ -67,18 +67,18 @@ function projectile SpawnProjectile(Vector Start, Rotator Dir)
 
 defaultproperties
 {
-	MountedCalClass=Class'KFMod.KFDropMine'
-	bWaitForRelease=False
-	TransientSoundVolume=100.000000
-	FireLoopAnim=
-	FireEndAnim=
-	PreFireAnimRate=1.750000
-	FireSound=None
-	FireRate=1.000000
-	AmmoClass=Class'KFMod.PlaceMineAmmo'
-	ShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
-	ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
-	ShakeOffsetMag=(X=9.000000,Y=9.000000,Z=9.000000)
-	ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
-	BotRefireRate=1.000000
+     MountedCalClass=Class'KFMod.KFDropMine'
+     bWaitForRelease=False
+     TransientSoundVolume=100.000000
+     FireLoopAnim=
+     FireEndAnim=
+     PreFireAnimRate=1.750000
+     FireSound=None
+     FireRate=1.000000
+     AmmoClass=Class'KFMod.PlaceMineAmmo'
+     ShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
+     ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
+     ShakeOffsetMag=(X=9.000000,Y=9.000000,Z=9.000000)
+     ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
+     BotRefireRate=1.000000
 }

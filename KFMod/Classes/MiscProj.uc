@@ -4,12 +4,9 @@ var ONSBluePlasmaFireEffect ShockBallEffect;
 var float DamageAtten;
 var sound ImpactSounds[6];
 
-<<<<<<< HEAD
 
 var Vector tempStartLoc;
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated event PreBeginPlay()
 {
     Super.PreBeginPlay();
@@ -25,10 +22,7 @@ simulated function PostBeginPlay()
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 
     SetTimer(0.4, false);
-<<<<<<< HEAD
     tempStartLoc = Location;
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function PostNetBeginPlay()
@@ -137,23 +131,6 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DamageAtten=5.000000
-	Speed=10000.000000
-	MaxSpeed=10100.000000
-	bSwitchToZeroCollision=True
-	Damage=20.000000
-	DamageRadius=12.000000
-	MomentumTransfer=40000.000000
-	MyDamageType=Class'KFMod.DamTypeShotgun'
-	ExplosionDecal=Class'KFMod.ShotgunDecal'
-	DrawType=DT_StaticMesh
-	StaticMesh=StaticMesh'WeaponStaticMesh.FlakChunk'
-	CullDistance=3000.000000
-	LifeSpan=0.034000
-	DrawScale=14.000000
-	Style=STY_Alpha
-=======
      DamageAtten=5.000000
      Speed=10000.000000
      MaxSpeed=10100.000000
@@ -169,5 +146,4 @@ defaultproperties
      LifeSpan=0.034000
      DrawScale=14.000000
      Style=STY_Alpha
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

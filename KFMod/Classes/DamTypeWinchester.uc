@@ -6,17 +6,9 @@ class DamTypeWinchester extends DamTypeKFSnipe
 
 defaultproperties
 {
-<<<<<<< HEAD
-	HeadShotDamageMult=2.000000
-	WeaponClass=Class'KFMod.Winchester'
-	DeathString="(#FF0101)%k killed %o (Winchester)."
-	FemaleSuicide="%o shot herself in the foot."
-	MaleSuicide="%o shot himself in the foot."
-=======
-     HeadShotDamageMult=2.000000
+     HeadShotDamageMult=1.300000
      WeaponClass=Class'KFMod.Winchester'
-     DeathString="ï¿½%k killed %o (Winchester)."
+     DeathString="ÿ%k killed %o (Winchester)."
      FemaleSuicide="%o shot herself in the foot."
      MaleSuicide="%o shot himself in the foot."
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -13,11 +13,11 @@ function ShowDeagleInfo(Canvas C)
 
 defaultproperties
 {
-	Weight=0.000000
-	InventoryType=Class'KFMod.PlaceMineWeapon'
-	PickupMessage="You got some mines."
-	PickupSound=Sound'PickupSounds.AssaultRiflePickup'
-	PickupForce="AssaultRiflePickup"
-	StaticMesh=StaticMesh'PatchStatics.Mine'
-	CollisionHeight=5.000000
+     Weight=0.000000
+     InventoryType=Class'KFMod.PlaceMineWeapon'
+     PickupMessage="You got some mines."
+     PickupSound=Sound'PickupSounds.AssaultRiflePickup'
+     PickupForce="AssaultRiflePickup"
+     StaticMesh=StaticMesh'PatchStatics.Mine'
+     CollisionHeight=5.000000
 }

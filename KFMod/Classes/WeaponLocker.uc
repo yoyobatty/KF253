@@ -1,159 +1,148 @@
 class WeaponLocker extends Actor
-	placeable;
+placeable;
 
-<<<<<<< HEAD
-var() float TriggerRadius, TriggerHeight;
+//var Trigger OpenTrigger;
+//var UseTrigger OnUseTrigger;
+var float TriggerRadius, TriggerHeight;
 var bool bActive, bOpen;
 var int OpenRefs;
 
-simulated event PostBeginPlay()
-{
-	local TraderTrigger OpenTrigger;
+//var() bool bUseDefaultEquipment;    //Draw equipment from the list in KFGametype?
+//var() array< string > LockerEquip;   //Usable for map-set equipment and also for
+									//holding the shit from KFGameType otherwise.
 
-	if( Level.NetMode!=NM_Client )
-	{
-		OpenTrigger = Spawn(class'TraderTrigger');
-		OpenTrigger.SetCollisionSize(TriggerRadius,TriggerHeight);
-		OpenTrigger.EffectedTrader = Self;
-	}
-
-	if( Level.NetMode!=NM_DedicatedServer )
-		LoopAnim('Idle');
-=======
-//var() float TriggerRadius, TriggerHeight;
-var bool bActive, bOpen;
-var int OpenRefs;
-var ShopVolume Shop;
-var ShadowProjector PlayerShadow;
-var float NextLightUpdateTime; // throttle scripted updates
+//var array< class<GUIBuyable> > LockerClasses;    //Stuff the designers don't see
+											//what slinky DOESN'T WANT YOU TO KNOW!!!
 
 simulated event PostBeginPlay()
 {
-	Super.PostBeginPlay();
-	if( Level.NetMode!=NM_DedicatedServer )
-		LoopAnim('Idle',,,0);
 
-	foreach VisibleCollidingActors(class'ShopVolume', Shop, 1000)
-	{
-		Shop.MyTrader = self;
-	}
+	local Trigger OpenTrigger;
+    local UseTrigger OnUseTrigger;
 
-	if (bActorShadows &&(Level.NetMode != NM_DedicatedServer))
-	{
-		PlayerShadow = Spawn(class'ShadowProjectorMid',Self,'',Location);
-		PlayerShadow.ShadowActor = self;
-		PlayerShadow.LightDirection = GetNearbyLightDirection();
-		PlayerShadow.LightDistance = VSize(Location - (Location - PlayerShadow.LightDirection * 500));
-		PlayerShadow.MaxTraceDistance = 500;
-		PlayerShadow.InitShadow();
-		PlayerShadow.bShadowActive = true;
-	}
+    OpenTrigger = Spawn(class'Trigger');
+	OpenTrigger.Event = Tag;
+	OpenTrigger.TriggerType = TT_LivePlayerProximity;
+	OpenTrigger.SetCollisionSize(TriggerRadius,TriggerHeight);
+
+	OnUseTrigger = Spawn(class'UseTrigger');
+	OnUseTrigger.Event = Tag;
+	OnUseTrigger.SetCollisionSize(TriggerRadius,TriggerHeight);
+
+	LoopAnim('Idle');
+
 }
 
-function Vector GetNearbyLightDirection()
+/*
+function InitItems()
 {
-	local Light NearbyLight;
-	local vector LightDir;
-	local float ClosestDist, Dist;
 
-	ClosestDist = 500.f;
-	foreach RadiusActors(class'Light', NearbyLight, 500.f)
+    local int i,a,counter;
+	//local class<GUIBuyable> newitem;
+
+	//log("Init items.",'KFMessage');
+
+	//If we want to use the defaultequipment
+	// TODO: Is this still needed now that equipment is specified in the gametype?
+	if(bUseDefaultEquipment)
 	{
-		if(!FastTrace(Location, NearbyLight.Location))
-			continue;
-		Dist = VSize(NearbyLight.Location - Location);
-		if (Dist < ClosestDist)
-		{
-			ClosestDist = Dist;
-			LightDir = Normal(NearbyLight.Location - Location);
-		}
+	    LockerEquip.Remove(0,LockerEquip.Length);  //Just in case some retard mapper doesn't know what he's doing
+	    for(i=0;i<KFGameType(Level.Game).MAX_BUYITEMS;i++)
+	    {
+	        LockerEquip.Insert(0,1);
+	        LockerEquip[0] = KFGameType(Level.Game).BuylistItemNames[i];
+	    }
 	}
-	if(LightDir.Z < 0.3)
-		LightDir.Z = 0.3;
-	if (ClosestDist < 500.f)
-		return LightDir;
-	else
-		return Normal(vect(1,1,3));
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+
+	for(a=0;a<LockerEquip.Length;a++)
+	{
+	    newitem = class<GUIBuyable>(DynamicLoadObject(LockerEquip[a],class'Class'));
+	    if(newitem == None)
+	        continue;
+		LockerClasses[counter] = newitem;
+		counter++;
+	}
+
+}
+*/
+event Trigger( Actor Other, Pawn EventInstigator )
+{
+   //if(EventInstigator == None)
+	   //log("EVENTINSTIGATOR IS NONE");
+   if(KFHumanPawn(EventInstigator) == None)
+   {
+	   //log("TRIGGER:  NOT HUMAN PAWN"@EventInstigator.Class);
+	   return;
+   }
+   if(UseTrigger(Other) != None && EventInstigator.Controller.IsA('KFPlayerController') && bOpen)
+   {
+       KFPlayerController(EventInstigator.Controller).ShowBuyMenu(string(Tag),KFHumanPawn(EventInstigator).MaxCarryWeight);
+	   return;
+   } else if(bActive)
+   {
+	  // log("OPENING");
+	   SetOpen(true);
+	    //if ( KFHumanPawn(Other) != none && bOpen == true)
+	    //TODO: Find safe way to get this onto client screen
+	    if(PlayerController(EventInstigator.Controller)!=none)
+           PlayerController(EventInstigator.Controller).ClientMessage("Press 'USE' key to TRADE", 'KFCriticalEvent');
+
+   }
+   // TODO: is there a time when they shouldn't be allowed to shop?
+   //if(KFInvasionBot(EventInstigator.Controller)!=none)
+   //{
+   //  KFInvasionBot(EventInstigator.Controller).DoTrading();
+   //}
+}
+
+event UnTrigger(Actor Other,Pawn EventInstigator)
+{
+   if(KFHumanPawn(EventInstigator) == None || !bActive)
+	   return;
+   //log("CLOSING");
+   SetOpen(false);
 }
 
 function SetOpen(bool bToOpen)
 {
 	switch(bToOpen)
 	{
-	case false:
-		OpenRefs--;
-		if(bOpen && OpenRefs == 0)
-		{
-			if( Level.NetMode!=NM_DedicatedServer )
-<<<<<<< HEAD
-				LoopAnim('Idle');
-=======
-				LoopAnim('Idle',,,0);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-			bOpen=false;
-		}
-		break;
-	case true:
-		OpenRefs++;
-		if(!bOpen)
-		{
-			NetUpdateTime = Level.TimeSeconds - 1;
-			bClientTrigger = !bClientTrigger;
-			if( Level.NetMode!=NM_DedicatedServer )
-				ClientTrigger();
-			bOpen=true;
-		}
-		break;
+		case false:
+			 OpenRefs--;
+			 //log("Closing. OpenRefs"@OpenRefs,'KFMessage');
+			 if(bOpen && OpenRefs == 0)
+			 {
+				 LoopAnim('Idle');
+				 //FreezeAnimAt(0.65);
+				 bOpen=false;
+			 }
+			 break;
+		case true:
+			 OpenRefs++;
+			 //log("Opening.  OpenRefs"@OpenRefs,'KFMessage');
+			if(!bOpen)
+			 {
+				 PlayAnim('Gesture');
+				  //FreezeAnimAt(0.65);
+				 bOpen=true;
+			 }
+			 break;
 	}
-}
-<<<<<<< HEAD
-simulated function AnimEnd( int Channel )
-{
-	if( Level.NetMode!=NM_DedicatedServer )
-		LoopAnim('Idle');
-}
-simulated event ClientTrigger()
-{
-	PlayAnim('Gesture');
-=======
-
-simulated function AnimEnd( int Channel )
-{
-	if( Level.NetMode!=NM_DedicatedServer )
-		LoopAnim('Idle',,,0);
-}
-simulated event ClientTrigger()
-{
-	PlayAnim('Gesture',,,1);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
-<<<<<<< HEAD
-	TriggerRadius=150.000000
-	TriggerHeight=100.000000
-=======
-	//TriggerRadius=150.000000
-	//TriggerHeight=100.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-	bActive=True
-	DrawType=DT_Mesh
-	bAlwaysRelevant=True
-	bNetInitialRotation=True
-	RemoteRole=ROLE_SimulatedProxy
-	NetUpdateFrequency=0.200000
-	Mesh=SkeletalMesh'KFMapObjects.Trader'
-	DrawScale=0.500000
-	CollisionRadius=15.000000
-	CollisionHeight=50.000000
-	bCollideActors=True
-	bCollideWorld=True
-	bBlockActors=True
-	bBlockKarma=True
-<<<<<<< HEAD
-=======
-	bActorShadows=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     TriggerRadius=150.000000
+     TriggerHeight=100.000000
+     bActive=True
+     DrawType=DT_Mesh
+     bReplicateAnimations=True
+     Mesh=SkeletalMesh'KFMapObjects.Trader'
+     DrawScale=0.500000
+     CollisionRadius=15.000000
+     CollisionHeight=50.000000
+     bCollideActors=True
+     bCollideWorld=True
+     bBlockActors=True
+     bBlockKarma=True
 }

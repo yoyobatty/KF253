@@ -100,11 +100,6 @@ event NotifyLevelChange() // Musics don't stay over mapchanges.
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bActive=False
-	bRequiresTick=True
-=======
      bActive=False
      bRequiresTick=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

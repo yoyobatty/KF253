@@ -5,7 +5,6 @@ class KFHumanPawn extends KFPawn;
 
 #exec OBJ LOAD FILE=KFCharacters.utx
 #exec OBJ LOAD FILE=KFSoldiers.ukx
-<<<<<<< HEAD
 var float DrugBonusMovement;
 var bool bOnDrugs;
 var Emitter Blood;
@@ -44,75 +43,17 @@ var int TempScore; // temporary score.
 
 replication
 {
-=======
-
-// --- Audio/Visual ---
-var Emitter Blood;
-var Sound BreathingSound;
-var Sound MiscSound;
-var() Material InjuredOverlay, CriticalOverlay;
-
-// --- Camera/Effects ---
-var CameraEffect CameraEffectFound;
-var globalconfig bool bHitBlurEnabled;
-var bool bUsingHitBlur;
-var float StopBlurTime;
-
-// --- Player State ---
-var int ScoreCounter;
-var int AlphaAmount;
-//var PlayerController PC;
-var bool bAimingRifle;
-
-// --- Inventory/Weight ---
-var() float MaxCarryWeight;
-var float CurrentWeight;
-var() HeldWeapon RifleAtt, MeleeAtt;
-
-// --- Torch/Flashlight ---
-var() int TorchBatteryLife;
-var bool bTorchOn;
-var int TempScore;
-
-// --- Movement/Physics ---
-var() float SprintMulti;
-var() float HealthSpeedModifier;
-var bool bIsSprinting;
-
-// --- Miscellaneous ---
-var int SpeedAdjustment;
-var float BaseMeleeIncrease;
-
-// --- Crouch/Jump Parameters ---
-var float  CrouchEndTime;
-var() float JumpCrouchBonus;   // Jump height multiplier for crouching
-var() float JumpCrouchTime;
-
-replication
-{
-    reliable if (Role == ROLE_Authority)
-        bIsSprinting;
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	reliable if ( bNetDirty && (Role == Role_Authority) )
 		bAimingRifle;
 
 	reliable if ( bNetDirty && (Role == Role_Authority) && bNetOwner )
-<<<<<<< HEAD
 		CurrentWeight,MaxCarryWeight,AlphaAmount,bTorchOn,TorchBatteryLife,bOnDrugs;
-=======
-		CurrentWeight,MaxCarryWeight,AlphaAmount,bTorchOn,TorchBatteryLife;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	reliable if(RemoteRole == ROLE_AutonomousProxy)
 		DoHitCamEffects, StopHitCamEffects;
 
 	reliable if(Role < ROLE_Authority)
-<<<<<<< HEAD
 		SetAiming;
-=======
-		SetAiming,ServerStartSprintKF,ServerStopSprintKF;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function CheckCarryWeight()
@@ -124,7 +65,7 @@ function CheckCarryWeight()
 	{
 		For( I=Inventory; I!=None; I=I.Inventory )
 		{
-			if( KFWeapon(I)!=None && !KFWeapon(I).bKFNeverThrow )
+			if( KFWeapon(I)!=None )
 			{
 				I.Velocity = Velocity;
 				I.DropFrom(Location+VRand()*10);
@@ -139,53 +80,27 @@ event PreBeginPlay()
 {
 	Super.PreBeginPlay();
 	SetTimer(1.5,true);
-<<<<<<< HEAD
 	PC = PlayerController(Controller);
-=======
-	//PC = PlayerController(Controller);
-	PhysicsVolume.GroundFriction = 4.000000; //default is 8, this feels more natural, like there's a slight bit of slip to the floor
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 Simulated function tick(float DeltaTime)
 {
-<<<<<<< HEAD
 	super.Tick(deltaTime);
 
 	if (PC != none)
 	{
 		if (KFPlayerReplicationInfo(PC.PlayerReplicationInfo).ThreeSecondScore > 0 && AlphaAmount > 0)
-=======
-	super.Tick(DeltaTime);
-
-	if (PlayerController(Controller) != None)
-	{
-		if (KFPlayerReplicationInfo(PlayerController(Controller).PlayerReplicationInfo).ThreeSecondScore > 0 && AlphaAmount > 0)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			AlphaAmount -=2;
     
 		if (AlphaAmount <= 0)
 		{
-<<<<<<< HEAD
 			KFPlayerReplicationInfo(PC.PlayerReplicationInfo).ThreeSecondScore = 0;
-=======
-			KFPlayerReplicationInfo(PlayerController(Controller).PlayerReplicationInfo).ThreeSecondScore = 0;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			ScoreCounter = 0;
 		}
 	}
 }
 
 
-<<<<<<< HEAD
-=======
-simulated event PhysicsVolumeChange( PhysicsVolume NewVolume )
-{
-    Super.PhysicsVolumeChange(NewVolume);
-	NewVolume.GroundFriction = 4.000000; //default is 8, this feels more natural, like there's a slight bit of slip to the floor
-}
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function SetAiming(bool IsAiming)
 {
 	bAimingRifle = IsAiming;
@@ -199,7 +114,7 @@ function Timer()
 	local PlayerController PCC;//,Owner;
 
 	if (BurnDown > 0)
-		TakeFireDamage(LastBurnDamage + rand(2) + 3 , BurnInstigator);
+		TakeFireDamage(LastBurnDamage + rand(2) + 3 , LastDamagedBy);
 	else
 	{
 		RemoveFlamingEffects();
@@ -207,7 +122,6 @@ function Timer()
 	}
 
 	// Flashlight Drain
-<<<<<<< HEAD
 	if (Weapon != none)
  	{
 		if(KFWeapon(Weapon).FlashLight != none)
@@ -217,28 +131,6 @@ function Timer()
 				TorchBatteryLife -= 10;
 			else if (!KFWeapon(Weapon).FlashLight.bHasLight && TorchBatteryLife < default.TorchBatteryLife)
 				TorchBatteryLife += 20;
-=======
-	if(Weapon != none && KFWeapon(Weapon).FlashLight != none)
-	{
-		// Increment / Decrement battery life
-		if (KFWeapon(Weapon).FlashLight.bHasLight && TorchBatteryLife > 0)
-			TorchBatteryLife -= 10;
-		else if (!KFWeapon(Weapon).FlashLight.bHasLight && TorchBatteryLife < default.TorchBatteryLife)
-		{
-			TorchBatteryLife += 20;
-			if ( TorchBatteryLife > default.TorchBatteryLife )
-			{
-				TorchBatteryLife = default.TorchBatteryLife;
-			}
-		}
-	}
-	else if( TorchBatteryLife<default.TorchBatteryLife )
-	{
-		TorchBatteryLife += 20;
-		if ( TorchBatteryLife > default.TorchBatteryLife )
-		{
-			TorchBatteryLife = default.TorchBatteryLife;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 
@@ -247,10 +139,7 @@ function Timer()
 		PCC = PlayerController(Controller);
 		if(PCC != None )
 		{
-<<<<<<< HEAD
 			bOnDrugs = false;
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			if(bUsingHitBlur && Level.TimeSeconds >= StopBlurTime)
 				StopHitCamEffects();
 			// Update for the scoreboards.
@@ -273,7 +162,6 @@ function Timer()
 				KFWeapon(Weapon).AccuracyUpdate(vsize(Velocity));
 		}
 
-<<<<<<< HEAD
 
 
 		// Experience Level relate stuff .
@@ -286,8 +174,6 @@ function Timer()
 		else if (Weapon == none || !KfWeapon(Weapon).bSpeedMeUp)
 			SpeedAdjustment = 0;
 		groundspeed = ((FMax(140,Health*2)) - (2 * CurrentWeight) + SpeedAdjustment)*GetVeteran().Static.GetMovementSpeedModifier();
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 
 	// TODO: WTF? central here
@@ -299,10 +185,7 @@ function Timer()
 	}
 	else if (Weapon == none)
 		IdleWeaponAnim = IdleRestAnim;
-<<<<<<< HEAD
 		
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 }
 
@@ -311,16 +194,8 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 	if( Controller!=None && Controller.bGodMode )
 		return;
 
-<<<<<<< HEAD
 	Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
 
-=======
-	if( bDeleteMe || Health <= 0 )
-		return;
-
-	Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
-	//log("TakeDamage: "$self$" Damage: "$Damage$" InstigatedBy: "$instigatedBy$" HitLocation: "$hitlocation$" Momentum: "$momentum$" DamageType: "$damageType);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	//Bloody Overlays
 	if ((Health-Damage) <= 0.5*HealthMax)
 		SetOverlayMaterial(InjuredOverlay,0, true);
@@ -333,67 +208,54 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 		DoHitCamEffects(momentum);
 }                               
 
-function TakeBileDamage()
+simulated function TakeBileDamage()
 {
-	local vector BileVect;
+  local vector BileVect;
 
-<<<<<<< HEAD
-	super.TakeBileDamage();
-=======
-	local int RandBileDamage;
-    local int actualDamage;
-    local vector HitMomentum;
+  super.TakeBileDamage();
 
-	RandBileDamage = 2+Rand(2);
+  //TODO: move this sanity check to DoHitCamEffect?
+  if(Controller == none || PlayerController(Controller) == None)
+  {
+    //Log("No controller found. Returning...");
+    return;
+  }
 
-    if (bDeleteMe || Health <= 0)
-        return;
-
-    Super(XPawn).TakeDamage(RandBileDamage, BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
-    healthtoGive-=5;
-
-    HitMomentum = vect(0,0,0);
-    actualDamage = Level.Game.ReduceDamage(RandBileDamage, self, BileInstigator, Location, HitMomentum, class'DamTypeVomit');
-
-    if( actualDamage <= 0 )
-    {
-        return;
-    }
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-
-	//TODO: move this sanity check to DoHitCamEffect?
-	if(Controller == none || PlayerController(Controller) == None)
+  if(Controller.bGodMode)
 		return;
 
-	if(Controller.bGodMode)
-		return;
+  BileVect.X=frand()*400.0-200.0;
+  BileVect.Y=frand()*200.0-100.0;
+  BileVect.Z=frand()*400.0-200.0;
 
-	BileVect.X=frand()*400.0-200.0;
-	BileVect.Y=frand()*200.0-100.0;
-	BileVect.Z=frand()*400.0-200.0;
-	DoHitCamEffects( BileVect );
+  DoHitCamEffects( BileVect );
+
+
 }
 
 simulated function DoHitCamEffects(vector Momentum)
 {
-	StopBlurTime = Level.TimeSeconds+3;
-	if(!bUsingHitBlur)
-	{
+  StopBlurTime = Level.TimeSeconds+3;
+  if(!bUsingHitBlur)
+  {
 		//reset to false if need be.
-		SetTimer(1.5,true);
+	
 
-		if( !PlatformIsMacOS() && !PlatformIsUnix())
-			FindCameraEffect(class 'KFmod.UnderWaterBlur');
 
-		// this cast is OK as long as this is only called from TakeDamage,
-		// where the controller is tested before this function is called
-		PlayerController(Controller).ShakeView( 6000 * Normal(vector(rotator(Momentum))) , 15000 * Normal(vector(rotator(Momentum))),
+    SetTimer(1.5,true);
+
+	if(!PlatformIsMacOS() && !PlatformIsUnix())
+		FindCameraEffect(class 'KFmod.UnderWaterBlur');
+    // this cast is OK as long as this is only called from TakeDamage,
+    // where the controller is tested before this function is called
+    PlayerController(Controller).ShakeView( 6000 * Normal(vector(rotator(Momentum))) , 15000 * Normal(vector(rotator(Momentum))),
 			   2.0,
 			   60 * (Normal(Momentum)/30),
 			   vect(1,1,1)/200,
 			   1);
-		bUsingHitBlur = true;
-	}
+    bUsingHitBlur = true;
+
+  }
 }
 
 simulated function StopHitCamEffects()
@@ -406,18 +268,10 @@ simulated function StopHitCamEffects()
 	}
 }
 
-<<<<<<< HEAD
 simulated function died(Controller Killer, class<DamageType> damageType, vector HitLocation)
 {
 	StopHitCamEffects();
 	super.Died(Killer, damageType, HitLocation);
-=======
-simulated function Died(Controller Killer, class<DamageType> damageType, vector HitLocation)
-{
-	StopHitCamEffects();
-	log("Died: "$self$" Killer: "$Killer$" DamageType: "$damageType$" HitLocation: "$HitLocation);
-	Super.Died(Killer, damageType, HitLocation);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 simulated function CameraEffect FindCameraEffect(class<CameraEffect> CameraEffectClass)
@@ -528,7 +382,6 @@ simulated function NextWeapon()
         Weapon.PutDown();
 }
 
-<<<<<<< HEAD
 //This is a terribly ugly hack which allows us to silently give
 //weapons to pawns in the case of buy menu consumables
 function SilentGiveWeapon(string aClassName )
@@ -548,10 +401,16 @@ function SilentGiveWeapon(string aClassName )
 	    newWeapon.GiveTo(self);
 }
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function bool AddInventory( inventory NewItem )
 {
+	if(KFWeapon(NewItem)!=none)
+	{
+		if( (CurrentWeight + KFWeapon(NewItem).Weight ) > MaxCarryWeight )
+		{
+			KFWeapon(NewItem).DropFrom(Location);
+			return false;
+		}
+	}
 	if( !super.AddInventory(NewItem) )
 		return false;
 
@@ -563,7 +422,6 @@ function bool AddInventory( inventory NewItem )
 // Remove Item from this pawn's inventory, if it exists.
 function DeleteInventory( inventory Item )
 {
-<<<<<<< HEAD
 	if(KFWeapon(Item)!=none)
 		CurrentWeight -= KFWeapon(Item).Weight;
 	super.DeleteInventory(Item);
@@ -599,310 +457,81 @@ function Drugs()
 
 }
 
-=======
-	local Inventory I;
-	local bool bFoundItem;
-
-	if ( Role != ROLE_Authority )
-	{
-		return;
-	}
-
-	for ( I = Inventory; I != none; I = I.Inventory )
-	{
-		if ( I == Item )
-		{
-			bFoundItem = true;
-		}
-	}
-
-	if ( bFoundItem )
-	{
-        if ( KFWeapon(Item) != none )
-		{
-			CurrentWeight -= KFWeapon(Item).Weight;
-		}
-	}
-
-	super.DeleteInventory(Item);
-}
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function AddDefaultInventory()
 {
-	local int i;
+    local int i;
+    
+    if (KFSPGameType(Level.Game) != none && !KFSPGameType(Level.Game).bDefKFEquips)
+     return;
 
-	if( KFSPGameType(Level.Game)!=None )
-	{
-		Level.Game.AddGameSpecificInventory(self);
-		if ( inventory != None )
-			inventory.OwnerEvent('LoadOut');
-		Return;
-	}
-	if ( IsLocallyControlled() )
-	{
-		for ( i=0; i<16; i++ )
-			if ( RequiredEquipment[i] != "" )
-				CreateInventory(RequiredEquipment[i]);
+    if ( IsLocallyControlled() )
+    {
+        for ( i=0; i<16; i++ )
+            if ( RequiredEquipment[i] != "" )
+                CreateInventory(RequiredEquipment[i]);
 
-		for ( i=0; i<16; i++ )
-			if ( (SelectedEquipment[i] == 1) && (OptionalEquipment[i] != "") )
-				CreateInventory(OptionalEquipment[i]);
+        for ( i=0; i<16; i++ )
+            if ( (SelectedEquipment[i] == 1) && (OptionalEquipment[i] != "") )
+                CreateInventory(OptionalEquipment[i]);
 
-		Level.Game.AddGameSpecificInventory(self);
-	}
-	else
-	{
-		Level.Game.AddGameSpecificInventory(self);
+        Level.Game.AddGameSpecificInventory(self);
+    }
+    else
+    {
+        Level.Game.AddGameSpecificInventory(self);
 
-		for ( i=15; i>=0; i-- )
-			if ( (SelectedEquipment[i] == 1) && (OptionalEquipment[i] != "") )
-				CreateInventory(OptionalEquipment[i]);
+        for ( i=15; i>=0; i-- )
+            if ( (SelectedEquipment[i] == 1) && (OptionalEquipment[i] != "") )
+                CreateInventory(OptionalEquipment[i]);
 
-		for ( i=15; i>=0; i-- )
-			if ( RequiredEquipment[i] != "" )
-				CreateInventory(RequiredEquipment[i]);
-	}
+        for ( i=15; i>=0; i-- )
+            if ( RequiredEquipment[i] != "" )
+                CreateInventory(RequiredEquipment[i]);
+    }
 
-	// HACK FIXME
-	if ( inventory != None )
-		inventory.OwnerEvent('LoadOut');
+    // HACK FIXME
+    if ( inventory != None )
+        inventory.OwnerEvent('LoadOut');
 
-	Controller.ClientSwitchToBestWeapon();
+    Controller.ClientSwitchToBestWeapon();
 }
 function bool CanCarry( float Weight )
 {
-<<<<<<< HEAD
 	Return ((CurrentWeight+Weight)<=MaxCarryWeight);
-}
-function bool PerformDodge(eDoubleClickDir DoubleClickMove, vector Dir, vector Cross)
-{
-	Return False;
-=======
-	return ((CurrentWeight+Weight)<=MaxCarryWeight);
-}
-
-function bool PerformDodge(eDoubleClickDir DoubleClickMove, vector Dir, vector Cross)
-{
-	return false;
-}
-
-function bool ShowStalkers()
-{
-	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
-	{
-		return KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.Static.ShowStalkers();
-	}
-
-	return false;
-}
-
-simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
-{
-    local float HealthMod, SprintMod, WeightMod;
-	local float EncumbrancePercentage;
-	local float InitialCrouchSpeed, CrouchDecayRate;
-
-    super.ModifyVelocity(DeltaTime, OldVelocity);
-
-	if (Controller == none)
-		return;
-	
-	// Calculate encumbrance, but cap it to the maxcarryweight so when we use dev weapon cheats we don't move mega slow
-	EncumbrancePercentage = (FMin(CurrentWeight, MaxCarryWeight)/MaxCarryWeight);
-	// Calculate the weight modifier to speed
-	WeightMod = (1.0 - (EncumbrancePercentage * 0.13));
-	// Calculate the health modifier to speed
-	HealthMod = ((Health/HealthMax) * HealthSpeedModifier) + (1.0 - HealthSpeedModifier);
-	if(bIsSprinting || Physics == PHYS_Falling)
-	{
-		if(!bIsCrouched)
-			SprintMod = SprintMulti;
-		else SprintMod = 1.0;
-		InitialCrouchSpeed = 1.5;
-		CrouchDecayRate = 1.0;
-	}
-	else 
-	{
-		SprintMod = 1.0;
-		InitialCrouchSpeed = 1.25;
-		CrouchDecayRate = 1.5;
-	}
-	GroundSpeed = default.GroundSpeed * HealthMod;
-	GroundSpeed *= WeightMod;
-	GroundSpeed *= SprintMod;
-
-	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
-	{
-		GroundSpeed *= KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetMovementSpeedModifier();
-		if(Weapon != none && KFWeapon(Weapon).bMeleeWeapon)
-			GroundSpeed += (default.GroundSpeed * (BaseMeleeIncrease + KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetMeleeMovementSpeedModifier()));
-	}
-
-	// Check if the player is crouching
-	if (bIsCrouched)
-	{
-		// Gradually reduce the ground speed towards the crouch speed
-		//Check if we are falling too, as we wouldn't want to reduce or crouch multiplayer if still falling
-		if(Physics != PHYS_Falling)
-			CrouchedPct = FClamp(CrouchedPct - (DeltaTime * CrouchDecayRate), default.CrouchedPct, InitialCrouchSpeed);
-	}
-	else
-	{
-		CrouchedPct = FClamp(CrouchedPct + (DeltaTime * 200), default.CrouchedPct, InitialCrouchSpeed);
-	}
-	if(VSize(Velocity) < 1.f)
-		bIsSprinting = False;
-}
-
-event EndCrouch(float HeightAdjust)
-{	
-    CrouchEndTime = Level.TimeSeconds;
-    Super.EndCrouch(HeightAdjust);
-}
-
-//Player Jumped
-function bool DoJump( bool bUpdating )
-{
-	if ( ((Physics == PHYS_Walking) || (Physics == PHYS_Ladder) || (Physics == PHYS_Spider)) )
-	{
-		if ( Role == ROLE_Authority )
-		{
-			if ( (Level.Game != None) && (Level.Game.GameDifficulty > 2) )
-				MakeNoise(0.1 * Level.Game.GameDifficulty);
-			if ( bCountJumps && (Inventory != None) )
-				Inventory.OwnerEvent('Jumped');
-		}
-		if ( Physics == PHYS_Spider )
-			Velocity = JumpZ * Floor;
-		else if ( Physics == PHYS_Ladder )
-			Velocity.Z = 0;
-		else if ( bIsWalking )
-			Velocity.Z = Default.JumpZ;
-		else
-			Velocity.Z = JumpZ;
-		if ( (Base != None) && !Base.bWorldGeometry )
-			Velocity += Base.Velocity;
-
-        if( bIsCrouched || bWantsToCrouch || Level.TimeSeconds - CrouchEndTime < JumpCrouchTime )
-            Velocity.Z -= JumpZ * JumpCrouchBonus;
-		
-		SetPhysics(PHYS_Falling);
-		if ( !bUpdating )
-			PlayOwnedSound(GetSound(EST_Jump), SLOT_Pain, GruntVolume,,80);
-        return true;
-	}
-    return false;
-}
-
-exec simulated function StartSprintKF()
-{
-	if(!bIsSprinting && !bIsCrouched)
-		bIsSprinting = True;
-	ServerStartSprintKF();
-}
-
-function ServerStartSprintKF()
-{
-	if(!bIsSprinting && !bIsCrouched)
-		bIsSprinting = True;
-}
-
-exec simulated function StopSprintKF()
-{
-	if(bIsSprinting)
-		bIsSprinting = False;
-	ServerStopSprintKF();
-}
-
-function ServerStopSprintKF()
-{
-	if(bIsSprinting)
-		bIsSprinting = False;
-}
-
-// No more File cabinet surfing bots please!
-singular event BaseChange()
-{
-	Super.BaseChange();
-	if ( AIController(Controller)!=None && KActor(Base)!=None )
-		JumpOffPawn();
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 defaultproperties
 {
-<<<<<<< HEAD
-	BreathingSound=Sound'KFPlayerSound.Malebreath'
-	BaseMeleeIncrease=0.200000
-	MaxCarryWeight=15.000000
-	InjuredOverlay=Shader'KFCharacters.BloodiedShader'
-	CriticalOverlay=Shader'KFCharacters.BloodiedShader'
-	TorchBatteryLife=500
-	bCanDodgeDoubleJump=False
-	GruntVolume=50.000000
-	MultiJumpRemaining=0
-	MaxMultiJump=0
-	RequiredEquipment(0)="KFMod.Knife"
-	RequiredEquipment(1)="KFMod.Single"
-	RequiredEquipment(2)="KFMod.Frag"
-	RequiredEquipment(3)="KFMod.Syringe"
-	RequiredEquipment(4)="KFMod.Welder"
-	bCanDoubleJump=False
-	bCanWallDodge=False
-	GroundSpeed=230.000000
-	WaterSpeed=200.000000
-	AirSpeed=230.000000
-	AccelRate=1000.000000
-	JumpZ=325.000000
-	AirControl=0.150000
-	MaxFallSpeed=600.000000
-	BaseEyeHeight=48.000000
-	EyeHeight=48.000000
-	CrouchHeight=40.000000
-	ControllerClass=Class'KFMod.KFInvasionBot'
-	CrouchTurnRightAnim="CrouchR"
-	CrouchTurnLeftAnim="CrouchL"
-	bDramaticLighting=False
-	Mesh=SkeletalMesh'KFSoldiers.Soldier'
-	Skins(0)=Texture'KFCharacters.DavinSkin'
-	Skins(1)=Shader'KFCharacters.GasMaskShader'
-	CollisionHeight=50.000000
-=======
      BreathingSound=Sound'KFPlayerSound.Malebreath'
      BaseMeleeIncrease=0.200000
      MaxCarryWeight=15.000000
      InjuredOverlay=Shader'KFCharacters.BloodiedShader'
      CriticalOverlay=Shader'KFCharacters.BloodiedShader'
      TorchBatteryLife=500
-     GruntVolume=10.000000
+     bCanDodgeDoubleJump=False
+     GruntVolume=50.000000
+     MultiJumpRemaining=0
+     MaxMultiJump=0
      RequiredEquipment(0)="KFMod.Knife"
      RequiredEquipment(1)="KFMod.Single"
      RequiredEquipment(2)="KFMod.Frag"
      RequiredEquipment(3)="KFMod.Syringe"
      RequiredEquipment(4)="KFMod.Welder"
-	 bCanDodgeDoubleJump=False
      bCanDoubleJump=False
      bCanWallDodge=False
-	 bCanWalkOffLedges=True
-     MultiJumpRemaining=0
-     MaxMultiJump=0
-     GroundSpeed=200.000000
+     GroundSpeed=230.000000
      WaterSpeed=200.000000
-     AirSpeed=400.000000
+     AirSpeed=230.000000
+     AccelRate=1000.000000
      JumpZ=325.000000
      AirControl=0.150000
-     MaxFallSpeed=700.000000
+     MaxFallSpeed=600.000000
      BaseEyeHeight=48.000000
      EyeHeight=48.000000
-     CrouchHeight=28.000000
-	 AccelRate=750.000000
-	 SprintMulti=1.400000
-	 CrouchedPct=0.500000
-	 JumpCrouchBonus=0.15
-	 JumpCrouchTime=0.30
-	 HealthSpeedModifier=0.300000
+     CrouchHeight=40.000000
      ControllerClass=Class'KFMod.KFInvasionBot'
+     TurnLeftAnim=
+     TurnRightAnim=
      CrouchTurnRightAnim="CrouchR"
      CrouchTurnLeftAnim="CrouchL"
      bDramaticLighting=False
@@ -910,5 +539,4 @@ defaultproperties
      Skins(0)=Texture'KFCharacters.DavinSkin'
      Skins(1)=Shader'KFCharacters.GasMaskShader'
      CollisionHeight=50.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

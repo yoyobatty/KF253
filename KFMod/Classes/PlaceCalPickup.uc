@@ -13,16 +13,16 @@ function ShowDeagleInfo(Canvas C)
 
 defaultproperties
 {
-	cost=300
-	PowerValue=30
-	SpeedValue=100
-	RangeValue=60
-	Description="a Heavy belt-fed mounted machine gun."
-	ItemName="Placeable .50Cal Heavy"
-	InventoryType=Class'KFMod.PlaceCalWeapon'
-	PickupMessage="you got the .50 Cal Heavy"
-	PickupSound=Sound'PickupSounds.AssaultRiflePickup'
-	PickupForce="AssaultRiflePickup"
-	StaticMesh=StaticMesh'KillingFloorStatics.3PDeagle_Ground'
-	CollisionHeight=5.000000
+     cost=300
+     PowerValue=30
+     SpeedValue=100
+     RangeValue=60
+     Description="a Heavy belt-fed mounted machine gun."
+     ItemName="Placeable .50Cal Heavy"
+     InventoryType=Class'KFMod.PlaceCalWeapon'
+     PickupMessage="you got the .50 Cal Heavy"
+     PickupSound=Sound'PickupSounds.AssaultRiflePickup'
+     PickupForce="AssaultRiflePickup"
+     StaticMesh=StaticMesh'KillingFloorStatics.3PDeagle_Ground'
+     CollisionHeight=5.000000
 }

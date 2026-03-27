@@ -4,47 +4,99 @@ var () int CashAmount;
 var bool bDroppedCash;  // if true, its been dropped. dont randomize the amount
 var float TossTimer;
 
-function GiveCashTo( Pawn Other )
-{
-	// You all love the mental-mad typecasting XD
-	if( !bDroppedCash )
-		CashAmount = (rand(0.5 * default.CashAmount) + default.CashAmount) * (KFGameReplicationInfo(Level.GRI).GameDiff  * 0.5) ;
-	if( Other.Controller!=None && Other.Controller.PlayerReplicationInfo!=none )
-	{
-		Other.Controller.PlayerReplicationInfo.Score += CashAmount;
-		Other.Controller.PlayerReplicationInfo.Team.Score += CashAmount;
-	}
-	AnnouncePickup(Other);
-	SetRespawn();
-}
-
 //=============================================================================
 // Pickup state: this inventory item is sitting on the ground.
 auto state Pickup
 {
+	function bool ReadyToPickup(float MaxWait)
+	{
+		return true;
+	}
+
+	/* ValidTouch()
+	 Validate touch (if valid return true to let other pick me up and trigger event).
+	*/
+	function bool ValidTouch( actor Other )
+	{
+		// make sure its a live player
+		if ( (Pawn(Other) == None) || !Pawn(Other).bCanPickupInventory || (Pawn(Other).DrivenVehicle == None && Pawn(Other).Controller == None)  )
+			return false;
+
+		// Disallow instant pick up.
+		if( Instigator==Other && TossTimer>Level.TimeSeconds )
+			Return False;
+
+		// make sure not touching through wall
+		if ( !FastTrace(Other.Location, Location) )
+			return false;
+
+		// make sure game will let player pick me up
+		if(Level.Game != none && Level.Game.PickupQuery(Pawn(Other), self) )
+		{
+			TriggerEvent(Event, self, Pawn(Other));
+			return true;
+		}
+		return false;
+	}
+
 	// When touched by an actor.
 	function Touch( actor Other )
 	{
 		// If touched by a player pawn, let him pick this up.
 		if( ValidTouch(Other) )
-			GiveCashTo(Pawn(Other));
+		{
+			if (KFHumanPawn(Other) != none)
+			{
+				// You all love the mental-mad typecasting XD
+
+				if (!bDroppedCash)
+					CashAmount = (rand(0.5 * default.CashAmount) + default.CashAmount) * (KFGameReplicationInfo(Level.GRI).GameDiff  * 0.5) ;
+
+				if (KFHumanPawn(Other).Controller.PlayerReplicationInfo != none)
+				{
+					KFHumanPawn(Other).Controller.PlayerReplicationInfo.Score += CashAmount;
+					KFHumanPawn(Other).Controller.PlayerReplicationInfo.Team.Score += CashAmount;
+				}
+			}
+			AnnouncePickup(Pawn(Other));
+			SetRespawn();
+		}
 	}
-}
-state FallingPickup
-{
-	function Touch( actor Other )
+
+	// Make sure no pawn already touching (while touch was disabled in sleep).
+	function CheckTouching()
 	{
-		if( ValidTouch(Other) )
-			GiveCashTo(Pawn(Other));
+		local Pawn P;
+
+		ForEach TouchingActors(class'Pawn', P)
+			Touch(P);
 	}
-}
-State FadeOut
-{
-	function Touch( actor Other )
+
+	function Timer()
 	{
-		if( ValidTouch(Other) )
-			GiveCashTo(Pawn(Other));
+		if ( bDropped )
+			GotoState('FadeOut');
 	}
+
+	function BeginState()
+	{
+		TossTimer = Level.TimeSeconds+1;
+		UntriggerEvent(Event, self, None);
+		if ( bDropped )
+		{
+			AddToNavigation();
+			SetTimer(8, false);
+		}
+	}
+
+	function EndState()
+	{
+		if ( bDropped )
+			RemoveFromNavigation();
+	}
+
+Begin:
+	CheckTouching();
 }
 
 function AnnouncePickup( Pawn Receiver )
@@ -78,23 +130,7 @@ static function string GetLocalString(
 
 defaultproperties
 {
-<<<<<<< HEAD
-	CashAmount=40
-	RespawnTime=60.000000
-	PickupMessage="You found a wad of cash"
-	PickupSound=Sound'PatchSounds.SellItem'
-	DrawType=DT_StaticMesh
-	StaticMesh=StaticMesh'22Patch.BankNote'
-	Physics=PHYS_Falling
-	DrawScale=0.400000
-	AmbientGlow=40
-	UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
-	TransientSoundVolume=150.000000
-	CollisionRadius=20.000000
-	CollisionHeight=5.000000
-	MessageClass=Class'UnrealGame.PickupMessagePlus'
-=======
-     CashAmount=40
+     CashAmount=25
      RespawnTime=60.000000
      PickupMessage="You found a wad of cash"
      PickupSound=Sound'PatchSounds.SellItem'
@@ -105,8 +141,7 @@ defaultproperties
      AmbientGlow=40
      UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
      TransientSoundVolume=150.000000
-     CollisionRadius=25.000000
+     CollisionRadius=20.000000
      CollisionHeight=5.000000
      MessageClass=Class'UnrealGame.PickupMessagePlus'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

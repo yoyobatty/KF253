@@ -39,27 +39,16 @@ simulated function Timer()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	BurstLength=4
-	BurstRate=0.100000
-	Momentum=10000.000000
-	TransientSoundVolume=150.000000
-	FireEndAnim=
-	FireRate=0.500000
-	ShakeRotMag=(X=20.000000,Y=150.000000,Z=20.000000)
-	ShakeOffsetMag=(X=1.000000,Y=1.000000,Z=1.000000)
-	BotRefireRate=1.000000
-	aimerror=50.000000
-=======
      BurstLength=4
-     BurstRate=0.100000
+     BurstRate=0.050000
+     DamageMin=22
+     DamageMax=30
      Momentum=10000.000000
      TransientSoundVolume=150.000000
      FireEndAnim=
-     FireRate=0.500000
+     FireRate=0.250000
      ShakeRotMag=(X=20.000000,Y=150.000000,Z=20.000000)
      ShakeOffsetMag=(X=1.000000,Y=1.000000,Z=1.000000)
      BotRefireRate=1.000000
-     aimerror=50.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     aimerror=5.000000
 }

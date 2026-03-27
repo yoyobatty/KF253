@@ -26,9 +26,5 @@ simulated function Destroyed()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DrawType=DT_Mesh
-=======
      DrawType=DT_Mesh
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

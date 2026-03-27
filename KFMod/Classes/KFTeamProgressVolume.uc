@@ -5,228 +5,147 @@
 // gather your whole team before you can progress.
 
 // Alex
-class KFTeamProgressVolume extends PhysicsVolume;
 
+class KFTeamProgressVolume extends PhysicsVolume ;
+
+var int NumPlayers;
 var int NumTouching; 
-var() bool bOff; // Whatever if the volume should start disabled.
+var KFHumanPawn LastTouching;
+var GameReplicationInfo GRI;
+var bool bOff;
 
 // Configurable Variables
 
-var() bool bDisableAfterTriggered;   // default true.  Changes this if you'd like to the volume to continue checking player counts.
-var() bool bTimeOut;   // default false.  If true, the volume's event will fire even if not all players are inside.
-var() int TimeOutSeconds;  // Number of seconds before timeout is called
-var() float PlayerThreshold;  // Min percent of total players who HAVE to be in the volume before the timeout can go through.
-var() bool bTeleportWhenAbsent; // Teleport all players here that are not inside the volume (to in volume playerstarts).
-var() bool bRepawnDeadPlayers; // All fallen players will respawn here (to in volume playerstarts).
-var() enum EVolTriggerAct
-{
-	VTR_ToggleDisabled,
-	VTR_Untrigger,
-	VTR_TurnOff,
-	VTR_TurnOn,
-	VTR_FinishEvent
-} VolumeTriggerAction;
-var array<PlayerStart> PSList;
+var () bool bDisableAfterTriggered;   // default true.  Changes this if you'd like to the volume to continue checking player counts.
+var () bool bTimeOut;   // default false.  If true, the volume's event will fire even if not all players are inside.
+var () int TimeOutSeconds;  // Number of seconds before timeout is called
+var () float PlayerThreshold;  // Min percent of total players who HAVE to be in the volume before the timeout can go through.
 
-simulated function PostBeginPlay()
+event PostNetBeginPlay()
 {
-	local NavigationPoint N;
-	local PlayerStart PS;
-	local int i;
-
-	Super.PostBeginPlay();
-	if( Level.NetMode==NM_Client )
-		return;
-	For( N=Level.NavigationPointList; N!=None; N=N.NextNavigationPoint )
-	{
-		PS = PlayerStart(N);
-		if( PS!=None && PS.PhysicsVolume==Self )
-		{
-			PS.bEnabled = False;
-			PSList.Length = i+1;
-			PSList[i] = PS;
-			i++;
-		}
-	}
-}
-function PlayerStart PickRandomSpawnPoint()
-{
-	Return PSList[Rand(PSList.Length)];
-}
-function int CountAlivePlayers()
-{
-	local Controller C;
-	local int i;
-
-	For( C=Level.ControllerList; C!=None; C=C.NextController )
-	{
-		if( PlayerController(C)!=None && C.Pawn!=None && C.Pawn.Health>0 )
-			i++;
-	}
-	Return i;
+  SetTimer(1.0,true);
 }
 
-simulated event PawnEnteredVolume(Pawn Other)
-{
-	local vector HitLocation,HitNormal;
-	local Actor SpawnedEntryActor;
 
-	if ( bWaterVolume && (Level.TimeSeconds - Other.SplashTime > 0.3) && (PawnEntryActor != None) && !Level.bDropDetail && (Level.DetailMode != DM_Low) && EffectIsRelevant(Other.Location,false) )
-	{
-		if ( !TraceThisActor(HitLocation, HitNormal, Other.Location - Other.CollisionHeight*vect(0,0,1), Other.Location + Other.CollisionHeight*vect(0,0,1)) )	
-		{
-			SpawnedEntryActor = Spawn(PawnEntryActor,Other,,HitLocation,rot(16384,0,0));
-			if( SpawnedEntryActor!=None )
-				SpawnedEntryActor.RemoteRole = ROLE_None;
-		}
-	}
-	if( bOff || Level.NetMode==NM_Client || PlayerController(Other.Controller)==None )
-		return;
-	NumTouching++;
-	CheckActivity();
+simulated function Timer()
+{
+   local int i;
+
+   // Why check, if the volume is disabled?
+   if (bOFF)
+    return;
+
+    foreach TouchingActors( class 'KFHumanPawn', LastTouching )
+     if(LastTouching!= none && LastTouching.health > 0)
+      NumTouching ++;
+
+
+  for ( i=0; i<GRI.PRIArray.Length; i++ )
+   if (Pawn(GRI.PRIArray[i].Owner) != none &&
+   Pawn(GRI.PRIArray[i].Owner).health > 0)
+    NumPlayers ++;
+
+
+  if (NumTouching / NumPlayers >= PlayerThreshold )
+  {
+   TriggerEvent(Event,self,LastTouching);
+   self.SetCollision(false,false,false);
+  }
+
 }
 
-function CheckActivity()
+
+/*
+
+simulated event PawnEnteredVolume(Pawn P)
 {
-	local int i;
+  local KFHumanPawn A;
 
-	i = CountAlivePlayers();
 
-	if( i>=NumTouching )
-	{
-		if( IsInState('TimingOut') )
-			GoToState('');
-		FinishedEvent();
-	}
-	else if( NumTouching>0 && bTimeOut && (float(i)/float(NumTouching))>=PlayerThreshold )
-	{
-		SetTimer(2,True);
-		if( !IsInState('TimingOut') )
-			GoToState('TimingOut');
-	}
-	else
-	{
-		if( IsInState('TimingOut') )
-			GoToState('');
-		if( NumTouching<=0 )
-			SetTimer(0,False);
-		else SetTimer(2,True);
-	}
+
+  A = KFHumanPawn(P);
+  LastTouching = A;
+  //log("Touched");
+  NumTouching ++;
+
+  GRI = PlayerController(A.Controller).GameReplicationInfo;
+
+    if((NumTouching +1) >= GRI.PRIArray.Length)
+    {
+     TriggerEvent(Event,self,A);
+
+     if(bDisableAfterTriggered)
+     {
+      self.SetCollision(false,false,false);
+     }
+    }
+
+   // So we dont have enough players, but we've set timeout
+   // check to see if the percentage of total players in our volume
+   // makes the threshold requirement
+
+   if (bTimeOut && TimeOutSeconds >0 && (NumTouching +1 / GRI.PRIArray.Length) >= PlayerThreshold)
+   {
+     SetTimer(1.0,false);
+   }
+
+   
+   // Log(A);
+   // Log(GRI.PRIArray.Length);
+   // Log("Num Touching :"$NumTouching);
+
+
+
 }
 
-function Timer()
-{
-	CheckActivity();
-}
-
-State TimingOut
-{
-Begin:
-	Sleep(TimeOutSeconds);
-	FinishedEvent();
-}
-
-function FinishedEvent()
-{
-	local Controller C;
-	local PlayerStart P;
-
-	if( bOff )
-		Return;
-	if( PSList.Length>0 && KFSPGameType(Level.Game)!=None )
-		KFSPGameType(Level.Game).SpawnVolume = Self;
-	if( bTeleportWhenAbsent )
-	{
-		For( C=Level.ControllerList; C!=None; C=C.NextController )
-		{
-			if( PlayerController(C)!=None && C.Pawn!=None && C.Pawn.Health>0 && C.Pawn.PhysicsVolume!=Self )
-			{
-				P = PickRandomSpawnPoint();
-				if( P==None )
-					Continue;
-				C.Pawn.PlayTeleportEffect(True,False);
-				C.Pawn.SetLocation(P.Location);
-				C.ClientSetRotation(P.Rotation);
-				C.Pawn.PlayTeleportEffect(False,True);
-			}
-		}
-	}
-	if( bRepawnDeadPlayers )
-	{
-		For( C=Level.ControllerList; C!=None; C=C.NextController )
-		{
-			if( PlayerController(C)!=None && (C.Pawn==None || C.Pawn.Health<=0) && !C.PlayerReplicationInfo.bOnlySpectator )
-			{
-				C.GotoState('PlayerWaiting');
-				C.PlayerReplicationInfo.bOutOfLives = false;
-				C.PlayerReplicationInfo.NumLives = 0;
-				C.ServerReStartPlayer();
-				PlayerController(C).ClientSetViewTarget(C.Pawn);
-				PlayerController(C).SetViewTarget(C.Pawn);
-			}
-		}
-	}
-	TriggerEvent(Event,self,None);
-	if(bDisableAfterTriggered)
-	{
-		SetTimer(0,False);
-		bOff = true;
-	}
-}
 
 simulated event PawnLeavingVolume(Pawn P)
 {
-	if( bOff || Level.NetMode==NM_Client || PlayerController(P.Controller)==None )
-		return;
-	NumTouching--;
-	CheckActivity();
-}
 
-function PlayerPawnDiedInVolume(Pawn Other)
-{
-	if( bOff || Level.NetMode==NM_Client || PlayerController(Other.Controller)==None )
-		return;
-	NumTouching --;
-	CheckActivity();
+      //  Super.PawnLeavingVolume(P);
+       // log("UN-Touched");
+        NumTouching --;
 }
+*/
+
+
+
+function TriggerEvent( Name EventName, Actor Other, Pawn EventInstigator )
+{
+   if(bDisableAfterTriggered)
+   {
+     bOFF = true;
+     SetTimer(0.1,false);
+   }
+
+  Super.TriggerEvent(EventName,Other,EventInstigator);
+  
+}  
+
+
 
 function Trigger( actor Other, pawn EventInstigator )
 {
-	Switch( VolumeTriggerAction )
-	{
-		Case VTR_ToggleDisabled:
-			bOff = !bOff;
-			Return;
-		Case VTR_Untrigger:
-			if( NumTouching>0 )
-				UntriggerEvent(Event,self, EventInstigator );
-			Return;
-		Case VTR_TurnOff:
-			bOff = True;
-			Return;
-		Case VTR_TurnOn:
-			bOff = False;
-			Return;
-		Case VTR_FinishEvent:
-			bOff = False;
-			FinishedEvent();
-			Return;
-	}
+    local KFHumanPawn P;
+
+    if (bOff) 
+     return;
+
+    SetCollision(!bCollideActors);
+    Log("Progress volume collision set to "$bCollideActors);
+
+    foreach TouchingActors( class 'KFHumanPawn', P )
+     if(P != none && P.health > 0)
+      P.UnTouch(self);
+      
+    if(bCollideActors)
+     SetTimer(1.0,true);
+
 }
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bDisableAfterTriggered=True
-	TimeOutSeconds=60
-	PlayerThreshold=0.750000
-	bStatic=False
-	RemoteRole=ROLE_None
-=======
      bDisableAfterTriggered=True
      TimeOutSeconds=60
      PlayerThreshold=0.750000
-     bStatic=False
-     RemoteRole=ROLE_None
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

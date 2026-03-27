@@ -4,17 +4,8 @@ class SirenScreamDamage extends DamTypeZombieAttack;
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DeathString="%o had their ears busted by %k."
-	FemaleSuicide="%o's ears popped."
-	MaleSuicide="%o's ears popped."
-	bArmorStops=False
-=======
-     HeadShotDamageMult=1.0
-     DeathString="%o had their ears busted by %k."
-     FemaleSuicide="%o's ears popped."
-     MaleSuicide="%o's ears popped."
+     DeathString="%o was wailed at, fatally."
+     FemaleSuicide="%'s ears popped."
+     MaleSuicide="%o ears popped."
      bArmorStops=False
-     bLocationalHit=False
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

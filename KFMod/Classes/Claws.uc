@@ -183,35 +183,7 @@ function RegenHealthZombie( float dt )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	weaponRange=55.000000
-	MeleeHitSounds(0)=Sound'KFWeaponSound.punch1'
-	MeleeHitSounds(1)=Sound'KFWeaponSound.punch2'
-	MeleeHitSounds(2)=Sound'KFWeaponSound.punch3'
-	FireModeClass(0)=Class'KFMod.ClawsFire'
-	FireModeClass(1)=Class'KFMod.NoFire'
-	SelectForce="SwitchToFlakCannon"
-	AIRating=0.450000
-	CurrentRating=0.250000
-	bCanThrow=False
-	Description="Bloody and Sharp. Yikes! "
-	EffectOffset=(X=100.000000,Y=32.000000,Z=-20.000000)
-	DisplayFOV=85.000000
-	HudColor=(G=0)
-	SmallViewOffset=(X=6.000000,Y=12.000000,Z=-50.000000)
-	CenteredOffsetY=-5.000000
-	CenteredRoll=3000
-	CenteredYaw=-1500
-	GroupOffset=2
-	PickupClass=Class'KFMod.ClawsPickup'
-	PlayerViewOffset=(X=1.000000,Y=9.500000,Z=-36.000000)
-	PlayerViewPivot=(Pitch=5400)
-	BobDamping=7.000000
-	AttachmentClass=Class'KFMod.ClawsAttachment'
-	IconCoords=(X1=169,Y1=78,X2=244,Y2=124)
-	ItemName="Fists"
-	Mesh=SkeletalMesh'KFWeaponModels.Claws'
-=======
+     weaponRange=55.000000
      MeleeHitSounds(0)=Sound'KFWeaponSound.punch1'
      MeleeHitSounds(1)=Sound'KFWeaponSound.punch2'
      MeleeHitSounds(2)=Sound'KFWeaponSound.punch3'
@@ -224,7 +196,7 @@ defaultproperties
      Description="Bloody and Sharp. Yikes! "
      EffectOffset=(X=100.000000,Y=32.000000,Z=-20.000000)
      DisplayFOV=85.000000
-     Priority=1
+     Priority=25
      HudColor=(G=0)
      SmallViewOffset=(X=6.000000,Y=12.000000,Z=-50.000000)
      CenteredOffsetY=-5.000000
@@ -234,10 +206,9 @@ defaultproperties
      PickupClass=Class'KFMod.ClawsPickup'
      PlayerViewOffset=(X=1.000000,Y=9.500000,Z=-36.000000)
      PlayerViewPivot=(Pitch=5400)
-     BobDamping=4.000000
+     BobDamping=7.000000
      AttachmentClass=Class'KFMod.ClawsAttachment'
      IconCoords=(X1=169,Y1=78,X2=244,Y2=124)
      ItemName="Fists"
      Mesh=SkeletalMesh'KFWeaponModels.Claws'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -77,26 +77,15 @@ simulated function bool AllowFire()
 {
 	if (Weapon.Owner.Physics == PHYS_Falling)
 		return false;
-<<<<<<< HEAD
 	if( KFWeapon(Weapon).bIsReloading || !KFWeapon(Weapon).CanZoomNow() )
-=======
-	if( !KFWeapon(Weapon).CanZoomNow() )
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		return false; 
 	return true;
 }
 
 defaultproperties
 {
-<<<<<<< HEAD
-	FireAnim="raise"
-	FireSound=Sound'KFPlayerSound.getweaponout3'
-	FireRate=0.500000
-	BotRefireRate=0.500000
-=======
      FireAnim="raise"
      FireSound=Sound'KFPlayerSound.getweaponout3'
      FireRate=0.500000
      BotRefireRate=0.500000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

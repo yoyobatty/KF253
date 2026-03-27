@@ -9,7 +9,6 @@ var() Material ZoomMat;
 var() Sound ZoomSound;
 var bool bArrowRemoved;
 
-<<<<<<< HEAD
 
 function float GetAIRating()
 {
@@ -201,14 +200,11 @@ simulated function ClientWeaponThrown()
 
 
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function byte BestMode()
 {
 	return 0;
 }
 
-<<<<<<< HEAD
 
 
 function bool RecommendRangedAttack()
@@ -218,48 +214,6 @@ function bool RecommendRangedAttack()
 
 //TODO: LONG ranged?
 function bool RecommendLongRangedAttack()
-=======
-function float GetAIRating()
-{
-	local Bot B;
-	local float ZDiff, dist, Result;
-
-	B = Bot(Instigator.Controller);
-	if ( B == None )
-		return AIRating;
-	if ( B.IsShootingObjective() )
-		return AIRating - 0.15;
-	if ( B.Enemy == None )
-	{
-		if ( (B.Target != None) && VSize(B.Target.Location - B.Pawn.Location) > 8000 )
-			return 0.95;
-		return AIRating;
-	}
-
-	if ( B.Stopped() )
-		result = AIRating + 0.1;
-	else
-		result = AIRating - 0.1;
-	if ( Vehicle(B.Enemy) != None )
-		result -= 0.2;
-	ZDiff = Instigator.Location.Z - B.Enemy.Location.Z;
-	if ( ZDiff < -200 )
-		result += 0.1;
-	dist = VSize(B.Enemy.Location - Instigator.Location);
-	if ( dist > 2000 )
-	{
-		if ( !B.EnemyVisible() )
-			result = result - 0.15;
-		return ( FMin(2.0,result + (dist - 2000) * 0.0002) );
-	}
-	if ( !B.EnemyVisible() )
-		return AIRating - 0.1;
-
-	return result;
-}
-
-function bool RecommendRangedAttack()
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 {
 	return true;
 }
@@ -299,11 +253,8 @@ simulated function SetZoomBlendColor(Canvas c)
 	c.DrawColor = clr;
 }
 
-<<<<<<< HEAD
 
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 simulated function BringUp(optional Weapon PrevWeapon)
 {
 	if ( PlayerController(Instigator.Controller) != None )
@@ -356,40 +307,6 @@ simulated function bool CanZoomNow()
 simulated event RenderOverlays(Canvas Canvas)
 {
 	local PlayerController PC;
-<<<<<<< HEAD
-=======
-	local float Dist;
-	local int HitCount;
-	local vector Start, StartDist, HitLoc, HitNorm;
-	local actor T;
-	local string TargetName;
-
-	Start = Instigator.Location + Instigator.EyePosition();
-	StartDist=Start;
-	While( (HitCount++)<50 )
-	{
-		T = Instigator.Trace(HitLoc, HitNorm, Start + vector(Instigator.GetViewRotation()) * 15000, Start, true);
-		if (T == None)
-		{
-			Dist = -1;
-			TargetName = "Null"; //For fun
-			Break;
-		}
-		else if( T==Instigator || T.Base == Instigator )
-		{
-			Start = HitLoc;
-			Continue;
-		}
-
-	}
-	Dist = VSize(HitLoc-StartDist);
-	if(T.IsA('Pawn'))
-		TargetName = T.GetHumanReadableName();
-	else if (T.IsA('ExtendedZCollision'))
-		TargetName = T.Owner.GetHumanReadableName();
-	else
-		TargetName = "None";
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	PC = PlayerController(KFPawn(Owner).Controller);
 
@@ -434,7 +351,6 @@ simulated event RenderOverlays(Canvas Canvas)
 		Canvas.SetDrawColor(200,150,0);
 
 		Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.43);
-<<<<<<< HEAD
 		Canvas.DrawText("Zoom: 2.50");
 
 		Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.47);
@@ -443,13 +359,6 @@ simulated event RenderOverlays(Canvas Canvas)
 
 		
 
-=======
-		Canvas.DrawText("Range Finder: " $(Dist/52.5)$ "m");
-		Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.47);
-		Canvas.DrawText("Target: " $TargetName);
-
-		zoomed = true;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	}
 }
 
@@ -481,54 +390,10 @@ simulated function PlayAnimZoom( bool bZoomNow )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	ZoomMat=FinalBlend'KillingFloorWeapons.Xbow.CommandoCrossFinalBlend'
-	ClipCount=1
-	ReloadRate=0.010000
-	UpKick=200
-	FireModeClass(0)=Class'KFMod.CrossbowFire'
-	FireModeClass(1)=Class'KFMod.KFZoom'
-	PutDownAnim="PutDown"
-	SelectSound=Sound'KFPlayerSound.getweaponout'
-	SelectForce="SwitchToAssaultRifle"
-	AIRating=0.650000
-	CurrentRating=0.650000
-	bSniping=True
-	OldCenteredOffsetY=0.000000
-	OldPlayerViewOffset=(X=-8.000000,Y=5.000000,Z=-6.000000)
-	OldSmallViewOffset=(X=4.000000,Y=11.000000,Z=-12.000000)
-	OldPlayerViewPivot=(Pitch=400)
-	OldCenteredRoll=3000
-	Description="A recreational hunting weapon, featuring a firing trigger and an a powerful integrated scope. "
-	DisplayFOV=65.000000
-	Priority=20
-	SmallViewOffset=(X=-5.000000,Y=18.000000,Z=-15.000000)
-	CenteredOffsetY=-5.000000
-	CenteredRoll=3000
-	CenteredYaw=-1500
-	CustomCrosshair=-1
-	CustomCrossHairColor=(B=0,G=0,R=0,A=0)
-	CustomCrossHairTextureName=
-	InventoryGroup=4
-	GroupOffset=2
-	PickupClass=Class'KFMod.CrossbowPickup'
-	PlayerViewOffset=(X=4.000000,Y=5.500000,Z=-6.000000)
-	PlayerViewPivot=(Pitch=400)
-	BobDamping=6.000000
-	AttachmentClass=Class'KFMod.CrossbowAttachment'
-	IconCoords=(X1=253,Y1=146,X2=333,Y2=181)
-	ItemName="Compound Crossbow"
-	LightType=LT_None
-	LightBrightness=0.000000
-	LightRadius=0.000000
-	Mesh=SkeletalMesh'KFWeaponModels.Xbow'
-	DrawScale=0.900000
-=======
      ZoomMat=FinalBlend'KillingFloorWeapons.Xbow.CommandoCrossFinalBlend'
      ClipCount=1
      ReloadRate=0.010000
-     Weight=9.000000
-     UpKick=150
+     UpKick=200
      FireModeClass(0)=Class'KFMod.CrossbowFire'
      FireModeClass(1)=Class'KFMod.KFZoom'
      PutDownAnim="PutDown"
@@ -536,6 +401,7 @@ defaultproperties
      SelectForce="SwitchToAssaultRifle"
      AIRating=0.650000
      CurrentRating=0.650000
+     bSniping=True
      OldCenteredOffsetY=0.000000
      OldPlayerViewOffset=(X=-8.000000,Y=5.000000,Z=-6.000000)
      OldSmallViewOffset=(X=4.000000,Y=11.000000,Z=-12.000000)
@@ -543,19 +409,20 @@ defaultproperties
      OldCenteredRoll=3000
      Description="A recreational hunting weapon, featuring a firing trigger and an a powerful integrated scope. "
      DisplayFOV=65.000000
-     Priority=10
+     Priority=46
      SmallViewOffset=(X=-5.000000,Y=18.000000,Z=-15.000000)
      CenteredOffsetY=-5.000000
      CenteredRoll=3000
      CenteredYaw=-1500
-     CustomCrosshair=11
-     CustomCrossHairTextureName="Crosshairs.HUD.Crosshair_Cross5"
+     CustomCrosshair=-1
+     CustomCrossHairColor=(B=0,G=0,R=0,A=0)
+     CustomCrossHairTextureName=
      InventoryGroup=4
      GroupOffset=2
      PickupClass=Class'KFMod.CrossbowPickup'
      PlayerViewOffset=(X=4.000000,Y=5.500000,Z=-6.000000)
      PlayerViewPivot=(Pitch=400)
-     BobDamping=4.000000
+     BobDamping=6.000000
      AttachmentClass=Class'KFMod.CrossbowAttachment'
      IconCoords=(X1=253,Y1=146,X2=333,Y2=181)
      ItemName="Compound Crossbow"
@@ -564,5 +431,4 @@ defaultproperties
      LightRadius=0.000000
      Mesh=SkeletalMesh'KFWeaponModels.Xbow'
      DrawScale=0.900000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

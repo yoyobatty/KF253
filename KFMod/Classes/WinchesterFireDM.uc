@@ -72,11 +72,6 @@ function DoTrace(Vector Start, Rotator Dir)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DamageMin=40
-	DamageMax=50
-=======
      DamageMin=40
      DamageMax=50
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

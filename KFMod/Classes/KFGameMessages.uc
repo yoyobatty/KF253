@@ -91,9 +91,5 @@ static function string GetString(
 
 defaultproperties
 {
-<<<<<<< HEAD
-	NoLateJoiners="This server does not accept late joiners."
-=======
      NoLateJoiners="This server does not accept late joiners."
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

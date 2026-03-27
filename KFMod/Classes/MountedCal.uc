@@ -443,35 +443,6 @@ simulated function SpecialCalcBehindView(PlayerController PC, out actor ViewActo
 
 defaultproperties
 {
-<<<<<<< HEAD
-	TurretBaseClass=None
-	TurretSwivelClass=None
-	RotPitchConstraint=(Min=5000.000000,Max=10000.000000)
-	RotationSpeed=5.000000
-	ZoomSpeed=0.000000
-	DefaultWeaponClassName="KFMod.MountedCalWeapon"
-	VehicleProjSpawnOffset=(X=50.000000,Z=86.000000)
-	CrosshairScale=0.200000
-	DrivePos=(X=-55.000000,Y=0.000000,Z=29.000000)
-	FPCamPos=(X=-40.000000,Y=0.000000,Z=50.000000)
-	MaxViewYaw=1000
-	DriverDamageMult=1.000000
-	VehiclePositionString="Manning a .50Cal Heavy"
-	VehicleNameString=".50Cal Heavy"
-	bSimulateGravity=True
-	bSpecialHUD=False
-	HealthMax=100.000000
-	Health=100
-	bDynamicLight=True
-	Physics=PHYS_Falling
-	Mesh=SkeletalMesh'KFVehicleModels.50Cal'
-	DrawScale=0.300000
-	AmbientGlow=0
-	CollisionRadius=40.000000
-	CollisionHeight=20.000000
-	bCollideWorld=True
-	bUseCylinderCollision=True
-=======
      TurretBaseClass=None
      TurretSwivelClass=None
      RotPitchConstraint=(Min=5000.000000,Max=10000.000000)
@@ -499,5 +470,4 @@ defaultproperties
      CollisionHeight=20.000000
      bCollideWorld=True
      bUseCylinderCollision=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

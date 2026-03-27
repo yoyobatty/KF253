@@ -2,8 +2,28 @@ class KFProximityObjective extends ProximityObjective;
 
 function bool IsRelevant( Pawn P, bool bAliveCheck )
 {
-	return true;
+
+/*
+    if ( !IsActive() )
+        return false;
+
+    if ( !ClassIsChildOf(P.Class, ConstraintPawnClass) )
+        return false;
+
+    if ( bAliveCheck )
+    {
+        if ( Instigator.Health < 1 || Instigator.bDeleteMe || !Instigator.IsPlayerPawn() )
+            return false;
+    }
+
+    if ( bBotOnlyObjective && (PlayerController(Instigator.Controller) != None) )
+        return false;
+        */
+
+
+    return true;
 }
+
 
 function DisableObjective(Pawn Instigator)
 {

@@ -36,11 +36,7 @@ simulated function Tick(float DeltaTime)
         //change this for different 'bloom-map' qualities
         st.SetSize(256,256);
  
-<<<<<<< HEAD
         PC.Player.InteractionMaster.AddInteraction("Dreamland.BloomInteraction", PC.Player); // Create the interaction
-=======
-        PC.Player.InteractionMaster.AddInteraction("KFMod.BloomInteraction", PC.Player); // Create the interaction
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
         bHasInteraction = True; // Set the variable so this lot isn't called again
         bMesh=Spawn(class'BloomMesh');
         //A FinalBlend with FB_Brighten
@@ -81,21 +77,11 @@ event RenderTexture(ScriptedTexture Tex)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bAffectSpectators=True
-	bAffectPlayers=True
-	GroupName="KF"
-	FriendlyName="Bloom"
-	Description="Adds Bloom to the gameplay."
-	bAlwaysRelevant=True
-	RemoteRole=ROLE_SimulatedProxy
-=======
      bAffectSpectators=True
      bAffectPlayers=True
-     GroupName="KF-Bloom"
+     GroupName="KF"
      FriendlyName="Bloom"
      Description="Adds Bloom to the gameplay."
      bAlwaysRelevant=True
      RemoteRole=ROLE_SimulatedProxy
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

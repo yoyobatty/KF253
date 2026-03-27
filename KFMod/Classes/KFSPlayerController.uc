@@ -144,11 +144,6 @@ exec function LoadSavePoint(){
 
 defaultproperties
 {
-<<<<<<< HEAD
-	CheatClass=Class'KFMod.KFCheatManager'
-	MidGameMenuClass="KFGUI.KFDisconnectPage"
-=======
      CheatClass=Class'KFMod.KFCheatManager'
      MidGameMenuClass="KFGUI.KFDisconnectPage"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

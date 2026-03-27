@@ -1,6 +1,6 @@
 // Zombie Monster for KF Invasion gametype
 
-class ZombieCrawler extends KFMonster;
+class ZombieCrawler extends KFMonster ;
 
 #exec OBJ LOAD FILE=KFCharacters.utx
 #exec OBJ LOAD FILE=KFCharacterModels.ukx
@@ -8,7 +8,7 @@ class ZombieCrawler extends KFMonster;
 #exec OBJ LOAD FILE=KFPlayerSound.uax
 #exec OBJ LOAD FILE=PlayerSounds.uax
 
-var() float PounceSpeed;
+var float PounceSpeed;
 var bool bPouncing;
 
 function ZombieMoan()
@@ -34,55 +34,116 @@ function ZombieMoan()
 
 function bool DoPounce()
 {
-	if ( bIsCrouched || bWantsToCrouch || (Physics != PHYS_Walking) || VSize(Location - Controller.Target.Location) > (MeleeRange * 5) )
+	local vector X,Y,Z;
+
+	if ( bIsCrouched || bWantsToCrouch || (Physics != PHYS_Walking) ||
+  VSize(Location - Controller.Target.Location) > (MeleeRange * 5) )
 		return false;
 
-	Velocity = Normal(Controller.Target.Location-Location)*PounceSpeed;
+    GetAxes(Rotation,X,Y,Z);
+	//if (DoubleClickMove == DCLICK_Forward)
+		Velocity = PounceSpeed*X + (Velocity dot Y)*Y;
+	//else if (DoubleClickMove == DCLICK_Back)
+	//	Velocity = -1.5*GroundSpeed*X + (Velocity Dot Y)*Y;
+	//else if (DoubleClickMove == DCLICK_Left)
+	//	Velocity = 1.5*GroundSpeed*Y + (Velocity Dot X)*X;
+	//else if (DoubleClickMove == DCLICK_Right)
+	//	Velocity = -1.5*GroundSpeed*Y + (Velocity Dot X)*X;
+
 	Velocity.Z = JumpZ;
+	//CurrentDir = DoubleClickMove;
 	SetPhysics(PHYS_Falling);
-	ZombieSpringAnim();
-	bPouncing=true;
+
+        ZombieSpringAnim();
+
+        bPouncing=true;
+
+
 	return true;
 }
 
 simulated function ZombieSpringAnim()
 {
-	SetAnimAction('ZombieSpring');
+  SetAnimAction('ZombieSpring');
 }
 
 event Landed(vector HitNormal)
 {
-	bPouncing=false;
-	super.Landed(HitNormal);
+  bPouncing=false;
+  super.Landed(HitNormal);
 }
 
 event Bump(actor Other)
 {
-	// TODO: is there a better way
-	if(bPouncing && KFHumanPawn(Other)!=none )
-	{
-		KFHumanPawn(Other).TakeDamage(damageConst + rand(damageRand), self ,self.Location,self.velocity, class 'KFmod.ZombieMeleeDamage');
-		if (KFHumanPawn(Other).Health <=0)
-		{
-			//TODO - move this to humanpawn.takedamage? Also see KFMonster.MeleeDamageTarget
-			KFHumanPawn(Other).SpawnGibs(self.rotation, 1);
-		}
-		//After impact, there'll be no momentum for further bumps
-		bPouncing=false;
-	}
+  // TODO: is there a better way
+  if(bPouncing && KFHumanPawn(Other)!=none )
+  {
+    KFHumanPawn(Other).TakeDamage(damageConst + rand(damageRand), self ,self.Location,self.velocity, class 'KFmod.ZombieMeleeDamage');
+
+    if (KFHumanPawn(Other).Health <=0)
+    {
+      //TODO - move this to humanpawn.takedamage? Also see KFMonster.MeleeDamageTarget
+      KFHumanPawn(Other).SpawnGibs(self.rotation, 1);
+
+    }
+    //After impact, there'll be no momentum for further bumps
+    bPouncing=false;
+
+  }
+
 }
 
 // Blend his attacks so he can hit you in mid air.
-simulated function int DoAnimAction( name AnimName )
+
+simulated event SetAnimAction(name NewAction)
 {
-	if( AnimName=='ZombieLeapAttack' || AnimName=='LeapAttack3' || AnimName=='ZombieLeapAttack' )
-	{
-		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
-		PlayAnim(AnimName,, 0.0, 1);
-		Return 1;
-	}
-	Return Super.DoAnimAction(AnimName);
+  Super.SetAnimAction(NewAction);
+
+ 	   if ( AnimAction == 'ZombieLeapAttack' || AnimAction == 'LeapAttack3'
+            || AnimAction == 'ZombieLeapAttack')
+	    {
+	      AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
+	      PlayAnim(NewAction,, 0.0, 1);
+	    }
+
 }
+
+/*
+
+function rotator rTurn(rotator rHeading,rotator rTurnAngle)
+{
+    // Generate a turn in object coordinates
+    //     this should handle any gymbal lock issues
+
+    local vector vForward,vRight,vUpward;
+    local vector vForward2,vRight2,vUpward2;
+    local rotator T;
+    local vector  V;
+
+    GetAxes(rotation,vForward,vRight,vUpward);
+    //  rotate in plane that contains vForward&vRight
+    T.Yaw=rTurnAngle.Yaw; V=vector(T);
+    vForward2=V.X*vForward + V.Y*vRight;
+    vRight2=V.X*vRight - V.Y*vForward;
+    vUpward2=vUpward;
+
+    // rotate in plane that contains vForward&vUpward
+    T.Yaw=rTurnAngle.Pitch; V=vector(T);
+    vForward=V.X*vForward2 + V.Y*vUpward2;
+    vRight=vRight2;
+    vUpward=V.X*vUpward2 - V.Y*vForward2;
+
+    // rotate in plane that contains vUpward&vRight
+    T.Yaw=rTurnAngle.Roll; V=vector(T);
+    vForward2=vForward;
+    vRight2=V.X*vRight + V.Y*vUpward;
+    vUpward2=V.X*vUpward - V.Y*vRight;
+
+    T=OrthoRotation(vForward2,vRight2,vUpward2);
+
+   return(T);
+}
+*/
 
 function bool FlipOver()
 {
@@ -91,92 +152,16 @@ function bool FlipOver()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	PounceSpeed=330.000000
-	MeleeAnims(0)="ZombieLeapAttack"
-	MeleeAnims(1)="ZombieLeapAttack"
-	MeleeAnims(2)="LeapAttack3"
-	HitAnims(0)="ZombieSpring"
-	HitAnims(1)="ZombieSpring"
-	HitAnims(2)="ZombieSpring"
-	KFHitFront="ZombieSpring"
-	KFHitBack="ZombieSpring"
-	KFHitLeft="ZombieSpring"
-	KFHitRight="ZombieSpring"
-	bStunImmune=True
-	bCannibal=True
-	damageRand=4
-	damageConst=4
-	damageForce=5000
-	KFRagdollName="CrawlerRag"
-	Intelligence=BRAINS_Mammal
-	HitSound(0)=Sound'KFPlayerSound.zpain1'
-	HitSound(1)=Sound'KFPlayerSound.zpain2'
-	HitSound(2)=Sound'KFPlayerSound.zpain3'
-	HitSound(3)=Sound'KFPlayerSound.zpain4'
-	ScoringValue=1
-	IdleHeavyAnim="ZombieLeapIdle"
-	IdleRifleAnim="ZombieLeapIdle"
-	bCrawler=True
-	GroundSpeed=140.000000
-	WaterSpeed=130.000000
-	JumpZ=350.000000
-	Health=100
-	MenuName="Crawler"
-	ControllerClass=Class'KFChar.CrawlerController'
-	MovementAnims(0)="ZombieScuttle"
-	MovementAnims(1)="ZombieScuttle"
-	MovementAnims(2)="ZombieScuttle"
-	MovementAnims(3)="ZombieScuttle"
-	TurnLeftAnim="ZombieLeapIdle"
-	TurnRightAnim="ZombieLeapIdle"
-	WalkAnims(0)="ZombieScuttle"
-	WalkAnims(1)="ZombieScuttle"
-	WalkAnims(2)="ZombieScuttle"
-	WalkAnims(3)="ZombieScuttle"
-	AirAnims(0)="ZombieSpring"
-	AirAnims(1)="ZombieSpring"
-	AirAnims(2)="ZombieSpring"
-	AirAnims(3)="ZombieSpring"
-	TakeoffAnims(0)="ZombieSpring"
-	TakeoffAnims(1)="ZombieSpring"
-	TakeoffAnims(2)="ZombieSpring"
-	TakeoffAnims(3)="ZombieSpring"
-	LandAnims(0)="ZombieLeapIdle"
-	LandAnims(1)="ZombieLeapIdle"
-	LandAnims(2)="ZombieLeapIdle"
-	LandAnims(3)="ZombieLeapIdle"
-	AirStillAnim="ZombieSpring"
-	TakeoffStillAnim="ZombieLeap"
-	IdleCrouchAnim="ZombieLeapIdle"
-	IdleWeaponAnim="ZombieLeapIdle"
-	IdleRestAnim="ZombieLeapIdle"
-	SpineBone1=
-	SpineBone2=
-	bOrientOnSlope=True
-	Mesh=SkeletalMesh'KFCharacterModels.Shade'
-	Skins(0)=Shader'KFCharacters.Zombie9Shader'
-	Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
-	CollisionHeight=25.000000
-=======
      PounceSpeed=330.000000
      MeleeAnims(0)="ZombieLeapAttack"
      MeleeAnims(1)="ZombieLeapAttack"
      MeleeAnims(2)="LeapAttack3"
-     HitAnims(0)="ZombieSpring"
-     HitAnims(1)="ZombieSpring"
-     HitAnims(2)="ZombieSpring"
-     KFHitFront="ZombieSpring"
-     KFHitBack="ZombieSpring"
-     KFHitLeft="ZombieSpring"
-     KFHitRight="ZombieSpring"
      bStunImmune=True
      bCannibal=True
      damageRand=4
-     damageConst=4
+     damageConst=8
      damageForce=5000
      KFRagdollName="CrawlerRag"
-     Intelligence=BRAINS_Mammal
      HitSound(0)=Sound'KFPlayerSound.zpain1'
      HitSound(1)=Sound'KFPlayerSound.zpain2'
      HitSound(2)=Sound'KFPlayerSound.zpain3'
@@ -184,11 +169,11 @@ defaultproperties
      ScoringValue=1
      IdleHeavyAnim="ZombieLeapIdle"
      IdleRifleAnim="ZombieLeapIdle"
-     bCrawler=True
      GroundSpeed=140.000000
      WaterSpeed=130.000000
      JumpZ=350.000000
-     Health=100
+     HealthMax=110.000000
+     Health=110
      MenuName="Crawler"
      ControllerClass=Class'KFChar.CrawlerController'
      MovementAnims(0)="ZombieScuttle"
@@ -197,33 +182,30 @@ defaultproperties
      MovementAnims(3)="ZombieScuttle"
      TurnLeftAnim="ZombieLeapIdle"
      TurnRightAnim="ZombieLeapIdle"
-     WalkAnims(0)="ZombieScuttle"
-     WalkAnims(1)="ZombieScuttle"
-     WalkAnims(2)="ZombieScuttle"
-     WalkAnims(3)="ZombieScuttle"
-     AirAnims(0)="ZombieSpring"
-     AirAnims(1)="ZombieSpring"
-     AirAnims(2)="ZombieSpring"
-     AirAnims(3)="ZombieSpring"
-     TakeoffAnims(0)="ZombieSpring"
-     TakeoffAnims(1)="ZombieSpring"
-     TakeoffAnims(2)="ZombieSpring"
-     TakeoffAnims(3)="ZombieSpring"
+     WalkAnims(0)="ZombieLeap"
+     WalkAnims(1)="ZombieLeap"
+     WalkAnims(2)="ZombieLeap"
+     WalkAnims(3)="ZombieLeap"
+     AirAnims(0)="ZombieLeap"
+     AirAnims(1)="ZombieLeap"
+     AirAnims(2)="ZombieLeap"
+     AirAnims(3)="ZombieLeap"
+     TakeoffAnims(0)="ZombieLeap"
+     TakeoffAnims(1)="ZombieLeap"
+     TakeoffAnims(2)="ZombieLeap"
+     TakeoffAnims(3)="ZombieLeap"
      LandAnims(0)="ZombieLeapIdle"
      LandAnims(1)="ZombieLeapIdle"
      LandAnims(2)="ZombieLeapIdle"
      LandAnims(3)="ZombieLeapIdle"
-     AirStillAnim="ZombieSpring"
+     AirStillAnim="ZombieLeapIdle"
      TakeoffStillAnim="ZombieLeap"
      IdleCrouchAnim="ZombieLeapIdle"
      IdleWeaponAnim="ZombieLeapIdle"
      IdleRestAnim="ZombieLeapIdle"
-     SpineBone1=
-     SpineBone2=
      bOrientOnSlope=True
      Mesh=SkeletalMesh'KFCharacterModels.Shade'
      Skins(0)=Shader'KFCharacters.Zombie9Shader'
      Skins(1)=FinalBlend'KFCharacters.CrawlerHairFB'
      CollisionHeight=25.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

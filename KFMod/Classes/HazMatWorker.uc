@@ -211,20 +211,6 @@ simulated function BloodSpray()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	WalkAnim="WalkCycle"
-	IdleAnim="IdleCycle"
-	DeathAnim="Die1"
-	WalkRate=1.000000
-	MoverEncroachType=ME_IgnoreWhenEncroach
-	bDynamicLightMover=True
-	DrawType=DT_Mesh
-	bReplicateAnimations=True
-	RemoteRole=ROLE_None
-	Mesh=SkeletalMesh'KFCharactersB.HazmatMan'
-	bShadowCast=False
-	bBlockKarma=True
-=======
      WalkAnim="WalkCycle"
      IdleAnim="IdleCycle"
      DeathAnim="Die1"
@@ -237,5 +223,4 @@ defaultproperties
      Mesh=SkeletalMesh'KFCharactersB.HazmatMan'
      bShadowCast=False
      bBlockKarma=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

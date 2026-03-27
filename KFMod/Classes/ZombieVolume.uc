@@ -18,10 +18,6 @@ function bool CanSpawnInHere(array< class<Actor> > zombies)
 {
 	if(LastCheckTime+CanRespawnTime < Level.TimeSeconds )
 	{
-<<<<<<< HEAD
-=======
-		//log(self$" Tried to spawn zombies");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		bSpawnPossible = SpawnInHere(zombies,0,,,,true);
 		LastCheckTime = Level.TimeSeconds;
 	}
@@ -56,7 +52,6 @@ function bool SpawnInHere(array< class<Actor> > zombies,int index, optional int 
 	result = true;
 	finish=1;
 
-<<<<<<< HEAD
     //TODO: gibber - this looks exessive. Removing on a hunch
     //      that this is the biggest stumbling block
     /*
@@ -86,9 +81,6 @@ function bool SpawnInHere(array< class<Actor> > zombies,int index, optional int 
 
     }
     */
-=======
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	//If we're the parent, we'll use the index we were handed.
 	if(p != self)
@@ -173,11 +165,7 @@ function bool SpawnInHere(array< class<Actor> > zombies,int index, optional int 
 			counter = loc+1;
 			//Log("zombie spawn2!");
 		result = s.SpawnInHere(zombies,nextind,counter,p,finish,test,numspawned,TotalMaxMonsters,WaveMonsters);
-<<<<<<< HEAD
 
-=======
-		
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		//If the volume doesn't belong there, then we're going to destroy it
 		//and try again with a new position.
 		if(!result)
@@ -197,10 +185,6 @@ function bool SpawnInHere(array< class<Actor> > zombies,int index, optional int 
 				TotalMaxMonsters--;
 				WaveMonsters++;
 				numspawned++;
-<<<<<<< HEAD
-=======
-				//log(self$" spawned zombies " $zombies[index]);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			}
 		}
 	}
@@ -215,11 +199,7 @@ function bool SpawnInHere(array< class<Actor> > zombies,int index, optional int 
 	else bSpawnPossible = result;
 
 	LastCheckTime = Level.TimeSeconds;
-<<<<<<< HEAD
 
-=======
-	//log(self$" Tried to spawn zombies, spawn here");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	return result;
 }
 
@@ -295,10 +275,6 @@ function bool SpawnInHereTest(array< class<Actor> > zombies,int index, optional 
 		{
 			result=false;
 			finish=1;
-<<<<<<< HEAD
-=======
-			//log("Couldn't spawn zombie due to collisionsize issue");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			break;
 		}
 
@@ -388,13 +364,7 @@ function bool SpawnInHereTest(array< class<Actor> > zombies,int index, optional 
 
 defaultproperties
 {
-<<<<<<< HEAD
-	CanRespawnTime=10.000000
-	bStatic=False
-	bNoDelete=False
-=======
-     CanRespawnTime=5.000000
+     CanRespawnTime=10.000000
      bStatic=False
      bNoDelete=False
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

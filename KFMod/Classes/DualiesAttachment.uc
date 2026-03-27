@@ -1,7 +1,6 @@
 class DualiesAttachment extends KFWeaponAttachment;
 
 var bool bIsOffHand,bMyFlashTurn;
-var bool bBeamEnabled;
 var DualiesAttachment brother;
 var () Mesh BrotherMesh;
 
@@ -33,6 +32,65 @@ simulated function ActuallyFlash()
     Super.DoFlashEmitter();
 }
 
+// Hopefully this will keep the 1P / 3P beams in sync.
+
+simulated function Tick(float DeltaTime)
+{
+  local vector StartTrace,EndTrace,X,Y,Z,HitLocation,HitNormal;
+  local float BeamLength;
+  local vector NewDrawScale;
+
+  if (Owner == none || pawn(Owner).Controller == none)
+   return;
+
+   StartTrace = pawn(Owner).Weapon.GetFireStart(X,Y,Z); //LightPawn.Location + LightPawn.EyePosition();
+   GetAxes(pawn(Owner).Controller.GetViewRotation(),X,Y,Z);
+   
+   // not too far out, we don't want a flashlight that can shine across the map
+    EndTrace = StartTrace + 1800*vector(pawn(Owner).Controller.GetViewRotation());
+    Trace(HitLocation,HitNormal,EndTrace,StartTrace,true,,); //SurfaceMat
+
+    // find out how far the first hit was
+    BeamLength = VSize(StartTrace-HitLocation);
+
+
+  if(KFWeapon(pawn(Owner).Weapon).Flashlight != none)
+  {
+   if (TacShine == none && brother!= none && brother.TacShine == none)
+    {
+      TacShine = Spawn(KFWeapon(pawn(Owner).Weapon).TacShineClass,Owner,,,);
+     if(TacShine != none)
+      AttachToBone(TacShine,'FlashBone3P');
+    }
+
+    if (TacShineCorona == none && brother!= none && brother.TacShineCorona == none)
+    {
+      TacShineCorona = Spawn(class 'KFTacLightCorona',Owner,,,);
+     if(TacShineCorona != none)
+      AttachToBone(TacShineCorona,'FlashBone3P');
+    }
+
+
+    if (TacShine != none)
+     TacShine.bHidden = !KFWeapon(pawn(Owner).Weapon).Flashlight.bHasLight;
+    if (TacShineCorona != none)
+    {
+     TacShineCorona.bHidden = !KFWeapon(pawn(Owner).Weapon).Flashlight.bHasLight;
+    // TacShineCorona.bDynamicLight = KFWeapon(pawn(Owner).Weapon).Flashlight.bHasLight;
+    }
+
+     // Smush the beam, if we are humping up on a wall.
+    if (BeamLength <= 90 && TacShine != none)
+    {
+        NewDrawScale = TacShine.DrawScale3D;
+        NewDrawScale.y =  FMax(0.02,(BeamLength/90))* TacShine.Default.DrawScale;
+        TacShine.SetDrawScale3D(NewDrawScale);
+    }
+
+
+  }
+}
+
 simulated function Destroyed()
 {
 	if ( TacShineCorona != None )
@@ -45,10 +103,14 @@ simulated function Destroyed()
 // Prevents tracers from spawning if player is using the flashlight function of the 9mm
 simulated event ThirdPersonEffects()
 {
+
+
 	if( FiringMode==1 )
-		return;
+ 	 return;
+
 	Super.ThirdPersonEffects();
 }
+
 
 simulated function vector GetTracerStart()
 {
@@ -65,122 +127,24 @@ simulated function vector GetTracerStart()
     if ( mMuzFlash3rd != None && bMyFlashTurn)
         return mMuzFlash3rd.Location;
     else
-	if ( brother != none && brother.mMuzFlash3rd != None && !bMyFlashTurn)
-		return  brother.mMuzFlash3rd.Location;
-	//   return Location;
-}
+     if ( brother != none && brother.mMuzFlash3rd != None && !bMyFlashTurn)
+    return  brother.mMuzFlash3rd.Location;
 
-simulated function UpdateTacBeam( float Dist )
-{
-	local vector Sc;
-	local DualiesAttachment DA;
-
-	if( Mesh==BrotherMesh )
-	{
-		if( bBeamEnabled )
-		{
-			ChangeIdleToPrimary();
-			if (TacShine!=none )
-				TacShine.bHidden = True;
-			if (TacShineCorona!=none )
-				TacShineCorona.bHidden = True;
-			bBeamEnabled = False;
-		}
-		if( brother==None )
-		{
-			ForEach DynamicActors(Class'DualiesAttachment',DA)
-			{
-				if( DA!=Self && DA.Instigator==Instigator && DA.Mesh!=BrotherMesh )
-				{
-					brother = DA;
-					Break;
-				}
-			}
-		}
-		if( brother!=None )
-			brother.UpdateTacBeam(Dist);
-		Return;
-	}
-	if( !bBeamEnabled )
-	{
-		ChangeIdleToSecondary();
-		if (TacShine == none )
-		{
-			TacShine = Spawn(Class'Dualies'.Default.TacShineClass,Owner,,,);
-			AttachToBone(TacShine,'FlashBone3P');
-			TacShine.RemoteRole = ROLE_None;
-		}
-		else TacShine.bHidden = False;
-		if (TacShineCorona == none )
-		{
-			TacShineCorona = Spawn(class 'KFTacLightCorona',Owner,,,);
-			AttachToBone(TacShineCorona,'FlashBone3P');
-			TacShineCorona.RemoteRole = ROLE_None;
-		}
-		TacShineCorona.bHidden = False;
-		bBeamEnabled = True;
-	}
-	Sc = TacShine.DrawScale3D;
-	Sc.Y = FClamp(Dist/90.f,0.02,1.f);
-	if( TacShine.DrawScale3D!=Sc )
-		TacShine.SetDrawScale3D(Sc);
-}
-
-simulated function TacBeamGone()
-{
-	local DualiesAttachment DA;
-
-	if( Mesh==BrotherMesh )
-	{
-		if( brother==None )
-		{
-			ForEach DynamicActors(Class'DualiesAttachment',DA)
-			{
-				if( DA!=Self && DA.Instigator==Instigator && DA.Mesh!=BrotherMesh )
-				{
-					brother = DA;
-					Break;
-				}
-			}
-		}
-		if( brother!=None )
-			brother.TacBeamGone();
-		Return;
-	}
-	if( bBeamEnabled )
-	{
-		ChangeIdleToPrimary();
-		if (TacShine!=none )
-			TacShine.bHidden = True;
-		if (TacShineCorona!=none )
-			TacShineCorona.bHidden = True;
-		bBeamEnabled = False;
-	}
+     //   return Location;
 }
 
 defaultproperties
 {
-<<<<<<< HEAD
-	bMyFlashTurn=True
-	BrotherMesh=SkeletalMesh'KFWeaponModels.9mm3P'
-	mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
-	mTracerClass=Class'KFMod.KFNewTracer'
-	mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
-	TPAnims(0)="DualiesAttackRight"
-	TPAnims(1)="DualiesAttackLeft"
-	WeaponIdleMovementAnim="IdleDualies"
-	SecondaryWeaponIdleMovementAnim="DoubleTacLightHold"
-	Mesh=SkeletalMesh'KFWeaponModels.Single3P'
-=======
      bMyFlashTurn=True
      BrotherMesh=SkeletalMesh'KFWeaponModels.9mm3P'
      mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
      mTracerClass=Class'KFMod.KFNewTracer'
+     mTracerIntervalPrimary=0.050000
+     mTracerIntervalSecondary=0.050000
      mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
      TPAnims(0)="DualiesAttackRight"
      TPAnims(1)="DualiesAttackLeft"
      WeaponIdleMovementAnim="IdleDualies"
      SecondaryWeaponIdleMovementAnim="DoubleTacLightHold"
      Mesh=SkeletalMesh'KFWeaponModels.Single3P'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

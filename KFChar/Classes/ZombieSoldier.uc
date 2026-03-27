@@ -147,30 +147,6 @@ function SpawnTwoShots()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	MeleeAnims(0)="PoundPunch2"
-	MeleeAnims(1)="PoundPunch2"
-	MeleeAnims(2)="PoundPunch2"
-	damageRand=5
-	damageConst=8
-	damageForce=5000
-	HitSound(0)=Sound'KFPlayerSound.zpain1'
-	HitSound(1)=Sound'KFPlayerSound.zpain2'
-	HitSound(2)=Sound'KFPlayerSound.zpain3'
-	HitSound(3)=Sound'KFPlayerSound.zpain4'
-	AmmunitionClass=Class'KFMod.SZombieAmmo'
-	ScoringValue=2
-	GroundSpeed=105.000000
-	WaterSpeed=100.000000
-	Health=300
-	MenuName="Infected Soldier"
-	ControllerClass=Class'KFChar.SoldierZombieController'
-	AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
-	Mesh=SkeletalMesh'KFCharacterModels.InfectedWhiteSoldier'
-	Skins(0)=Shader'KFCharacters.Zombie8Shader'
-	Mass=900.000000
-	RotationRate=(Yaw=45000,Roll=0)
-=======
      MeleeAnims(0)="PoundPunch2"
      MeleeAnims(1)="PoundPunch2"
      MeleeAnims(2)="PoundPunch2"
@@ -193,5 +169,4 @@ defaultproperties
      Skins(0)=Shader'KFCharacters.Zombie8Shader'
      Mass=900.000000
      RotationRate=(Yaw=45000,Roll=0)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -22,7 +22,7 @@ simulated event RenderObjectivedBoard(Canvas Canvas)
 	local float XL,YL,Dummy;
 	local string S;
 
-	Canvas.Font = GetSmallerFontFor(Canvas,4);
+	Canvas.Font = HUDClass.static.GetMediumFontFor(Canvas);
 	Canvas.TextSize(TitleString, XL, YL);
 	Canvas.SetPos(Canvas.ClipX-XL-5,5);
 
@@ -34,9 +34,9 @@ simulated event RenderObjectivedBoard(Canvas Canvas)
 		if( SPRep.CurrentObjectiveNum>=SPRep.KFPLevel.MissionObjectives.Length )
 			S = NoObjString;
 		else S = SPRep.KFPLevel.MissionObjectives[SPRep.CurrentObjectiveNum];
-		Canvas.Font = GetSmallerFontFor(Canvas,3);
 		Canvas.TextSize(S, XL, Dummy);
 		Canvas.SetPos(Canvas.ClipX-XL-5,YL+7);
+		Canvas.Font = GetSmallerFontFor(Canvas,-1);
 		Canvas.DrawText(S,true);
 	}
 }
@@ -47,13 +47,7 @@ simulated function SetGRI(GameReplicationInfo GRI)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	titlestring="Current Objective:"
-	NoObjString="No Objectives"
-	HudClass=Class'KFMod.HUDKillingFloorSP'
-=======
      titlestring="Current Objective:"
      NoObjString="No Objectives"
      HudClass=Class'KFMod.HUDKillingFloorSP'
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

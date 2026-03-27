@@ -43,44 +43,16 @@ function StartSuperBerserk()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	DamageType=Class'KFMod.DamTypeDualies'
-	DamageMin=25
-	DamageMax=35
-	Momentum=10000.000000
-	bPawnRapidFireAnim=True
-	bAttachSmokeEmitter=True
-	TransientSoundVolume=50.000000
-	FireSound=Sound'PatchSounds.9mmShot'
-	FireForce="AssaultRifleFire"
-	FireRate=0.460000
-	AmmoClass=Class'KFMod.SingleAmmo'
-	AmmoPerFire=1
-	ShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
-	ShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)
-	ShakeRotTime=2.000000
-	ShakeOffsetMag=(X=6.000000,Y=6.000000,Z=6.000000)
-	ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
-	ShakeOffsetTime=2.000000
-	BotRefireRate=0.350000
-	FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
-	aimerror=30.000000
-	Spread=0.015000
-	SpreadStyle=SS_Random
-=======
-     bRandomPitchFireSound=True
      DamageType=Class'KFMod.DamTypeDualies'
-     DamageMin=30
-     DamageMax=40
+     DamageMin=25
+     DamageMax=35
      Momentum=10000.000000
      bPawnRapidFireAnim=True
-     bWaitForRelease=True
      bAttachSmokeEmitter=True
      TransientSoundVolume=50.000000
      FireSound=Sound'PatchSounds.9mmShot'
      FireForce="AssaultRifleFire"
-     FireRate=0.250000
-     FireAnimRate=1.200000
+     FireRate=0.460000
      AmmoClass=Class'KFMod.SingleAmmo'
      AmmoPerFire=1
      ShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
@@ -89,10 +61,9 @@ defaultproperties
      ShakeOffsetMag=(X=6.000000,Y=6.000000,Z=6.000000)
      ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
      ShakeOffsetTime=2.000000
-     BotRefireRate=0.750000
+     BotRefireRate=0.350000
      FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
-     aimerror=25.000000
-     Spread=0.007500
+     aimerror=30.000000
+     Spread=0.015000
      SpreadStyle=SS_Random
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -11,6 +11,6 @@ function bool HandlePickupQuery( pickup Item )
 
 defaultproperties
 {
-	MessageNoAmmo=" is Empty."
-	Priority=10
+     MessageNoAmmo=" is Empty."
+     Priority=10
 }

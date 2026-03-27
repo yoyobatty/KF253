@@ -139,19 +139,10 @@ function PostRender(canvas Canvas)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	Dist=40.000000
-	FOV=90.000000
-	Dev=0.280000
-	bEnableBloom=True
-	devX=1.600000
-	bVisible=True
-=======
      dist=40.000000
      FOV=90.000000
      Dev=0.280000
      bEnableBloom=True
      devX=1.600000
      bVisible=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

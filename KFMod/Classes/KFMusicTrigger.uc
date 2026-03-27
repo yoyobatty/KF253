@@ -17,11 +17,6 @@ function Trigger( Actor Other, Pawn EventInstigator );
 
 defaultproperties
 {
-<<<<<<< HEAD
-	FadeInTime=3.000000
-	FadeOutTime=3.000000
-=======
      FadeInTime=3.000000
      FadeOutTime=3.000000
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

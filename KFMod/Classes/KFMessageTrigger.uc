@@ -42,11 +42,6 @@ event Trigger( Actor Other, Pawn EventInstigator )
 
 defaultproperties
 {
-<<<<<<< HEAD
-	messagetype=EMT_CriticalEvent
-	Message="My Message"
-=======
      messagetype=EMT_CriticalEvent
      Message="My Message"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

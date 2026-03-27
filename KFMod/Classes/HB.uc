@@ -46,35 +46,6 @@ simulated function WallSplat()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	SplatterClass=Class'KFMod.HelloWordEmmiter'
-	mRegenPause=True
-	mRegenOnTime(0)=1.000000
-	mRegenOnTime(1)=2.000000
-	mRegenOffTime(0)=0.400000
-	mRegenOffTime(1)=1.000000
-	mStartParticles=0
-	mMaxParticles=0
-	mLifeRange(0)=1.000000
-	mLifeRange(1)=1.000000
-	mRegenRange(0)=80.000000
-	mRegenRange(1)=80.000000
-	mDirDev=(X=0.050000,Y=0.050000,Z=0.050000)
-	mSpeedRange(0)=50.000000
-	mSpeedRange(1)=90.000000
-	mMassRange(0)=0.400000
-	mMassRange(1)=0.500000
-	mAirResistance=0.600000
-	mRandOrient=True
-	mSizeRange(0)=1.500000
-	mSizeRange(1)=2.500000
-	mGrowthRate=12.000000
-	mRandTextures=True
-	mNumTileColumns=4
-	mNumTileRows=4
-	LifeSpan=10.000000
-	Style=STY_Alpha
-=======
      SplatterClass=Class'KFMod.HelloWordEmmiter'
      mRegenPause=True
      mRegenOnTime(0)=1.000000
@@ -102,5 +73,4 @@ defaultproperties
      mNumTileRows=4
      LifeSpan=10.000000
      Style=STY_Alpha
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

@@ -21,7 +21,6 @@ var int LobbyTimeout;
 var float GameDiff;  // Since Level.Game  doesnt seem to replicate...let's store the difficulty value here
 var bool bEnemyHealthBars,bPerksEnabled;
 var byte EndGameType;
-var bool bHUDShowCash;
 
 replication
 {
@@ -30,7 +29,7 @@ replication
 		MaxMonsters, PendingBots,LastBotName,TempBotName,EndGameType;
 
 	reliable if ( bNetInitial && (Role == ROLE_Authority) )
-		GameDiff,bEnemyHealthBars,bNoBots,bPerksEnabled,bHUDShowCash;
+		GameDiff,bEnemyHealthBars,bNoBots,bPerksEnabled;
 }
 
 simulated function PostNetBeginPlay()
@@ -97,9 +96,5 @@ simulated function AddKFPRI(PlayerReplicationInfo PRI)
 
 defaultproperties
 {
-<<<<<<< HEAD
-	LobbyTimeout=-1
-=======
      LobbyTimeout=-1
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

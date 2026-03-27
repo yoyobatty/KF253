@@ -248,32 +248,6 @@ function PlayFireEnd()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	mBlend=1.000000
-	mDrumRotationsPerSec=0.400000
-	mScale=1.000000
-	mScaleMultiplier=0.900000
-	mSpeedMin=150.000000
-	mSpeedMax=1000.000000
-	mHoldSpeedMin=850.000000
-	mHoldSpeedMax=1600.000000
-	mHoldSpeedGainPerSec=750.000000
-	mWaitTime=0.500000
-	ProjSpawnOffset=(Y=-20.000000,Z=-7.000000)
-	bFireOnRelease=True
-	bWaitForRelease=True
-	PreFireTime=0.500000
-	FireLoopAnim="LoopThrow"
-	FireSound=Sound'KFWeaponSound.axe-swish'
-	FireRate=1.500000
-	AmmoClass=Class'KFMod.StunAmmo'
-	ShakeOffsetMag=(X=25.000000,Y=25.000000,Z=25.000000)
-	ShakeOffsetRate=(X=0.000000)
-	ProjectileClass=Class'KFMod.StunProj'
-	BotRefireRate=2.500000
-	FlashEmitterClass=None
-	SpreadStyle=SS_Random
-=======
      mBlend=1.000000
      mDrumRotationsPerSec=0.400000
      mScale=1.000000
@@ -298,5 +272,4 @@ defaultproperties
      BotRefireRate=2.500000
      FlashEmitterClass=None
      SpreadStyle=SS_Random
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

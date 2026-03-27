@@ -4,106 +4,66 @@ class KFGameType extends Invasion
 #exec OBJ LOAD FILE=KillingFloorTextures.utx
 #exec OBJ LOAD FILE=KillingFloorWeapons.utx
 #exec OBJ LOAD FILE=KillingFloorManorTextures.utx
-<<<<<<< HEAD
 #exec OBJ LOAD FILE=KillingFloorManorTextures.utx
 #exec OBJ LOAD FILE=KillingFloorHUD.utx
 #exec OBJ LOAD FILE=KFX.utx
 #exec OBJ LOAD FILE=KFMaterials.utx
 #exec OBJ LOAD FILE=KillingFloorLabTextures.utx
-=======
-#exec OBJ LOAD FILE=KillingFloorOfficeTextures.utx
-#exec OBJ LOAD FILE=KillingFloorLabTextures.utx
-#exec OBJ LOAD FILE=KillingFloorHUD.utx
-#exec OBJ LOAD FILE=KFX.utx
-#exec OBJ LOAD FILE=KFPatch2.utx
-#exec OBJ LOAD FILE=PatchTex.utx
-#exec OBJ LOAD FILE=KFMaterials.utx
-#exec OBJ LOAD FILE=OfficeStatics.usx
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 #exec OBJ LOAD FILE=KillingFloorStatics.usx
 #exec OBJ LOAD FILE=KillingFloorManorStatics.usx
 #exec OBJ LOAD FILE=KillingFloorLabStatics.usx
 #exec OBJ LOAD FILE=PatchStatics.usx
-<<<<<<< HEAD
-=======
-#exec OBJ LOAD FILE=NewPatchSM.usx
-#exec OBJ LOAD FILE=22Patch.usx
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 #exec OBJ LOAD FILE=KFWeaponModels.ukx
 
-struct MClassTypes
-{
-	var() config string MClassName,MID;
-};
-var() globalconfig array<MClassTypes> MonsterClasses;
-struct IMClassList
-{
-	var class<Monster> MClass;
-	var string ID;
-};
-struct MSquadsList
-{
-	var array< class<Monster> > MSquad;
-};
-var array<MSquadsList> InitSquads;
+var string MonsterClassName[16];
 
-<<<<<<< HEAD
 var string HumanName[4];
 var string ZombieName[4];
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-var int Time,LobbyTimeCounter;
+var class<KFPawn> Zombietypes[3];
+var class<KFPawn> Humantypes[3];
+var int ZombieChoice;
+var int HumanChoice;
+var int Time;
 var int ZombiesKilled;
 var int TotalMaxMonsters;
 var int SquadsToSpawn;
 var bool rewardFlag;
-var bool bUpdateViewTargs;
+var bool bCountDownSet,bUpdateViewTargs;
 var KFMusicTrigger MapSongHandler;
 
 var PlayerReplicationInfo KFPRIArray[16];
 
-<<<<<<< HEAD
 const MAX_BUYITEMS=50;
-=======
-//const MAX_BUYITEMS=50;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 const KFPROPNUM = 8;
 var localized string KFSurvivalPropText[KFPROPNUM];
 var localized string KFSurvivalDescText[KFPROPNUM];
 
-var() globalconfig float WaveStartSpawnPeriod;
-var() globalconfig int StartingCash,MinRespawnCash;  // Cash amount Players start with to buy equipment
-var() globalconfig bool bNoBots,bUseEndGameBoss;
-var() globalconfig bool bNoLateJoiners;
-var() globalconfig string EndGameBossClass,BossBattleSong;
-var globalconfig string TmpWavesInf,TmpSquadsInf,TmpMClassInf;
+var config float WaveStartSpawnPeriod;
+var config int StartingCash;  // Cash amount Players start with to buy equipment
+var config bool bNoBots;
+var config bool bNoLateJoiners; // Server option - Nobody can join after Lobby
 
-var(LoadingHints) localized array<string> KFHints;
+var(LoadingHints) private localized array<string> KFHints;
 
-var() globalconfig array<string> MonsterSquad;
+const MAXMONSTERSQUADS=20;
 
-var array<int> SquadsToUse; // Pointers
+var config string MonsterSquad[MAXMONSTERSQUADS];
+var config int MonsterSquadCount;
+
+var array <string> SquadsToUse;
 var array < class<Monster> > NextSpawnSquad;
-var array<ShopVolume> ShopList;
 var vector lastSpawnLocation;
 
-var byte TraderProblemLevel;
-var bool bTradingDoorsOpen;
+var bool bTradingDoorsOpen,bAllBooted;
 
 var class<AIController>ControllerClass;
 var string ControllerClassName;
 
 var float LastWaveStartTime;
 
-<<<<<<< HEAD
-=======
-var()   float   SineWaveFreq;           // Controls the frequency of the zombie spawning sine wave. This is used to increase/decrease speed and intensity of zombie spawning to give the gameplay peaks and valleys
-var()   float   WaveTimeElapsed;        // How long this wave has been going on
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-var() globalconfig int LobbyTimeOut; // Number of Seconds after someone has gone to a Ready state that the game auto-begins.
-var() globalconfig int InitialCountDownValue;  // Value (in seconds) for the base countdown.
+var config int LobbyTimeOut; // Number of Seconds after someone has gone to a Ready state that the game auto-begins.
+var config int InitialCountDownValue;  // Value (in seconds) for the base countdown, before difficulty modifiers are applied.
 
 var float StoredRadius, StoredHeight;
 
@@ -117,24 +77,14 @@ var config bool bEnemyHealthBars;
 
 var ZombieVolume LastZVol;
 
-var array<PlayerDeathMark> DeathMarkers; // For zombie eating.
-
 var array<KFPlayerStats> ActiveStats;
 var float LastStatsSaveTime;
 
-var() globalconfig array<string> VeterancySkills,AvailableChars;
+var() config array<string> VeterancySkills;
 var array< Class<KFVeterancyTypes> > LoadedSkills;
-var() globalconfig bool bPerksEnabled;
-var() globalconfig int MaxZombiesOnce;
+var() config bool bPerksEnabled;
+var() config int MaxZombiesOnce;
 
-var bool bWaveBossInProgress,bHasSetViewYet;
-var KFMonster ViewingBoss;
-
-<<<<<<< HEAD
-=======
-var ShopObjective SO;
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function bool BecomeSpectator(PlayerController P)
 {
 	if( P.PlayerReplicationInfo==None || P.PlayerReplicationInfo.bOnlySpectator )
@@ -155,7 +105,6 @@ function bool AllowBecomeActivePlayer(PlayerController P)
 		RemainingBots--;
 		bPlayerBecameActive = true;
 	}
-	P.PlayerReplicationInfo.Score = StartingCash;
 	return true;
 }
 
@@ -201,96 +150,27 @@ function SaveAllStats() // Ultimate lag function.
 		else ActiveStats[i].SaveConfig();
 	}
 }
-function LoadUpMonsterList()
-{
-	local int i,j,q,c,n;
-	local Class<Monster> MC;
-	local string S,ID;
-	local bool bInitSq;
-	local array<IMClassList> InitMList;
 
-	Log("Loading up monster classes...",'Init');
-	for( i=0; i<MonsterClasses.Length; i++ )
-	{
-		if( MonsterClasses[i].MClassName=="" || MonsterClasses[i].MID=="" )
-			Continue;
-		MC = Class<Monster>(DynamicLoadObject(MonsterClasses[i].MClassName,Class'Class'));
-		if( MC==None )
-			Continue;
-		InitMList.Length = j+1;
-		InitMList[j].MClass = MC;
-		InitMList[j].ID = MonsterClasses[i].MID;
-		j++;
-	}
-	Log("Got"@j@"monsters. Loading up monster squads...",'Init');
-	for( i=0; i<MonsterSquad.Length; i++ )
-	{
-		S = MonsterSquad[i];
-		if( S=="" )
-			Continue;
-		bInitSq = False;
-		n = 0;
-		While( S!="" )
-		{
-			q = int(Left(S,1));
-			ID = Mid(S,1,1);
-			S = Mid(S,2);
-			MC = None;
-			for( j=0; j<InitMList.Length; j++ )
-			{
-				if( InitMList[j].ID~=ID )
-				{
-					MC = InitMList[j].MClass;
-					Break;
-				}
-			}
-			if( MC==None )
-				Continue;
-			if( !bInitSq )
-			{
-				InitSquads.Length = c+1;
-				bInitSq = True;
-			}
-			while( (q--)>0 )
-			{
-				InitSquads[c].MSquad.Length = n+1;
-				InitSquads[c].MSquad[n] = MC;
-				n++;
-			}
-		}
-		if( bInitSq )
-			c++;
-	}
-	Log("Got"@c@"monster squads.",'Init');
-	if( FallbackMonster==class'EliteKrall' && InitMList.Length>0 )
-		FallbackMonster = InitMList[0].MClass;
+function PreBeginPlay()
+{
+	Super.PreBeginPlay();
+	StartGameMusic(False);
 }
 
 event InitGame( string Options, out string Error )
 {
-<<<<<<< HEAD
 	local int i,j;
 	local KFLevelRules KFLRit;
-	local ShopVolume SH;
 
 	bTradingDoorsOpen = true;
 
 	Super.InitGame(Options, Error);
 
-	LoadUpMonsterList();
-=======
-	local int i;
-	local KFLevelRules KFLRit;
-	local class<KFVeterancyTypes> V;
-	local ShopVolume SH;
-	local Controller C;
+	for(i=0; i<16; ++i)
+		MonsterClass[i] = class<Monster>(DynamicLoadObject(MonsterClassName[i], class'Class'));
 
-	Super.InitGame(Options, Error);
-
-	FixAFewActors();
-
-	bTradingDoorsOpen = True;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+	if( FallbackMonster == class'EliteKrall' )
+		FallbackMonster = MonsterClass[0];
 
 	foreach DynamicActors(class'KFLevelRules',KFLRit)
 	{
@@ -298,16 +178,6 @@ event InitGame( string Options, out string Error )
 			KFLRules = KFLRit;
 		else Warn("MULTIPLE KFLEVELRULES FOUND!!!!!");
 	}
-	foreach AllActors(class'ShopVolume',SH)
-<<<<<<< HEAD
-		ShopList[ShopList.Length] = SH;
-=======
-	{
-		ShopList[ShopList.Length] = SH;
-        //SO = Spawn(class'ShopObjective',,,SH.Location);
-	}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-
 	//provide default rules if mapper did not need custom one
 	if(KFLRules==none)
 		KFLRules = spawn(class'KFLevelRules');
@@ -316,7 +186,6 @@ event InitGame( string Options, out string Error )
 
 	For( i=0; i<VeterancySkills.Length; i++ )
 	{
-<<<<<<< HEAD
 		if( VeterancySkills[i]=="" || VeterancySkills[i]~="None" )
 			continue;
 		LoadedSkills.Length = j+1;
@@ -325,38 +194,8 @@ event InitGame( string Options, out string Error )
 			LoadedSkills.Length = j;
 		else j++;
 	}
-	LoadUpMonsterList();
 }
 
-=======
-		V = Class<KFVeterancyTypes>(DynamicLoadObject(VeterancySkills[i],Class'Class'));
-		if( V!=None )
-			LoadedSkills[LoadedSkills.Length] = V;
-	}
-	//Spawn(Class'KFBotChatManager');
-	AccessControl.AdminClass = class'KFMod.KFAdmin';
-	LoadUpMonsterList();
-}
-
-function FixAFewActors()
-{
-    local KFDoorMover Door;
-	local NetKActor K;
-
-    foreach DynamicActors(class'KFDoorMover', Door)
-    {
-        Door.MoverEncroachType = ME_IgnoreWhenEncroach;	
-		Door.EncroachDamage = 0; // Disable damage from door encroachment
-    }
-	foreach DynamicActors(class'NetKActor', K)
-	{
-		KarmaParams(K.KParams).KMass *= 2.0;
-		KarmaParams(K.KParams).KMaxSpeed = 500.f;
-		
-	}
-}
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 // For the GUI buy menu
 simulated function float GetDifficulty()
 {
@@ -411,13 +250,7 @@ static function FillPlayInfo(PlayInfo PlayInfo)
 
 	PlayInfo.AddSetting(default.GameGroup,	"GameDifficulty",			GetDisplayText("GameDifficulty"),		0, 2, "Select", default.GIPropsExtras[0], "Xb");
 	PlayInfo.AddSetting(default.GameGroup,"WaveStartSpawnPeriod", GetDisplayText("WaveStartSpawnPeriod"),50,0,"Text","3;0.0:6.0");
-<<<<<<< HEAD
 	PlayInfo.AddSetting(default.GameGroup,"StartingCash", GetDisplayText("StartingCash"),70,0,"Text","200;0:500");
-	PlayInfo.AddSetting(default.GameGroup,"MinRespawnCash", "Min Respawn Cash amount",70,0,"Text","200;0:500");
-=======
-	PlayInfo.AddSetting(default.GameGroup,"StartingCash", GetDisplayText("StartingCash"),70,0,"Text","200;0:5000");
-	PlayInfo.AddSetting(default.GameGroup,"MinRespawnCash", "Min Respawn Cash amount",70,0,"Text","200;0:5000");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 //	PlayInfo.AddSetting(default.GameGroup,"bEnemyHealthBars", GetDisplayText("bEnemyHealthBars"),	80, 0, "Check");
 PlayInfo.AddSetting(default.GameGroup,"InitialCountDownValue", GetDisplayText("InitialCountDownValue"),50,0,"Text","60;1:100");
 	
@@ -426,7 +259,6 @@ PlayInfo.AddSetting(default.GameGroup,"InitialCountDownValue", GetDisplayText("I
 	PlayInfo.AddSetting(default.RulesGroup,"bNoLateJoiners", GetDisplayText("bNoLateJoiners"),	1, 0, "Check",				,				,True,True);
 	PlayInfo.AddSetting(default.RulesGroup, "MaxZombiesOnce","Max Specimens",0,1,"Text","4;6:600");
 	PlayInfo.AddSetting(default.RulesGroup,"bPerksEnabled","Perks enabled",0,1,"Check");
-	PlayInfo.AddSetting(default.RulesGroup,"bUseEndGameBoss","Use EndGame Boss",0,1,"Check");
 	
 	PlayInfo.AddSetting(default.ServerGroup, "LobbyTimeOut",			GetDisplayText("LobbyTimeOut"),			0, 1, "Text",		"3;0:120",				,True,True);
 	PlayInfo.AddSetting(default.ServerGroup, "bEnableStatLogging",		GetDisplayText("bEnableStatLogging"),	0, 1, "Check",				,				,True);
@@ -435,19 +267,6 @@ PlayInfo.AddSetting(default.GameGroup,"InitialCountDownValue", GetDisplayText("I
 	PlayInfo.AddSetting(default.ServerGroup, "MaxPlayers",				GetDisplayText("MaxPlayers"),			0, 1, "Text",		"3;0:32",				,True);
 	PlayInfo.AddSetting(default.ServerGroup, "MaxIdleTime",			GetDisplayText("MaxIdleTime"),			0, 1, "Text",		"3;0:300",				,True,True);
 
-<<<<<<< HEAD
-	PlayInfo.AddSetting(default.GameGroup,"TmpWavesInf","Waves Config",60,0,"Custom",";;KFGui.KFInvWaveConfig",,,True);
-	PlayInfo.AddSetting(default.GameGroup,"TmpSquadsInf","Squads Config",60,0,"Custom",";;KFGui.KFInvSquadConfig",,,True);
-	PlayInfo.AddSetting(default.GameGroup,"TmpMClassInf","Monsters Config",60,0,"Custom",";;KFGui.KFInvClassConfig",,,True);
-
-=======
-	PlayInfo.AddSetting(default.GameGroup,   "InitialWave",  GetDisplayText("InitialWave"), 50,  0,  "Text", "2;1:"$(ArrayCount(default.Waves)) );
-	PlayInfo.AddSetting(default.GameGroup,   "FinalWave",      GetDisplayText("FinalWave"), 50,  0,  "Text", "2;1:"$ArrayCount(default.Waves) );
-
-	PlayInfo.AddSetting(default.GameGroup,"TmpWavesInf","Waves Config",60,0,"Custom",";;KFGui.KFInvWaveConfig",,,True);
-	PlayInfo.AddSetting(default.GameGroup,"TmpSquadsInf","Squads Config",60,0,"Custom",";;KFGui.KFInvSquadConfig",,,True);
-	PlayInfo.AddSetting(default.GameGroup,"TmpMClassInf","Monsters Config",60,0,"Custom",";;KFGui.KFInvClassConfig",,,True);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	// Bots
 	PlayInfo.AddSetting(default.BotsGroup, "BotMode", default.MPGIPropsDisplayText[2], 30, 1, "Select", default.BotModeText);
 	PlayInfo.AddSetting(default.BotsGroup, "MinPlayers", default.MPGIPropsDisplayText[0], 0, 0, "Text", "3;0:32");
@@ -504,15 +323,10 @@ static event string GetDescriptionText(string PropName)
 		case "bNoBots":					return default.KFSurvivalDescText[3];
 		case "bNoLateJoiners":				return default.KFSurvivalDescText[4];
 		case "LobbyTimeOut":				return default.KFSurvivalDescText[5];
+	//	case "bEnemyHealthBars":			return default.KFSurvivalDescText[6];
 		case "MaxZombiesOnce":				return "Maximum zombies at once on playtime, note that high values will LAG when theres a lot of them.";
 		case "bPerksEnabled":				return "Have special player veterancy skills enabled.";
-		case "InitialCountDownValue":			return default.KFSurvivalDescText[7];
-		case "bUseEndGameBoss":				return "Spawn the final boss on end of final wave.";
-		case "TmpWavesInf":					return "Configure the KF waves.";
-		case "TmpSquadsInf":				return "Configure the monster squads to use on waves.";
-		case "TmpMClassInf":				return "Configure the monster classes to be used in the squads.";
-		case "EndGameBossClass":				return "The boss battle monster class.";
-		case "MinRespawnCash":				return "Minimum amount of Cash when respawning on new wave (to stop people's reconnection needs).";
+		case "InitialCountDownValue":                    return default.KFSurvivalDescText[7];
 	}
 	return Super.GetDescriptionText(PropName);
 }
@@ -526,7 +340,6 @@ event PostNetBeginPlay()
 	KFGameReplicationInfo(GameReplicationInfo).bPerksEnabled = bPerksEnabled;
 }
 
-<<<<<<< HEAD
 //TODO: Is this really the place?
 function bool PickupQuery( Pawn Other, Pickup item )
 {
@@ -552,8 +365,6 @@ function bool PickupQuery( Pawn Other, Pickup item )
 	return Super.PickupQuery(Other,item);
 }
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 function AddMonster()
 {
 	local NavigationPoint StartSpot;
@@ -583,6 +394,7 @@ function AddMonster()
 	if (MonstersAdded >= 3)
 		MonstersAdded = 0;
 }
+
 
 function bool CheckMaxLives(PlayerReplicationInfo Scorer)
 {
@@ -661,8 +473,8 @@ function ScoreKill(Controller Killer, Controller Other)
 	if ( Other.bIsPlayer )
 	{
 		Killer.PlayerReplicationInfo.Score -= 5;
-		Killer.PlayerReplicationInfo.Team.Score -= 2;
 		Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
+		Killer.PlayerReplicationInfo.Team.Score -= 5;
 		Killer.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
 		ScoreEvent(Killer.PlayerReplicationInfo, -5, "team_frag");
 		return;
@@ -672,22 +484,116 @@ function ScoreKill(Controller Killer, Controller Other)
 	else if(Killer.PlayerReplicationInfo !=none)
 	{
 		KillScore = (LastKilledMonsterClass.Default.ScoringValue * 5 + Rand(LastKilledMonsterClass.Default.ScoringValue * 2));
-		KillScore*=Clamp((GameDifficulty-1)/5.f+1,0.5,3);
-		KillScore = Max(1,int(KillScore));
 		Killer.PlayerReplicationInfo.Kills++;
 		Killer.PlayerReplicationInfo.Score += KillScore;
-		Killer.PlayerReplicationInfo.Team.Score += KillScore;
-		Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
+		Killer.PlayerReplicationInfo.Team.Score += (0.5 * KillScore);
 		Killer.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
+		Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
 		TeamScoreEvent(Killer.PlayerReplicationInfo.Team.TeamIndex, 1, "tdm_frag");
-		if( KFPlayerReplicationInfo(Killer.PlayerReplicationInfo)!=None )
-			KFPlayerReplicationInfo(Killer.PlayerReplicationInfo).ThreeSecondScore+=KillScore;
 	}
 	if (Killer.PlayerReplicationInfo !=none && Killer.PlayerReplicationInfo.Score < 0)
 		Killer.PlayerReplicationInfo.Score = 0;
 }
 
 function SetupWaveBot(Inventory BotsInv);
+
+function ArmBots(xPawn gp)
+{
+	local Inventory inv;
+	local int WepWeight;
+
+	WepWeight = FRand()*10;
+
+	if( gp.Health<75 )
+		gp.Health+=25;
+
+	for( inv=gp.Inventory;inv!=none;inv=inv.Inventory )
+		inv.Destroy();
+
+	switch (WaveNum)
+	{
+		Case 0:
+		Case 1:
+		Case 2:
+			if(WepWeight <8)
+			{
+				gp.CreateInventory("KFMod.Bullpup");
+				Weapon(gp.FindInventoryType(class'Bullpup')).AddAmmo(320,0);
+				gp.CreateInventory("KFMod.Knife");
+			}
+			else
+			{
+				gp.CreateInventory("KFMod.Shotgun");
+				Weapon(gp.FindInventoryType(class'Shotgun')).AddAmmo(50,0);
+				gp.CreateInventory("KFMod.Axe");
+			}
+			break;
+		Case 3:
+		Case 4:
+		Case 5:
+			if(WepWeight <5)
+			{
+				gp.CreateInventory("KFMod.Bullpup");
+				Weapon(gp.FindInventoryType(class'Bullpup')).AddAmmo(320,0);
+				gp.CreateInventory("KFMod.Knife");
+			}
+			else
+			{
+				gp.CreateInventory("KFMod.Shotgun");
+				Weapon(gp.FindInventoryType(class'Shotgun')).AddAmmo(50,0);
+				gp.CreateInventory("KFMod.Axe");
+			}
+			break;
+		Case 6:
+		Case 7:
+		Case 8:
+			if(WepWeight <4)
+			{
+				gp.CreateInventory("KFMod.Bullpup");
+				Weapon(gp.FindInventoryType(class'Bullpup')).AddAmmo(320,0);
+				gp.CreateInventory("KFMod.Knife");
+			}
+			else if(WepWeight<9)
+			{
+				gp.CreateInventory("KFMod.Shotgun");
+				Weapon(gp.FindInventoryType(class'Shotgun')).AddAmmo(50,0);
+			}
+			else
+			{
+				gp.CreateInventory("KFMod.Boomstick");
+				Weapon(gp.FindInventoryType(class'Boomstick')).AddAmmo(35,0);
+				gp.CreateInventory("KFMod.Chainsaw");
+			}
+			break;
+		Case 9:
+		Case 10:
+			if(WepWeight <3)
+			{
+				gp.CreateInventory("KFMod.Bullpup");
+				Weapon(gp.FindInventoryType(class'Bullpup')).AddAmmo(320,0);
+				gp.CreateInventory("KFMod.Knife");
+			}
+			else if(WepWeight <6)
+			{
+				gp.CreateInventory("KFMod.Shotgun");
+				Weapon(gp.FindInventoryType(class'Shotgun')).AddAmmo(50,0);
+				gp.CreateInventory("KFMod.Axe");
+			}
+			else if(WepWeight<9)
+			{
+				gp.CreateInventory("KFMod.Boomstick");
+				Weapon(gp.FindInventoryType(class'Boomstick')).AddAmmo(35,0);
+				gp.CreateInventory("KFMod.Chainsaw");
+			}
+			else
+			{
+				gp.CreateInventory("KFMod.LAW");
+				Weapon(gp.FindInventoryType(class'LAW')).AddAmmo(10,0);
+				gp.CreateInventory("KFMod.Chainsaw");
+			}
+			break;
+	}
+}
 
 /* Spawn and initialize a bot
 */
@@ -704,34 +610,20 @@ function Bot SpawnBot(optional string botName)
 		Chosen.Init(); //amb
 	NewBot = Spawn(class 'KFInvasionBot');
 
-<<<<<<< HEAD
 	if ( NewBot != None )
 		InitializeBot(NewBot,BotTeam,Chosen);
 
 	// Decide if bot should be a veteran.
 	if( bPerksEnabled && LoadedSkills.Length>0 && FRand()<0.35 && KFPlayerReplicationInfo(NewBot.PlayerReplicationInfo)!=None )
 		KFPlayerReplicationInfo(NewBot.PlayerReplicationInfo).ClientVeteranSkill = LoadedSkills[Rand(LoadedSkills.Length)];
-	NewBot.PlayerReplicationInfo.Score = StartingCash;
 
-=======
-	if( NewBot != None )
-		InitializeBot(NewBot,BotTeam,Chosen);
-
-	// Decide if bot should be a veteran.
-	if( bPerksEnabled && LoadedSkills.Length>0 && KFPlayerReplicationInfo(NewBot.PlayerReplicationInfo)!=None )
-	{
-		KFPlayerReplicationInfo(NewBot.PlayerReplicationInfo).ClientVeteranSkill = LoadedSkills[Rand(LoadedSkills.Length)];	
-	}
-	NewBot.PlayerReplicationInfo.Score = StartingCash;
-	NewBot.Skill = 9;
-	log("Spawned bot: "$NewBot.PlayerReplicationInfo.PlayerName);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	return NewBot;
 }
 
  
 function InitializeBot(Bot NewBot, UnrealTeamInfo BotTeam, RosterEntry Chosen)
 {   
+	local float Decs;
 	local string S;
 
 	NewBot.InitializeSkill(AdjustedDifficulty);
@@ -741,13 +633,25 @@ function InitializeBot(Bot NewBot, UnrealTeamInfo BotTeam, RosterEntry Chosen)
 		ChangeName(NewBot, Chosen.ModifiedPlayerName, false);
 	else ChangeName(NewBot, Chosen.PlayerName, false);
 	BotTeam.SetBotOrders(NewBot,Chosen);
-
-	S = Class'KFGameType'.Static.GetValidCharacter("");
+	Decs = FRand();
+	if( Decs<0.125 )
+		S = "Soldier_Black";
+	else if( Decs<0.25 )
+		S = "Soldier_Black";
+	else if( Decs<0.3775 )
+		S = "Soldier_Urban";
+	else if( Decs<0.5 )
+		S = "Soldier";
+	else if( Decs<0.625 )
+		S = "Soldier_Lewis";
+	else if( Decs<0.75 )
+		S = "Soldier_Davin";
+	else if( Decs<0.875 )
+		S = "Hazmat";
+	else if( Decs<0.9 )
+		S = "Soldier_Kara";
+	else S = "Soldier_Powers";
 	NewBot.PlayerReplicationInfo.SetCharacterName(S);
-<<<<<<< HEAD
-=======
-	log("Initialized bot: "$NewBot.PlayerReplicationInfo.PlayerName);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	xBot(NewBot).PawnSetupRecord = class'xUtil'.static.FindPlayerRecord(S);
 }
  
@@ -765,48 +669,27 @@ function WarningTimer()
 function bool RewardSurvivingPlayers()
 {
 	local Controller C;
-	local int moneyPerPlayer,div;
-	local TeamInfo T;
+	local int moneyPerPlayer;
 
 	C=Level.ControllerList;
 
-	for ( C=Level.ControllerList; C!=None; C=C.NextController )
-	{
-		if ( C.Pawn!=None && C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team!=None )
-		{
-			T = C.PlayerReplicationInfo.Team;
-			div++;
-		}
-	}
-	if ( T==None || T.Score<=0 )
-		Return False;
+	if ( C.PlayerReplicationInfo.Team.Score > 0 )
+		moneyPerPlayer = (C.PlayerReplicationInfo.Team.Score / (NumPlayers + NumBots) / 6);
 
-	moneyPerPlayer = int(T.Score / float(div));
+	C.PlayerReplicationInfo.Team.Score = 0;
 
 	for ( C=Level.ControllerList; C!=None; C=C.NextController )
 	{
-		if ( C.Pawn!=None && C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team!=None )
+		if ( (C.PlayerReplicationInfo != None) && ( C.bIsPlayer || C.PlayerReplicationInfo.bBot ) && !C.PlayerReplicationInfo.bOnlySpectator
+		 && !C.PlayerReplicationInfo.bOutOfLives && !C.PlayerReplicationInfo.bIsSpectator )
 		{
-			if( div==1 )
-			{
-				C.PlayerReplicationInfo.Score += T.Score;
-				T.Score = 0;
-			}
-			else
-			{
-				C.PlayerReplicationInfo.Score += moneyPerPlayer;
-				T.Score-=moneyPerPlayer;
-				div--;
-			}
+			// Dump the Team Score into the personal scores of all the players.
+			C.PlayerReplicationInfo.Score += moneyPerPlayer;
+			C.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
 			C.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-			if( T.Score<=0 )
-			{
-				T.Score = 0;
-				Break;
-			}
+			TeamScoreEvent(C.PlayerReplicationInfo.Team.TeamIndex, 1, "tdm_frag");
 		}
 	}
-	T.NetUpdateTime = Level.TimeSeconds - 1;
 	return true;
 }
 
@@ -920,12 +803,10 @@ function bool AddBot(optional string botName)
 	if ( NewBot == None )
 	{
 		warn("Failed to spawn bot.");
-<<<<<<< HEAD
-=======
-		log("Failed to spawn bot.");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		return false;
 	}
+	// broadcast a welcome message.
+	BroadcastLocalizedMessage(GameMessageClass, 1, NewBot.PlayerReplicationInfo);
 
 	NewBot.PlayerReplicationInfo.PlayerID = CurrentID++;
 	NumBots++;
@@ -951,16 +832,6 @@ auto State PendingMatch
 
 		Global.Timer();
 
-<<<<<<< HEAD
-=======
-        if ( Level.NetMode == NM_StandAlone && NumSpectators > 0 ) // Spectating only.
-        {
-            StartMatch();
-            PlayStartupMessage();
-            return;
-        }
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		// first check if there are enough net players, and enough time has elapsed to give people
 		// a chance to join
 		if ( NumPlayers == 0 )
@@ -1001,30 +872,32 @@ auto State PendingMatch
 		PlayStartupMessage();
 		if( NumPlayers>2 )
 			ElapsedTime++;
-		if( (RdyCount>=(NumPlayers*0.65) || ElapsedTime>300) && NumPlayers>2 && LobbyTimeout>0 )
+		if( (RdyCount>=(NumPlayers*0.75) || ElapsedTime>300) && NumPlayers>2 && LobbyTimeout>0 )
 		{
-			if( LobbyTimeout<=1 )
+			if( KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout==-1 )
+			{
+				if( LobbyTimeout<=0 )
+					KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout = 10;
+				else KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout = LobbyTimeout;
+			}
+			else if( KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout<=1 )
 			{
 				for (P=Level.ControllerList; P!=None; P=P.NextController )
 				{
 					if( P.PlayerReplicationInfo!=None )
 						P.PlayerReplicationInfo.bReadyToPlay = True;
 				}
-				LobbyTimeout = 0;
+				KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout = 0;
 			}
-			else LobbyTimeout--;
-			KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout = LobbyTimeout;
+			else KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout--;
 		}
-		else KFGameReplicationInfo(GameReplicationInfo).LobbyTimeout = -1;
 	}
 	function beginstate()
 	{
 		bWaitingToStartMatch = true;
 		StartupStage = 0;
-		if( LobbyTimeout<=0 )
-			LobbyTimeCounter = 10;
-		else LobbyTimeCounter = LobbyTimeout;
-		NetWait = Max(NetWait,0);
+		if ( IsA('xLastManStandingGame') )
+			NetWait = Max(NetWait,0);
 	}
 	function EndState()
 	{
@@ -1036,11 +909,6 @@ Begin:
 		StartMatch();
 }
 
-<<<<<<< HEAD
-=======
-function DoWaveEnd(){}
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 State MatchInProgress
 {
       function bool UpdateMonsterCount() // To avoid invasion errors.
@@ -1060,25 +928,14 @@ State MatchInProgress
           NumMonsters = i; 
           Return (j>0); 
 	}
-	function bool BootShopPlayers()
-	{
-		local int i,j;
-		local bool bRes;
-
-		j = ShopList.Length;
-		for( i=0; i<j; i++ )
-		{
-			if( ShopList[i].BootPlayers() )
-				bRes = True;
-		}
-		Return bRes;
-	}
 	function Timer()
 	{
 		local Controller C; //,OtherPlayer;
 		local bool bOneMessage;
 		local Bot B;
 		local KFTraderDoor TDoor;
+		local ShopVolume ShopVol;
+		local bool bProblemShop; 
  
 		Global.Timer();
 
@@ -1116,150 +973,58 @@ State MatchInProgress
 				return;
 			}
 		}
-
-		if( bWaveBossInProgress )
+		if (!bCountDownSet)
 		{
-			// Close Trader doors
-			if (bTradingDoorsOpen)
-			{
-				foreach DynamicActors(class'KFTraderDoor',TDoor)
-					TDoor.TriggerEvent(TDoor.Tag, TDoor, None);
-<<<<<<< HEAD
-				bTradingDoorsOpen = False;
-				TraderProblemLevel = 0;
-=======
-				log("Closing Trader Doors for Boss Fight");
-				bTradingDoorsOpen = False;
-				TraderProblemLevel = 0;
-				For( C=Level.ControllerList; C!=None; C=C.NextController )
-            		if( C.Pawn!=None && C.Pawn.Health>0 )
-                		C.Pawn.bBlockActors = C.Pawn.default.bBlockActors; // Disable pawn collision during trader time
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-			}
-			if( TraderProblemLevel<4 )
-			{
-				if( BootShopPlayers() )
-					TraderProblemLevel = 0;
-				else TraderProblemLevel++;
-			}
-			if( !bHasSetViewYet && TotalMaxMonsters<=0 && NumMonsters>0 )
-			{
-				bHasSetViewYet = True;
-				for ( C = Level.ControllerList; C != None; C = C.NextController )
-					if ( C.Pawn!=None && KFMonster(C.Pawn)!=None && KFMonster(C.Pawn).MakeGrandEntry() )
-					{
-						ViewingBoss = KFMonster(C.Pawn);
-						Break;
-					}
-				if( ViewingBoss!=None )
-				{
-					ViewingBoss.bAlwaysRelevant = True;
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-						if( PlayerController(C)!=None )
-						{
-							PlayerController(C).SetViewTarget(ViewingBoss);
-							PlayerController(C).ClientSetViewTarget(ViewingBoss);
-							PlayerController(C).bBehindView = True;
-							PlayerController(C).ClientSetBehindView(True);
-							PlayerController(C).ClientSetMusic(BossBattleSong,MTRAN_FastFade);
-						}
-				}
-			}
-			else if( ViewingBoss!=None && !ViewingBoss.bShotAnim )
-			{
-				ViewingBoss = None;
-				for ( C = Level.ControllerList; C != None; C = C.NextController )
-					if( PlayerController(C)!=None )
-					{
-						if( C.Pawn!=None )
-						{
-							PlayerController(C).SetViewTarget(C.Pawn);
-							PlayerController(C).ClientSetViewTarget(C.Pawn);
-						}
-						else
-						{
-							PlayerController(C).SetViewTarget(C);
-							PlayerController(C).ClientSetViewTarget(C);
-						}
-						PlayerController(C).bBehindView = False;
-						PlayerController(C).ClientSetBehindView(False);
-					}
-			}
-			if( TotalMaxMonsters<=0 || (Level.TimeSeconds>WaveEndTime) )
-			{
-				// if everyone's spawned and they're all dead
-				if ( NumMonsters <= 0 )
-					DoWaveEnd();
-			}
-			else AddBoss();
+			WaveCountDown = (InitialCountDownValue - GameDifficulty * 5);
+			If (WaveCountDown <= 0) 
+			 WaveCountDown = 1;
+			bCountDownSet = true;
 		}
-		else if(bWaveInProgress)
+
+		if(bWaveInProgress)
 		{
-<<<<<<< HEAD
-=======
-			WaveTimeElapsed += 1.0;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			// Close Trader doors
 			if (bTradingDoorsOpen)
 			{
 				foreach DynamicActors(class'KFTraderDoor',TDoor)
 					TDoor.TriggerEvent(TDoor.Tag, TDoor, None);
-<<<<<<< HEAD
-				bTradingDoorsOpen = False;
-				TraderProblemLevel = 0;
-=======
-				log("Closing Trader Doors for Wave Fight");
-				bTradingDoorsOpen = False;
-				TraderProblemLevel = 0;
-        		For( C=Level.ControllerList; C!=None; C=C.NextController )
-            		if( C.Pawn!=None && C.Pawn.Health>0 )
-                		C.Pawn.bBlockActors = C.Pawn.default.bBlockActors; // Disable pawn collision during trader time
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+				bAllBooted=false;
+				bTradingDoorsOpen = false;
 			}
-			if( TraderProblemLevel<4 )
+			if(!bAllBooted)
 			{
-				if( BootShopPlayers() )
-					TraderProblemLevel = 0;
-				else TraderProblemLevel++;
+				bProblemShop=false;
+
+				foreach AllActors(class'ShopVolume', ShopVol)
+				{
+					if( ShopVol.Touching.length>0 )
+						bProblemShop = true;
+					ShopVol.BootPlayers();
+				}
+				if(!bProblemShop)
+					bAllBooted=true;
 			}
 			if(!MusicPlaying)
 				StartGameMusic(True);
 
 			if( TotalMaxMonsters<=0 )
 			{
-<<<<<<< HEAD
-				if ( Level.TimeSeconds>WaveEndTime )
-=======
-				if ( NumMonsters <= 5 )
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+				if ( Level.TimeSeconds > WaveEndTime + 30)
 				{
 					for ( C = Level.ControllerList; C != None; C = C.NextController )
-						if ( (MonsterController(C)!=None) && !C.Pawn.PlayerCanSeeMe() )
+						if ( (MonsterController(C) != None) && (Level.TimeSeconds - MonsterController(C).LastSeenTime > 30)
+							&& !MonsterController(C).Pawn.PlayerCanSeeMe() )
 						{
 							C.Pawn.KilledBy( C.Pawn );
-							Break;
+							return;
 						}
 				}
 				// if everyone's spawned and they're all dead
 				if ( NumMonsters <= 0 )
-<<<<<<< HEAD
-				{
-					if( bUseEndGameBoss && WaveNum==(FinalWave-1) )
-						StartWaveBoss();
-					else DoWaveEnd();
-				}
-			} // all monsters spawned
-			else if ( (Level.TimeSeconds > NextMonsterTime) && (NumMonsters+NextSpawnSquad.Length <= MaxMonsters) )
-			{
-				WaveEndTime = Level.TimeSeconds+60;
-=======
 					DoWaveEnd();
 			} // all monsters spawned
 			else if ( (Level.TimeSeconds > NextMonsterTime) && (NumMonsters+NextSpawnSquad.Length <= MaxMonsters) )
 			{
-				WaveEndTime = Level.TimeSeconds+160;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				AddSquad();
 				if(nextSpawnSquad.length>0)
 					NextMonsterTime = Level.TimeSeconds + 0.2;  // 3
@@ -1268,16 +1033,11 @@ State MatchInProgress
 		}
 		else if ( NumMonsters <=0 )
 		{
-<<<<<<< HEAD
 			if ( WaveNum == FinalWave )
-=======
-			if ( WaveNum == FinalWave && !bUseEndGameBoss)
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			{
 				EndGame(None,"TimeLimit");
 				return;
 			}
-<<<<<<< HEAD
 			WaveCountDown--;
 			if (!CalmMusicPlaying)
 				StartGameMusic(False);
@@ -1286,58 +1046,17 @@ State MatchInProgress
 			{
 				// Currently, Do nothing
 			}
-=======
-			else if( WaveNum == (FinalWave + 1) && bUseEndGameBoss )
-            {
-                EndGame(None,"TimeLimit");
-                return;
-            }
-			WaveCountDown--;
-			if ( !CalmMusicPlaying )
-			{
-				StartGameMusic(False);
-				For( C=Level.ControllerList; C!=None; C=C.NextController )
-					if( C.Pawn!=None && C.Pawn.Health>0 )
-						C.Pawn.bBlockActors = false; // Disable pawn collision during trader time
-			}
-			// Open Trader doors
-			if ( WaveNum > (InitialWave - 1) && !bTradingDoorsOpen )
-			{
-				foreach DynamicActors(class'KFTraderDoor',TDoor)
-					TDoor.TriggerEvent(TDoor.Tag, TDoor, None);
-				log("Trader Doors Opened");
-				bTradingDoorsOpen = true;
-			}
-			KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			if ( WaveCountDown == 5 )
 			{
 				KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn=false;
 				InvasionGameReplicationInfo(GameReplicationInfo).WaveNumber = WaveNum;
 			}
 			else if ( (WaveCountDown > 0) && (WaveCountDown < 5) )
-<<<<<<< HEAD
 				BroadcastLocalizedMessage(class'KFMod.WaitingMessage', WaveCountDown-1);
-=======
-			{
-                if( WaveNum == FinalWave && bUseEndGameBoss )
-                {
-					For( C=Level.ControllerList; C!=None; C=C.NextController )
-						if ( PlayerController(C) != None )
-                    		PlayerController(C).ClientMessage("Final wave inbound!", 'CriticalEvent');
-                }
-                else
-                {
-                    BroadcastLocalizedMessage(class'KFMod.WaitingMessage', WaveCountDown-1);
-                }
-				
-			}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			else if ( WaveCountDown <= 1 )
 			{
 				bWaveInProgress = true;
 				KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = true;
-<<<<<<< HEAD
 				SetupWave();
 				for ( C = Level.ControllerList; C != None; C = C.NextController )
 					if ( PlayerController(C) != None )
@@ -1359,138 +1078,28 @@ State MatchInProgress
 							}
 						}
 					}
-=======
-				if( WaveNum == FinalWave && bUseEndGameBoss )
-                {
-                    StartWaveBoss();
-                }
-                else
-				{
-					SetupWave();
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-						if ( PlayerController(C) != None )
-							PlayerController(C).LastPlaySpeech = 0;
-
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-						if ( Bot(C) != None && Bot(C).Pawn != None )
-						{
-							B = Bot(C);
-							InvasionBot(B).bDamagedMessage = false;
-							B.bInitLifeMessage = false;
-							if ( !bOneMessage && (FRand() < 0.65) )
-							{
-								bOneMessage = true;
-								if ( (B.Squad.SquadLeader != None) && B.Squad.CloseToLeader(C.Pawn) )
-								{
-									B.SendMessage(B.Squad.SquadLeader.PlayerReplicationInfo, 'OTHER', B.GetMessageIndex('INPOSITION'), 20, 'TEAM');
-									B.bInitLifeMessage = false;
-								}
-							}
-						}
-				}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			}
 		}
 	}
 
-<<<<<<< HEAD
-=======
-	   // Use a sine wave to somewhat randomly increase/decrease the frequency (and
-    // also the intensity) of zombie squad spawning. This will give "peaks and valleys"
-    // the the intensity of the zombie attacks
-    function float CalcNextSquadSpawnTime()
-    {
-        local float NextSpawnTime;
-        local float SineMod;
-		local int TotalPlayers;
-
-        SineMod = 1.0 - Abs(sin(WaveTimeElapsed * SineWaveFreq));
-
-        NextSpawnTime = KFLRules.WaveSpawnPeriod;
-
-		TotalPlayers = NumPlayers + NumBots;
-
-                // Make the zeds come faster in the earlier waves
-                if( WaveNum < 7 )
-                {
-                    if( TotalPlayers == 4 )
-                    {
-                        NextSpawnTime *= 0.85;
-                    }
-                    else if( TotalPlayers == 5 )
-                    {
-                        NextSpawnTime *= 0.65;
-                    }
-                    else if( TotalPlayers >= 6 )
-                    {
-                        NextSpawnTime *= 0.3;
-                    }
-                }
-                // Give a slightly bigger breather in the later waves
-                else if( WaveNum >= 7 )
-                {
-                    if( TotalPlayers <= 3 )
-                    {
-                        NextSpawnTime *= 1.1;
-                    }
-                    else if( TotalPlayers == 4 )
-                    {
-                        NextSpawnTime *= 1.0;//0.85;
-                    }
-                    else if( TotalPlayers == 5 )
-                    {
-                        NextSpawnTime *= 0.75;//0.65;
-                    }
-                    else if( TotalPlayers >= 6 )
-                    {
-                        NextSpawnTime *= 0.60;//0.3;
-                    }
-                }
-            
-
-
-        // Make the zeds come a little faster at all times on harder and above
-        if ( GameDifficulty >= 4.0 ) // Hard
-        {
-            NextSpawnTime *= 0.85;
-        }
-
-        NextSpawnTime += SineMod * (NextSpawnTime * 2);
-
-        return NextSpawnTime;
-    }
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	function DoWaveEnd()
 	{
 		local Controller C;
 		local KFTraderDoor TDoor;
 		local KFDoorMover KFDM;
 
-<<<<<<< HEAD
-=======
-		// Only reset this at the end of wave 0. That way the sine wave that scales
-        // the intensity up/down will be somewhat random per wave
-        if( WaveNum < 1 )
-        {
-            WaveTimeElapsed = 0;
-        }
-
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		SaveAllStats();
 
 		if(!rewardFlag)
 			RewardSurvivingPlayers();
 
-		bWaveInProgress = False;
-		bWaveBossInProgress = False;
+		bWaveInProgress = false;
 		KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = false;
 
-		WaveCountDown = Max(InitialCountDownValue,1);
+		WaveCountDown = (InitialCountDownValue - GameDifficulty * 5);
 		KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
 		WaveNum++;
 
-<<<<<<< HEAD
 		// Open Trader doors
 		if (!bTradingDoorsOpen)
 		{
@@ -1500,63 +1109,29 @@ State MatchInProgress
 			bTradingDoorsOpen = true;
 		}
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		for ( C = Level.ControllerList; C != None; C = C.NextController )
 		{
 			if ( PlayerController(C) != None )
 			{
 				if ( (C.Pawn == None) && !C.PlayerReplicationInfo.bOnlySpectator )
-					PlayerController(C).SetViewTarget(C);
+				PlayerController(C).SetViewTarget(C);
 			}
-<<<<<<< HEAD
-=======
-			//log("Player: "$C.PlayerReplicationInfo.PlayerName);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			if ( C.PlayerReplicationInfo != None )
 			{
 				C.PlayerReplicationInfo.bOutOfLives = false;
 				C.PlayerReplicationInfo.NumLives = 0;
-<<<<<<< HEAD
-=======
-				//log("Player: "$C.PlayerReplicationInfo.PlayerName$" has $"$C.PlayerReplicationInfo.NumLives$" lives.");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				if ( (C.Pawn == None) && !C.PlayerReplicationInfo.bOnlySpectator )
 				{
-					C.PlayerReplicationInfo.Score = Max(MinRespawnCash,int(C.PlayerReplicationInfo.Score));
 					if( (PlayerController(C) != None) )
 					{
 						PlayerController(C).GotoState('PlayerWaiting');
 						PlayerController(C).SetViewTarget(C);
 						PlayerController(C).ClientSetBehindView(false);
 						PlayerController(C).bBehindView = False;
-<<<<<<< HEAD
 					}
 					C.ServerReStartPlayer();
 					if( (PlayerController(C) != None) )
 						PlayerController(C).ClientSetViewTarget(C.Pawn);
-=======
-						PlayerController(C).ClientSetViewTarget(C.Pawn);
-					}
-					//C.ServerReStartPlayer();
-					RestartPlayer(C);
-					//log("Respawning player: "$C.PlayerReplicationInfo.PlayerName);
-				}
-
-				if ( KFPlayerController(C) != none )
-                {
-
-                    // Don't broadcast this message AFTER the final wave!
-                    if( WaveNum < FinalWave )
-                    {
-						KFPlayerController(C).ClientMessage("WAVE COMPLETED! GET TO THE TRADER!", 'CriticalEvent');
-                    }
-                }
-				if(Bot(C) != None)
-				{
-					Bot(C).Squad.Team.SetBotOrders(Bot(C),None); //Reset bot orders
-					//Bot(C).SetOrders('DEFEND',None);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 				}
 			}
 		}
@@ -1566,18 +1141,7 @@ State MatchInProgress
 		foreach DynamicActors(class'KFDoorMover', KFDM)
 			KFDM.RespawnDoor();
 	}
-	function StartWaveBoss()
-	{
-		bHasSetViewYet = False;
-		WaveEndTime = Level.TimeSeconds+60;
-		NextSpawnSquad.Length = 1;
-		NextSpawnSquad[0] = Class<Monster>(DynamicLoadObject(EndGameBossClass,Class'Class'));
-		if( NextSpawnSquad[0]==None )
-			NextSpawnSquad[0] = FallbackMonster;
-		KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = 1;
-		TotalMaxMonsters = 1;
-		bWaveBossInProgress = True;
-	}
+
 	function UpdateViews() // To fix camera stuck on ur spec target
 	{
 		local Controller C;
@@ -1593,34 +1157,9 @@ State MatchInProgress
 	function BeginState()
 	{
 		Super.BeginState();
-<<<<<<< HEAD
 		WaveNum = InitialWave;
 		InvasionGameReplicationInfo(GameReplicationInfo).WaveNumber = WaveNum;
-		WaveCountDown = Max(InitialCountDownValue,1);
 	}
-=======
-		//WaveNum = InitialWave;
-		WaveNum = Max(0, InitialWave - 1); //Updated so we can set initial wave properly
-		InvasionGameReplicationInfo(GameReplicationInfo).WaveNumber = WaveNum;
-		WaveCountDown = Max(InitialCountDownValue,1);
-	}
-    function EndState()
-    {
-        local Controller C;
-
-        Super.EndState();
-
-        // Tell all players to stop showing the path to the trader
-        For( C=Level.ControllerList; C!=None; C=C.NextController )
-        {
-            if( C.Pawn!=None && C.Pawn.Health>0 )
-            {
-                // Restore pawn collision during trader time
-                C.Pawn.bBlockActors = C.Pawn.default.bBlockActors;
-            }
-        }
-    }
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 State MatchOver
@@ -1667,15 +1206,15 @@ event PostLogin( PlayerController NewPlayer )
 	PC = KFPlayerController(NewPlayer);
 	if( PC!=None && PC.MyActiveStats==None )
 		PC.FindStatsObject();
+
+	log(NewPlayer.PlayerReplicationInfo$" "$NewPlayer.PlayerReplicationInfo.PlayerName$" "$NewPlayer.PlayerReplicationInfo.PlayerID,'PostLogin');
 }
 
 function Killed( Controller Killer, Controller Killed, Pawn KilledPawn, class<DamageType> damageType )
 {
 	local KFPlayerController PC;
 
-	if( KFMonster(KilledPawn)!=None && 
-        Class<KFWeaponDamageType>(damageType)!=None &&
-         KFPlayerController(Killer)!=None  )
+	if( KFMonster(KilledPawn)!=None && KFPlayerController(Killer)!=None && Class<KFWeaponDamageType>(damageType)!=None )
 	{
 		PC = KFPlayerController(Killer);
 		if( PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) )
@@ -1702,13 +1241,11 @@ function SetupWave()
 		return;
 	}
 
-	TraderProblemLevel = 0;
 	rewardFlag=false;
 	ZombiesKilled=0;
 	WaveMonsters = 0;
 	WaveNumClasses = 0;
 	NewMaxMonsters = Waves[WaveNum].WaveMaxMonsters;
-<<<<<<< HEAD
 	if ( NumPlayers + NumBots <= 2 )
 		NewMaxMonsters = NewMaxMonsters * (FMin(GameDifficulty,7) + 3)/10;
 	if ( NumPlayers > 4 )
@@ -1719,14 +1256,6 @@ function SetupWave()
 	//Lets add a random amount around the MaxMonsters
 	TotalMaxMonsters = Clamp(2*MaxMonsters - 5 + FRand()* (GameDifficulty * 3),5,600);  //11, MAX 600, MIN 5
 	MaxMonsters = Clamp(MaxMonsters,5,MaxZombiesOnce);
-=======
-	NewMaxMonsters *= ((FMin(GameDifficulty,7) + 3)/7 * FClamp((NumPlayers+NumBots)*0.8,2,50));
-
-	TotalMaxMonsters = Clamp(NewMaxMonsters,5,800);  //11, MAX 800, MIN 5
-
-	MaxMonsters = Clamp(TotalMaxMonsters,5,MaxZombiesOnce);
-	log("2. MaxMonsters: "$MaxMonsters);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters=TotalMaxMonsters;
 	KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn=true;
@@ -1734,14 +1263,14 @@ function SetupWave()
 	AdjustedDifficulty = GameDifficulty + Waves[WaveNum].WaveDifficulty;
 
 	j = 1;
-	SquadsToUse.Length = 0;
+	SquadsToUse.Remove(0,SquadsToUse.Length);
 
-	for ( i=0; i<InitSquads.Length; i++ )
+	for ( i=0; i<MonsterSquadCount; i++ )
 	{
 		if ( (j & Waves[WaveNum].WaveMask) != 0 )
 		{
 			SquadsToUse.Insert(0,1);
-			SquadsToUse[0] = i;
+			SquadsToUse[0] = MonsterSquad[i];
 		}
 		j *= 2;
 	}
@@ -1752,15 +1281,28 @@ function SetupWave()
 
 function BuildNextSquad()
 {
-	local int i;
+	ClientBuildNextSquad(Rand(SquadsToUse.Length));
+}
 
-	if( SquadsToUse.Length==0 )
+function ClientBuildNextSquad(int index)
+{
+	local string nextCode,monsterCode;
+	local int quantCode,monsterIndex,i;
+
+	NextSpawnSquad.Remove(0,NextSpawnSquad.Length);
+	nextCode = SquadstoUse[index];
+	while(nextCode != "")
 	{
-		Warn("No squads to initilize with.");
-		Return;
+		monsterCode = Mid(nextCode,1,1);
+		quantCode = int(Mid(nextcode,0,1));
+		monsterIndex = Asc(monsterCode)-65;
+		for( i=0;i<quantCode;i++)
+		{
+			NextSpawnSquad.Insert(0,1);
+			NextSpawnSquad[0] = MonsterClass[monsterIndex];
+		}
+		nextCode = Right(nextCode,Len(nextCode)-2);
 	}
-	i = Rand(SquadsToUse.Length);
-	NextSpawnSquad = InitSquads[SquadsToUse[i]].MSquad;
 }
 
 function bool AddSquad()
@@ -1768,17 +1310,24 @@ function bool AddSquad()
 	local int numspawned;
 	local int WaveMonsterCount;
 
+	//Important for fixing the performance at the start of the wave
+	//and anytime many zombies need to be spawned right away.
+
+	//TODO: timeout if same squad is logjammed and won't spawn
 	if(LastZVol==none || NextSpawnSquad.length==0)
 	{
 		BuildNextSquad();
 		LastZVol = FindSpawningVolume();
 		if(LastZVol!=None)
 			lastSpawnLocation = LastZVol.location;
+		//TODO: Remove lastSpawnLocation cos it's redundant and messy
 	}
 
 	if(LastZVol == None)
-<<<<<<< HEAD
 		return false;
+
+	WaveMonsterCount = 0;
+	numspawned = 0;
 
 	LastZVol.SpawnInHere(NextSpawnSquad,0,,,,,numspawned,TotalMaxMonsters,WaveMonsterCount);
 	NumMonsters += numspawned; //NextSpawnSquad.Length;
@@ -1787,84 +1336,6 @@ function bool AddSquad()
 	NextSpawnSquad.Remove(0, numSpawned);
 
 	return true;
-=======
-	{
-		NextSpawnSquad.length = 0;
-		return false;
-	}
-
-	if( LastZVol.SpawnInHere(NextSpawnSquad,0,,,,,numspawned,TotalMaxMonsters,WaveMonsterCount) )
-	{
-		//log(LastZVol$" Spawn in here called");
-		NumMonsters += numspawned; //NextSpawnSquad.Length;
-		WaveMonsters+= numspawned; //NextSpawnSquad.Length;
-
-		NextSpawnSquad.Remove(0, numSpawned);
-
-		return true;
-	}
-	else
-	{
-		TryToSpawnInAnotherVolume();
-        return false;
-	}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-}
-function bool AddBoss()
-{
-	local int numspawned;
-	local int WaveMonsterCount;
-
-	if( LastZVol==none )
-	{
-		LastZVol = FindSpawningVolume();
-		if(LastZVol!=None)
-			lastSpawnLocation = LastZVol.location;
-<<<<<<< HEAD
-=======
-		if( LastZVol == none )
-        {
-            //log("Error!!! Couldn't find a place for the Patriarch after 2 tries, trying again later!!!");
-            TryToSpawnInAnotherVolume(true);
-            return false;
-        }
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-	}
-	if(LastZVol == None)
-		return false;
-
-<<<<<<< HEAD
-	LastZVol.SpawnInHere(NextSpawnSquad,0,,,,,numspawned,TotalMaxMonsters,WaveMonsterCount);
-	NumMonsters+=numspawned;
-	WaveMonsters+=numspawned;
-
-	return true;
-=======
-	if( LastZVol.SpawnInHere(NextSpawnSquad,0,,,,,numspawned,TotalMaxMonsters,WaveMonsterCount) )
-	{
-		//log(LastZVol$" Spawn in here called");
-		NumMonsters += numspawned; //NextSpawnSquad.Length;
-		WaveMonsters+= numspawned; //NextSpawnSquad.Length;
-
-		NextSpawnSquad.Remove(0, numSpawned);
-
-		return true;
-	}
-	else
-	{
-		TryToSpawnInAnotherVolume();
-        return false;
-	}
-}
-
-// If spawning in the previous zombie volume failed, try another
-function TryToSpawnInAnotherVolume(optional bool bBossSpawning)
-{
-    //log("Spawning failed, trying another volume");
-    LastZVol = FindSpawningVolume();
-    if( LastZVol!=None )
-        lastSpawnLocation = LastZVol.location;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function ZombieVolume FindSpawningVolume()
@@ -1880,11 +1351,6 @@ function ZombieVolume FindSpawningVolume()
 		{
 			BestScore=tScore;
 			BestZ = z;
-<<<<<<< HEAD
-=======
-			//log(BestZ$" best zombievolume");
-			//log(BestScore$" bestscore zombievolume");
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		}
 	}
 	return BestZ;
@@ -1899,28 +1365,14 @@ function float RateZombieVolume(ZombieVolume z)
 	if ( z.PhysicsVolume.bWaterVolume )
 		return -10000000;
 	else if( !z.CanSpawnInHere(NextSpawnSquad) )
-<<<<<<< HEAD
 		return -100;
-=======
-	{
-		//log(z$" couldn't spawn here");
-		return -100;
-	}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	Score = 10000000;
 
 	Score += 5000 * FRand(); //randomize
 
 	if(LastSpawnLocation == z.Location)
-<<<<<<< HEAD
 		return -1;
-=======
-	{
-		//log(z$" LastSpawnLocation was z.location");
-		return -1;
-	}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
 	// Make points far from the last one better choices
 	Score += Min(VSize(LastSpawnLocation-z.Location),1500);
@@ -1934,137 +1386,90 @@ function float RateZombieVolume(ZombieVolume z)
 
 			// if fog doesn't hide spawn && lineofsight possible
 			if( (!OtherPlayer.Region.Zone.bDistanceFog || (dist < OtherPlayer.Region.Zone.DistanceFogEnd)) && FastTrace(z.Location,OtherPlayer.Pawn.Location) )
-<<<<<<< HEAD
 				return -100;
 			else if(dist < 400)
 				return -50;
-=======
-			{
-				//log(z$" dist less than distancefogend");
-				return -100;
-			}
-			else if(dist < 400)
-			{
-				//log(z$" dist less than 400");
-				return -50;
-			}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 
  			if(VSize(z.Location-OtherPlayer.Pawn.Location) < 8000)
 				Score += (8000-VSize(z.Location-OtherPlayer.Pawn.Location))*2;
 		}
 	}
 	// if we get here, return at least a 5
-<<<<<<< HEAD
-=======
-	//log(z$" returned score" $Score);
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	return FMax(Score,5);
 }
 
 
 function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector HitLocation, out vector Momentum, class<DamageType> DamageType )
 { 
-	local float InstigatorSkill; 
-	local KFPlayerController PC;
-
-<<<<<<< HEAD
-	if( KFPawn(instigatedBy)!=None && KFMonster(Injured)!=None ) 
-		Damage = KFPawn(instigatedBy).GetVeteran().Static.AddDamage(KFMonster(Injured),KFPawn(instigatedBy),Damage,DamageType); 
-	else if( KFPawn(Injured)!=None && KFMonster(instigatedBy)!=None ) 
-		Damage = KFPawn(Injured).GetVeteran().Static.ReduceDamage(KFPawn(Injured),KFMonster(instigatedBy),Damage,DamageType); 
-
-	// This stuff cuts thru all the B.S
-	if(DamageType==class'DamTypeVomit' || DamageType==class'DamTypeWelder' || DamageType==class'SirenScreamDamage' )
-		return damage; 
-=======
-    if ( KFPawn(Injured) != none )
-    {
-        if ( KFPlayerReplicationInfo(Injured.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Injured.PlayerReplicationInfo).ClientVeteranSkill != none )
-        {
-            Damage = KFPlayerReplicationInfo(Injured.PlayerReplicationInfo).ClientVeteranSkill.Static.ReduceDamage(KFPawn(Injured), instigatedBy, Damage, DamageType);
-        }
-    }
-
-	// This stuff cuts thru all the B.S
-	//if(DamageType==class'DamTypeVomit' || DamageType==class'DamTypeWelder' || DamageType==class'SirenScreamDamage' )
-	//	return damage; 
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     local float InstigatorSkill; 
+     local KFPlayerController PC; 
  
-	if ( instigatedBy == None ) 
-		return Super(xTeamGame).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType ); 
- 
-	if ( Monster(Injured) != None ) 
-	{
-		if( instigatedBy!=None ) 
-		{ 
-			PC = KFPlayerController(instigatedBy.Controller); 
-			if( Class<KFWeaponDamageType>(damageType)!=None && PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) ) 
-				Class<KFWeaponDamageType>(damageType).Static.AwardDamage(PC.MyActiveStats,Clamp(Damage,1,Injured.Health)); 
-		} 
-		return Damage;
-	}
+     if( KFPawn(instigatedBy)!=None && KFMonster(Injured)!=None ) 
+          Damage = KFPawn(instigatedBy).GetVeteran().Static.AddDamage(KFMonster(Injured),KFPawn(instigatedBy),Damage,DamageType); 
+     else if( KFPawn(Injured)!=None && KFMonster(instigatedBy)!=None ) 
+          Damage = KFPawn(Injured).GetVeteran().Static.ReduceDamage(KFPawn(Injured),KFMonster(instigatedBy),Damage,DamageType); 
 
-	if ( MonsterController(InstigatedBy.Controller) != None )
-	{ 
-		InstigatorSkill = MonsterController(instigatedBy.Controller).Skill; 
-<<<<<<< HEAD
-		if ( NumPlayers > 4 ) 
-=======
-		if ( NumPlayers+NumBots > 4 ) 
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
-			InstigatorSkill += 1.0; 
-		if ( (InstigatorSkill < 7) && (Monster(Injured) == None) ) 
-		{ 
-			if ( InstigatorSkill <= 3 ) 
-				Damage = Damage; 
-			else Damage = Damage; 
-		} 
-	}
-	else if ( KFFriendlyAI(InstigatedBy.Controller) != None && KFHumanPawn(Injured) != none  )
-		Damage *= 0.25;
-	else if ( injured == instigatedBy )
-		Damage = Damage * 0.5;
+ // This stuff cuts thru all the B.S
+     if(DamageType==class'DamTypeVomit' || DamageType==class'DamTypeWelder' || DamageType==class'SirenScreamDamage' ) 
+          return damage; 
+ 
+     if ( instigatedBy == None ) 
+          return Super(xTeamGame).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType ); 
+ 
+     if ( Monster(Injured) != None ) 
+     { 
+          if ( Monster(Injured).SameSpeciesAs(InstigatedBy) ) 
+               return 0; 
+          if( instigatedBy!=None ) 
+          { 
+               PC = KFPlayerController(instigatedBy.Controller); 
+               if( Class<KFWeaponDamageType>(damageType)!=None && PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) ) 
+                    Class<KFWeaponDamageType>(damageType).Static.AwardDamage(PC.MyActiveStats,Clamp(Damage,1,Injured.Health)); 
+          } 
+          return Damage; 
+     }
+
+          if ( MonsterController(InstigatedBy.Controller) != None )
+     { 
+          InstigatorSkill = MonsterController(instigatedBy.Controller).Skill; 
+          if ( NumPlayers > 4 ) 
+                    InstigatorSkill += 1.0; 
+          if ( (InstigatorSkill < 7) && (Monster(Injured) == None) ) 
+          { 
+               if ( InstigatorSkill <= 3 ) 
+                    Damage = Damage; 
+               else Damage = Damage; 
+          } 
+     } 
+     else if ( injured == instigatedBy ) 
+          Damage = Damage * 0.5;
           
           
-	if ( InvasionBot(injured.Controller) != None )
-	{ 
-		if ( !InvasionBot(injured.controller).bDamagedMessage && (injured.Health - Damage < 50) ) 
-		{ 
-			InvasionBot(injured.controller).bDamagedMessage = true; 
-			if ( FRand() < 0.5 ) 
-				injured.Controller.SendMessage(None, 'OTHER', 4, 12, 'TEAM'); 
-			else injured.Controller.SendMessage(None, 'OTHER', 13, 12, 'TEAM'); 
-		} 
-		if ( GameDifficulty <= 3 ) 
-		{ 
-			if ( injured.IsPlayerPawn() && (injured == instigatedby) && (Level.NetMode == NM_Standalone) ) 
-				Damage *= 0.5; 
+        if ( InvasionBot(injured.Controller) != None )
+     { 
+          if ( !InvasionBot(injured.controller).bDamagedMessage && (injured.Health - Damage < 50) ) 
+          { 
+               InvasionBot(injured.controller).bDamagedMessage = true; 
+               if ( FRand() < 0.5 ) 
+                    injured.Controller.SendMessage(None, 'OTHER', 4, 12, 'TEAM'); 
+               else 
+                    injured.Controller.SendMessage(None, 'OTHER', 13, 12, 'TEAM'); 
+          } 
+          if ( GameDifficulty <= 3 ) 
+          { 
+               if ( injured.IsPlayerPawn() && (injured == instigatedby) && (Level.NetMode == NM_Standalone) ) 
+                    Damage *= 0.5; 
  
-			//skill level modification 
-			if ( MonsterController(InstigatedBy.Controller) != None ) 
-				Damage = Damage; 
-		} 
-	}
+               //skill level modification 
+               if ( MonsterController(InstigatedBy.Controller) != None ) 
+                    Damage = Damage; 
+          } 
+     }
      
-	if( injured.InGodMode() )
-		return 0;
-	if( instigatedBy!=injured && MonsterController(InstigatedBy.Controller)==None && (instigatedBy.Controller==None || instigatedBy.GetTeamNum()==injured.GetTeamNum()) )
-	{
-		if ( class<WeaponDamageType>(DamageType) != None || class<VehicleDamageType>(DamageType) != None )
-			Momentum *= TeammateBoost;
-		if ( Bot(injured.Controller) != None )
-			Bot(Injured.Controller).YellAt(instigatedBy);
+          if( injured.InGodMode() )
+          return 0;
 
-		if ( FriendlyFireScale==0.0 || (Vehicle(injured) != None && Vehicle(injured).bNoFriendlyFire) )
-		{
-			if ( GameRulesModifiers != None )
-				return GameRulesModifiers.NetDamage( Damage, 0,injured,instigatedBy,HitLocation,Momentum,DamageType );
-			else return 0;
-		}
-		Damage *= FriendlyFireScale;
-	}
-	return Super(DeathMatch).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType );
+     return Super(xTeamGame).ReduceDamage( Damage,injured,instigatedBy,HitLocation,Momentum,DamageType );
 }
 
 static function bool NeverAllowTransloc()
@@ -2091,17 +1496,45 @@ event PlayerController Login
 
 	NewPlayer = Super.Login(Portal,Options,Error);
 
+	// if the player doesn't use one of KFs players kick him out
+	if (NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Black"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Urban"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier"		||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Lewis"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Davin"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Hazmat"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Stalker"  ||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Kara"	||
+		NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Powers" ||
+					NewPlayer.PlayerReplicationInfo.CharacterName == "Soldier_Masterson")
+	{
+		// it's ok...
+	}
+	else
+	{
+		// Force to killing floor model.
+		NewPlayer.PlayerReplicationInfo.CharacterName = "Soldier";
+	}
+
 	if ( NewPlayer.PlayerReplicationInfo.bOnlySpectator && NumSpectators > MaxSpectators )
 	{
 		Error = GameMessageClass.Default.MaxedOutMessage;
 		NewPlayer.Destroy();
 		return None;
 	}
-	else if ( !NewPlayer.PlayerReplicationInfo.bOnlySpectator && NumPlayers > MaxPlayers && !NewPlayer.PlayerReplicationInfo.bAdmin )
+
+	if ( !NewPlayer.PlayerReplicationInfo.bOnlySpectator && NumPlayers > MaxPlayers && !NewPlayer.PlayerReplicationInfo.bAdmin )
 	{
 		Error = GameMessageClass.Default.MaxedOutMessage;
 		NewPlayer.Destroy();
 		return None;
+	}
+	//Block Late Joiner code.
+	if (GameReplicationInfo.bMatchHasBegun && bNoLateJoiners && !NewPlayer.PlayerReplicationInfo.bAdmin)
+	{
+		Error = "This server does not allow late joiners.";
+		NewPlayer.Destroy();
+		Return none;
 	}
 
 	for ( C=Level.ControllerList; C!=None; C=C.NextController )
@@ -2153,13 +1586,7 @@ function bool AtCapacity(bool bSpectator)
 function RestartPlayer( Controller aPlayer )
 {
 	if ( aPlayer.PlayerReplicationInfo.bOutOfLives || aPlayer.Pawn!=None )
-<<<<<<< HEAD
 		return;
-=======
-	{
-		return;
-	}
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	if( bWaveInProgress && PlayerController(aPlayer)!=None )
 	{
 		aPlayer.PlayerReplicationInfo.bOutOfLives = True;
@@ -2167,23 +1594,12 @@ function RestartPlayer( Controller aPlayer )
 		aPlayer.GoToState('Spectating');
 		Return;
 	}
-<<<<<<< HEAD
+	aPlayer.PawnClass=Humantypes[rand(3)];
 
-=======
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	Super.RestartPlayer(aPlayer);
 
 	if( KFHumanPawn(aPlayer.Pawn)!=None )
 		KFHumanPawn(aPlayer.Pawn).CheckCarryWeight();
-<<<<<<< HEAD
-=======
-
-    // Disable pawn collision during trader time
-    if (bTradingDoorsOpen && aPlayer.bIsPlayer)
-    {
-        aPlayer.Pawn.bBlockActors = false;
-    }
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }
 
 function BroadcastDeathMessage(Controller Killer, Controller Other, class<DamageType> damageType)
@@ -2280,11 +1696,7 @@ function bool CheckEndGame(PlayerReplicationInfo Winner, string Reason)
 
 	EndTime = Level.TimeSeconds + EndTimeDelay;
 
-<<<<<<< HEAD
 	if ( WaveNum >= FinalWave )
-=======
-	if ( WaveNum > FinalWave )
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 	{
 		GameReplicationInfo.Winner = Teams[0];
 		KFGameReplicationInfo(GameReplicationInfo).EndGameType = 2;
@@ -2322,334 +1734,23 @@ function bool CheckEndGame(PlayerReplicationInfo Winner, string Reason)
 	return true;
 }
 
-function SendPlayer( PlayerController aPlayer, string URL )
-{
-	if( bGameEnded || aPlayer==None || aPlayer.PlayerReplicationInfo==None )
-		Return;
-	Broadcast(Self,aPlayer.PlayerReplicationInfo.PlayerName@"has ended the level.");
-	if( Left(URL,4)~="NULL" )
-	{
-		WaveNum = FinalWave;
-		EndGame(None,"TimeLimit");
-		Return;
-	}
-	Level.ServerTravel(URL,False);
-	bGameEnded = True;
-}
-
-static function string GetValidCharacter( string S )
-{
-	local int i,l;
-
-	l = Default.AvailableChars.Length;
-	if( S!="" )
-	{
-		for( i=0; i<l; i++ )
-		{
-			if( Default.AvailableChars[i]~=S )
-				Return Default.AvailableChars[i];
-		}
-	}
-	Return Default.AvailableChars[Rand(l)];
-}
-
-static function string GetLoadingHint( PlayerController PC, string MapName, Color ColorHint )
-{
-	local Material Shot;
-	local UT2K4ServerLoading LO;
-	local LevelSummary LS;
-	local array<Material> TexToUse;
-	local int i,j;
-	local LoadingInfoImage CI;
-
-	// Look for map screenshot.
-	LS = LevelSummary(DynamicLoadObject(MapName$".LevelSummary", Class'LevelSummary', True));
-	if( LS!=None && LS.ScreenShot!=None )
-		Shot = LS.ScreenShot;
-	if( Shot==None ) // Try looking for mapname <screenshot>
-		Shot = Material(DynamicLoadObject(MapName$".ScreenShot", Class'Material', True));
-	if( Shot!=None )
-	{
-		if( MaterialSequence(Shot)!=None )
-		{
-			For( i=0; i<MaterialSequence(Shot).SequenceItems.Length; i++ )
-			{
-				TexToUse.Length = j+1;
-				TexToUse[j] = MaterialSequence(Shot).SequenceItems[i].Material;
-				j++;
-			}
-			Shot = TexToUse[Rand(j)];
-		}
-		if( Texture(Shot) != None )
-			Texture(Shot).LODSet = LODSET_Interface;
-		foreach PC.AllObjects(Class'UT2K4ServerLoading', LO)
-		{
-			CI = New(None)Class'LoadingInfoImage';
-			LO.Operations[LO.Operations.Length] = CI;
-			CI.Image = Shot;
-			if( LS!=None )
-			{
-				CI.MapTitle = LS.Title;
-				CI.MapAuthor = LS.Author;
-			}
-		}
-	}
-	Return Default.KFHints[Rand(Default.KFHints.Length)];
-}
-
 defaultproperties
 {
-<<<<<<< HEAD
-	MonsterClasses(0)=(MClassName="KFChar.ZombieClot",Mid="A")
-	MonsterClasses(1)=(MClassName="KFChar.ZombieCrawler",Mid="B")
-	MonsterClasses(2)=(MClassName="KFChar.ZombieGoreFast",Mid="C")
-	MonsterClasses(3)=(MClassName="KFChar.ZombieStalker",Mid="D")
-	MonsterClasses(4)=(MClassName="KFChar.ZombieScrake",Mid="E")
-	MonsterClasses(5)=(MClassName="KFChar.ZombieFleshpound",Mid="F")
-	MonsterClasses(6)=(MClassName="KFChar.ZombieBloat",Mid="G")
-	MonsterClasses(7)=(MClassName="KFChar.ZombieSiren",Mid="H")
-	MonsterClasses(8)=(MClassName="KFChar.ZombieFleshpoundRangeAlt",Mid="I")
-	HumanName(0)="Cpl.McinTyre"
-	HumanName(1)="Sgt.Michaels"
-	HumanName(2)="Pvt.Davin"
-	HumanName(3)="Cpl.Powers"
-	KFSurvivalPropText(0)="Wave Start Spawn Period"
-	KFSurvivalPropText(1)="Wave Spawn Period"
-	KFSurvivalPropText(2)="Starting Cash"
-	KFSurvivalPropText(3)="No Bots"
-	KFSurvivalPropText(4)="No Late Joiners"
-	KFSurvivalPropText(5)="Lobby TimeOut"
-	KFSurvivalPropText(6)="Specimen HealthBars"
-	KFSurvivalPropText(7)="Wave Downtime"
-	KFSurvivalDescText(0)="Specify time between successive spawns at start of waves(recommended:6.0), lower values may hurt performance!"
-	KFSurvivalDescText(1)="Specify time between successive spawns during a wave(recommended:3.0), lower values may hurt performance!"
-	KFSurvivalDescText(2)="Specify how much money players should begin the game with. (Max 300)"
-	KFSurvivalDescText(3)="Check this box to remove bots from the game."
-	KFSurvivalDescText(4)="Check this box to stop people from joining after the game has started."
-	KFSurvivalDescText(5)="Set the maximum time on the lobby screen which can elapse after one player has clicked ready before the game automatically starts. "
-	KFSurvivalDescText(6)="If true, specimens will have visible health indicators above their heads"
-	KFSurvivalDescText(7)="The based amount of time (in seconds) to count between waves."
-	WaveStartSpawnPeriod=6.000000
-	StartingCash=300
-	MinRespawnCash=250
-	bUseEndGameBoss=True
-	EndGameBossClass="KFChar.ZombieBoss"
-	BossBattleSong="KF25-Abandon"
-	KFHints(0)="Aiming for the head is a good idea. If you score a critical headshot, you can remove a Specimen's head, rendering them unable to use special abilities, and increasing any further damage they take."
-	KFHints(1)="While you can use your medical syringe to heal your own wounds, it is far more effective when used on a team mate."
-	KFHints(2)="The Fleshpound Specimen cannot be stunned. Avoid engaging in melee combat with it."
-	KFHints(3)="A grenade can be thrown even when you have another weapon drawn by pressing the throw grenade kotkey."
-	KFHints(4)="To reload the Combat Shotgun or Winchester press and HOLD the reload key to continue inserting shells."
-	KFHints(5)="Some Specimens will perform combo attacks, allowing them to strike you two or even three times in an instant. Stay on your guard in close quarters."
-	KFHints(6)="Doors that have been destroyed will respawn at the end of each wave. If your defenses are compromised, try again later."
-	KFHints(7)="The volatile liquids the Bloat carries in its belly have a propensity for catching fire."
-	KFHints(8)="Your movement speed is affected by your weight total. You can also run faster carrying a melee weapon than a gun."
-	KFHints(9)="Bloats will explode in a shower of acidic goop when they die. Keep your distance when taking them down."
-	KFHints(10)="Stalkers blend in with their surroundings when not attacking. Train your eye to look for subtle movements."
-	KFHints(11)="The Trader will only open her shop for a brief time when the coast is clear. You'll have to find where she is situated in each map, and plan your shopping beforehand."
-	KFHints(12)="The larger and more difficult the Specimen you kill, the more cash you will be awarded."
-	KFHints(13)="Surviving players receive a cash bonus at the end of each round."
-	KFHints(14)="The Siren's sonics can detonate incoming explosives. Be wary of using explosive weapons when she screams."
-	MonsterSquad(0)="4A"
-	MonsterSquad(1)="3A1G"
-	MonsterSquad(2)="2A2G"
-	MonsterSquad(3)="1C3D1G"
-	MonsterSquad(4)="3A2D1G"
-	MonsterSquad(5)="4A2D"
-	MonsterSquad(6)="2B2C1D"
-	MonsterSquad(7)="1A2C2D1G"
-	MonsterSquad(8)="2A3B1C"
-	MonsterSquad(9)="4B1H"
-	MonsterSquad(10)="1C1E1G1H"
-	MonsterSquad(11)="1B2D2E"
-	MonsterSquad(12)="1C1D1E1F"
-	MonsterSquad(13)="1E1F1H"
-	MonsterSquad(14)="1I"
-	ControllerClassName="KFmod.KFDoorController"
-	LobbyTimeout=20
-	InitialCountDownValue=60
-	VeterancySkills(0)="KFMod.KFVetFieldMedic"
-	VeterancySkills(1)="KFMod.KFVetSupportSpec"
-	VeterancySkills(2)="KFMod.KFVetSharpshooter"
-	VeterancySkills(3)="KFMod.KFVetCommando"
-	VeterancySkills(4)="KFMod.KFVetBerserker"
-	VeterancySkills(5)="KFMod.KFVetFirebug"
-	VeterancySkills(6)="KFMod.KFVetSergeant"
-	AvailableChars(0)="Soldier_Black"
-	AvailableChars(1)="Soldier_Urban"
-	AvailableChars(2)="Soldier"
-	AvailableChars(3)="Soldier_Lewis"
-	AvailableChars(4)="Soldier_Davin"
-	AvailableChars(5)="Hazmat"
-	AvailableChars(6)="Stalker"
-	AvailableChars(7)="Soldier_Kara"
-	AvailableChars(8)="Soldier_Powers"
-	AvailableChars(9)="Soldier_Masterson"
-	bPerksEnabled=True
-	MaxZombiesOnce=32
-	WaveConfigMenu="KFGUI.KFWaveConfigMenu"
-	FallbackMonsterClass="KFChar.ZombieStalker"
-	FinalWave=10
-	InvasionBotNames(1)="Zombie"
-	InvasionBotNames(2)="Zombie"
-	InvasionBotNames(3)="Zombie"
-	InvasionBotNames(4)="Zombie"
-	InvasionBotNames(5)="Zombie"
-	InvasionBotNames(6)="Zombie"
-	InvasionBotNames(7)="Zombie"
-	InvasionBotNames(8)="Zombie"
-	InvasionEnd(0)="Sound"
-	InvasionEnd(1)="Sound"
-	InvasionEnd(2)="Sound"
-	InvasionEnd(3)="Sound"
-	InvasionEnd(4)="Sound"
-	InvasionEnd(5)="Sound"
-	Waves(0)=(WaveMask=7,WaveMaxMonsters=32,WaveDuration=254)
-	Waves(1)=(WaveMask=56,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.100000)
-	Waves(2)=(WaveMask=320,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.100000)
-	Waves(3)=(WaveMask=592,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.200000)
-	Waves(4)=(WaveMask=1344,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.200000)
-	Waves(5)=(WaveMask=2114,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.300000)
-	Waves(6)=(WaveMask=5121,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.300000)
-	Waves(7)=(WaveMask=8708,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.400000)
-	Waves(8)=(WaveMask=12304,WaveMaxMonsters=32,WaveDuration=254,WaveDifficulty=0.400000)
-	Waves(9)=(WaveMask=20488,WaveMaxMonsters=32,WaveDuration=254)
-	Waves(10)=(WaveDuration=254)
-	Waves(11)=(WaveDuration=254)
-	Waves(12)=(WaveDuration=254)
-	Waves(13)=(WaveDuration=254)
-	Waves(14)=(WaveDuration=254)
-	Waves(15)=(WaveDuration=254)
-	MaxTeamSize=6
-	TeamAIType(0)=Class'KFMod.KFTeamAI'
-	TeamAIType(1)=Class'KFMod.KFTeamAI'
-	bForceRespawn=True
-	NumRounds=10
-	SpawnProtectionTime=0.000000
-	EndGameSoundName(0)="Sound"
-	EndGameSoundName(1)="Sound"
-	AltEndGameSoundName(0)="Sound"
-	AltEndGameSoundName(1)="Sound"
-	EpicNames(0)="Lt.Barker"
-	EpicNames(1)="Pvt.Davin"
-	EpicNames(2)="Cpl.Power"
-	EpicNames(3)="Pvt.Barns"
-	EpicNames(4)="Cpl.Hicks"
-	EpicNames(5)="Sgt.Apone"
-	EpicNames(6)="Pvt.Hudson"
-	EpicNames(7)="Maj.Brale"
-	EpicNames(8)="Lt.Derricks"
-	EpicNames(9)="Pvt.Quick"
-	EpicNames(10)="Sgt.Masterson"
-	EpicNames(11)="Lt.Barker"
-	EpicNames(12)="Pvt.Davin"
-	EpicNames(13)="Cpl.Power"
-	EpicNames(14)="Pvt.Barns"
-	EpicNames(15)="Cpl.Hicks"
-	EpicNames(16)="Sgt.Apone"
-	EpicNames(17)="Pvt.Hudson"
-	EpicNames(18)="Maj.Brale"
-	EpicNames(19)="Lt.Derricks"
-	EpicNames(20)="Pvt.Quick"
-	MaleBackupNames(0)="Lt.Barker"
-	MaleBackupNames(1)="Pvt.Davin"
-	MaleBackupNames(2)="Cpl.Power"
-	MaleBackupNames(3)="Pvt.Barns"
-	MaleBackupNames(4)="Cpl.Hicks"
-	MaleBackupNames(5)="Sgt.Apone"
-	MaleBackupNames(6)="Pvt.Hudson"
-	MaleBackupNames(7)="Maj.Brale"
-	MaleBackupNames(8)="Lt.Derricks"
-	MaleBackupNames(9)="Pvt.Quick"
-	MaleBackupNames(10)="Sgt.Masterson"
-	MaleBackupNames(11)="Lt.Barker"
-	MaleBackupNames(12)="Pvt.Davin"
-	MaleBackupNames(13)="Cpl.Power"
-	MaleBackupNames(14)="Pvt.Barns"
-	MaleBackupNames(15)="Cpl.Hicks"
-	MaleBackupNames(16)="Sgt.Apone"
-	MaleBackupNames(17)="Pvt.Hudson"
-	MaleBackupNames(18)="Maj.Brale"
-	MaleBackupNames(19)="Lt.Derricks"
-	MaleBackupNames(20)="Pvt.Quick"
-	MaleBackupNames(21)="Pvt.Davin"
-	MaleBackupNames(22)="Cpl.Power"
-	MaleBackupNames(23)="Pvt.Barns"
-	MaleBackupNames(24)="Cpl.Hicks"
-	MaleBackupNames(25)="Sgt.Apone"
-	MaleBackupNames(26)="Pvt.Hudson"
-	MaleBackupNames(27)="Maj.Brale"
-	MaleBackupNames(28)="Lt.Derricks"
-	MaleBackupNames(29)="Pvt.Quick"
-	MaleBackupNames(30)="Sgt.Masterson"
-	MaleBackupNames(31)="Lt.Barker"
-	FemaleBackupNames(0)="Lt.Vasquez"
-	FemaleBackupNames(1)="Pvt.Kara"
-	FemaleBackupNames(2)="Sgt.Swanson"
-	FemaleBackupNames(3)="Maj.Simons"
-	FemaleBackupNames(4)="Pvt.Martinez"
-	FemaleBackupNames(5)="Cpl.Sharpe"
-	FemaleBackupNames(6)="Pvt.Faulkner"
-	FemaleBackupNames(7)="Lt.Vasquez"
-	FemaleBackupNames(8)="Pvt.Kara"
-	FemaleBackupNames(9)="Sgt.Swanson"
-	FemaleBackupNames(10)="Maj.Simons"
-	FemaleBackupNames(11)="Pvt.Martinez"
-	FemaleBackupNames(12)="Cpl.Sharpe"
-	FemaleBackupNames(13)="Pvt.Faulkner"
-	FemaleBackupNames(14)="Lt.Vasquez"
-	FemaleBackupNames(15)="Pvt.Kara"
-	FemaleBackupNames(16)="Sgt.Swanson"
-	FemaleBackupNames(17)="Maj.Simons"
-	FemaleBackupNames(18)="Pvt.Martinez"
-	FemaleBackupNames(19)="Cpl.Sharpe"
-	FemaleBackupNames(20)="Pvt.Faulkner"
-	FemaleBackupNames(21)="Lt.Vasquez"
-	FemaleBackupNames(22)="Pvt.Kara"
-	FemaleBackupNames(23)="Sgt.Swanson"
-	FemaleBackupNames(24)="Maj.Simons"
-	FemaleBackupNames(25)="Pvt.Martinez"
-	FemaleBackupNames(26)="Cpl.Sharpe"
-	FemaleBackupNames(27)="Pvt.Faulkner"
-	FemaleBackupNames(28)="Pvt.Kara"
-	FemaleBackupNames(29)="Sgt.Swanson"
-	FemaleBackupNames(30)="Maj.Simons"
-	FemaleBackupNames(31)="Pvt.Martinez"
-	LoginMenuClass="KFGUI.KFInvasionLoginMenu"
-	bAllowVehicles=True
-	DefaultPlayerClassName="KFmod.KFHumanPawn"
-	ScoreBoardType="KFMod.KFScoreBoardNew"
-	HUDType="KFmod.HUDKillingFloor"
-	MapListType="KFMod.KFMapList"
-	MapPrefix="KF"
-	BeaconName="KF"
-	ResetTimeDelay=10
-	DefaultPlayerName="Fresh Meat"
-	TimeLimit=0
-	DeathMessageClass=Class'KFMod.KFDeathMessage'
-	GameMessageClass=Class'KFMod.KFGameMessages'
-	MutatorClass="KFmod.KillingFloorMut"
-	PlayerControllerClass=Class'KFMod.KFPlayerController'
-	PlayerControllerClassName="KFmod.KFPlayerController"
-	GameReplicationInfoClass=Class'KFMod.KFGameReplicationInfo'
-	GameName="Killing Floor"
-	Description="They are coming. There's nothing but you and your squad standing between a mass of escaped laboratory horrors and the world at large."
-	ScreenShotName="KFThumbs.KFShots"
-	Acronym="KF"
-	GIPropsDisplayText(0)="KF Game Difficulty"
-	GIPropDescText(0)="Change the game difficulty. Anything above Normal will cause increased zombie speed, damage and health among other things..."
-	GIPropsExtras(0)="1.500000;Easy;3.000000;Normal;4.000000;Skilled;5.000000;Elite;7.000000;Suicidal"
-=======
-     MonsterClasses(0)=(MClassName="KFChar.ZombieClot",Mid="A")
-     MonsterClasses(1)=(MClassName="KFChar.ZombieCrawler",Mid="B")
-     MonsterClasses(2)=(MClassName="KFChar.ZombieGoreFast",Mid="C")
-     MonsterClasses(3)=(MClassName="KFChar.ZombieStalker",Mid="D")
-     MonsterClasses(4)=(MClassName="KFChar.ZombieScrake",Mid="E")
-     MonsterClasses(5)=(MClassName="KFChar.ZombieFleshpound",Mid="F")
-     MonsterClasses(6)=(MClassName="KFChar.ZombieBloat",Mid="G")
-     MonsterClasses(7)=(MClassName="KFChar.ZombieSiren",Mid="H")
-     MonsterClasses(8)=(MClassName="KFChar.ZombieWretch",Mid="I")
-     MonsterClasses(9)=(MClassName="KFChar.ZombieShade",Mid="J")
+     MonsterClassName(0)="KFChar.ZombieClot"
+     MonsterClassName(1)="KFChar.ZombieCrawler"
+     MonsterClassName(2)="KFChar.ZombieGoreFast"
+     MonsterClassName(3)="KFChar.ZombieStalker"
+     MonsterClassName(4)="KFChar.ZombieScrake"
+     MonsterClassName(5)="KFChar.ZombieFleshpound"
+     MonsterClassName(6)="KFChar.ZombieBloat"
+     MonsterClassName(7)="KFChar.ZombieSiren"
+     HumanName(0)="Cpl.McinTyre"
+     HumanName(1)="Sgt.Michaels"
+     HumanName(2)="Pvt.Davin"
+     HumanName(3)="Cpl.Powers"
+     Humantypes(0)=Class'KFMod.KFHumanPawn'
+     Humantypes(1)=Class'KFMod.KFHumanPawn'
+     Humantypes(2)=Class'KFMod.KFHumanPawn'
      KFSurvivalPropText(0)="Wave Start Spawn Period"
      KFSurvivalPropText(1)="Wave Spawn Period"
      KFSurvivalPropText(2)="Starting Cash"
@@ -2665,13 +1766,9 @@ defaultproperties
      KFSurvivalDescText(4)="Check this box to stop people from joining after the game has started."
      KFSurvivalDescText(5)="Set the maximum time on the lobby screen which can elapse after one player has clicked ready before the game automatically starts. "
      KFSurvivalDescText(6)="If true, specimens will have visible health indicators above their heads"
-     KFSurvivalDescText(7)="The based amount of time (in seconds) to count between waves."
+     KFSurvivalDescText(7)="The based amount of time (in seconds) to count between waves.  NOTE: this value is affected by difficulty, so dont set it too low!"
      WaveStartSpawnPeriod=6.000000
-     StartingCash=500
-     MinRespawnCash=500
-     bUseEndGameBoss=True
-     EndGameBossClass="KFChar.ZombieBoss"
-     BossBattleSong="KF25-Abandon"
+     StartingCash=300
      KFHints(0)="Aiming for the head is a good idea. If you score a critical headshot, you can remove a Specimen's head, rendering them unable to use special abilities, and increasing any further damage they take."
      KFHints(1)="While you can use your medical syringe to heal your own wounds, it is far more effective when used on a team mate."
      KFHints(2)="The Fleshpound Specimen cannot be stunned. Avoid engaging in melee combat with it."
@@ -2687,42 +1784,30 @@ defaultproperties
      KFHints(12)="The larger and more difficult the Specimen you kill, the more cash you will be awarded."
      KFHints(13)="Surviving players receive a cash bonus at the end of each round."
      KFHints(14)="The Siren's sonics can detonate incoming explosives. Be wary of using explosive weapons when she screams."
-     MonsterSquad(0)="4A1G1I"
-     MonsterSquad(1)="3A2G1I"
+     MonsterSquad(0)="5A1G"
+     MonsterSquad(1)="4A2G"
      MonsterSquad(2)="2A4G"
      MonsterSquad(3)="6D"
      MonsterSquad(4)="3A2D1G"
-     MonsterSquad(5)="1A2D3I"
+     MonsterSquad(5)="4A2D"
      MonsterSquad(6)="1B3C2D"
-     MonsterSquad(7)="1A1C2D1G1J"
-     MonsterSquad(8)="2A2B1C1J"
-     MonsterSquad(9)="2B2H1I1J"
+     MonsterSquad(7)="1A2C2D1G"
+     MonsterSquad(8)="2A3B1C"
+     MonsterSquad(9)="4B2H"
      MonsterSquad(10)="1C1E1G3H"
      MonsterSquad(11)="1B2D2E1H"
      MonsterSquad(12)="1C1D1E1F2H"
-     MonsterSquad(13)="2F2H1J"
+     MonsterSquad(13)="2F3H"
      MonsterSquad(14)="2E3F1H"
+     MonsterSquadCount=20
      ControllerClassName="KFmod.KFDoorController"
      LobbyTimeout=20
-     InitialCountDownValue=45
-     bEnemyHealthBars=True
+     InitialCountDownValue=60
      VeterancySkills(0)="KFMod.KFVetFieldMedic"
      VeterancySkills(1)="KFMod.KFVetSupportSpec"
      VeterancySkills(2)="KFMod.KFVetSharpshooter"
      VeterancySkills(3)="KFMod.KFVetCommando"
      VeterancySkills(4)="KFMod.KFVetBerserker"
-     VeterancySkills(5)="KFMod.KFVetFirebug"
-     VeterancySkills(6)="KFMod.KFVetSergeant"
-     AvailableChars(0)="Soldier_Black"
-     AvailableChars(1)="Soldier_Urban"
-     AvailableChars(2)="Soldier"
-     AvailableChars(3)="Soldier_Lewis"
-     AvailableChars(4)="Soldier_Davin"
-     AvailableChars(5)="Hazmat"
-     AvailableChars(6)="Stalker"
-     AvailableChars(7)="Soldier_Kara"
-     AvailableChars(8)="Soldier_Powers"
-     AvailableChars(9)="Soldier_Masterson"
      bPerksEnabled=True
      MaxZombiesOnce=32
      WaveConfigMenu="KFGUI.KFWaveConfigMenu"
@@ -2742,22 +1827,16 @@ defaultproperties
      InvasionEnd(3)="Sound"
      InvasionEnd(4)="Sound"
      InvasionEnd(5)="Sound"
-     Waves(0)=(WaveMask=7,WaveMaxMonsters=20,WaveDuration=255)
-     Waves(1)=(WaveMask=56,WaveMaxMonsters=28,WaveDuration=255,WaveDifficulty=0.100000)
+     Waves(0)=(WaveMask=7,WaveMaxMonsters=32,WaveDuration=255)
+     Waves(1)=(WaveMask=56,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.100000)
      Waves(2)=(WaveMask=320,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.100000)
      Waves(3)=(WaveMask=592,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.200000)
      Waves(4)=(WaveMask=1344,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.200000)
      Waves(5)=(WaveMask=2114,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.300000)
-     Waves(6)=(WaveMask=5121,WaveMaxMonsters=35,WaveDuration=255,WaveDifficulty=0.300000)
-     Waves(7)=(WaveMask=8708,WaveMaxMonsters=40,WaveDuration=255,WaveDifficulty=0.400000)
-     Waves(8)=(WaveMask=12304,WaveMaxMonsters=40,WaveDuration=255,WaveDifficulty=0.400000)
-     Waves(9)=(WaveMask=20488,WaveMaxMonsters=40,WaveDuration=255,WaveDifficulty=0.400000)
-     Waves(10)=(WaveMaxMonsters=50)
-     Waves(11)=(WaveMaxMonsters=50)
-     Waves(12)=(WaveMaxMonsters=50)
-     Waves(13)=(WaveMaxMonsters=50)
-     Waves(14)=(WaveMaxMonsters=50)
-     Waves(15)=(WaveMaxMonsters=50)
+     Waves(6)=(WaveMask=5121,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.300000)
+     Waves(7)=(WaveMask=8708,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.400000)
+     Waves(8)=(WaveMask=12304,WaveMaxMonsters=32,WaveDuration=255,WaveDifficulty=0.400000)
+     Waves(9)=(WaveMask=20488,WaveMaxMonsters=32,WaveDuration=255)
      MaxTeamSize=6
      TeamAIType(0)=Class'KFMod.KFTeamAI'
      TeamAIType(1)=Class'KFMod.KFTeamAI'
@@ -2856,7 +1935,7 @@ defaultproperties
      LoginMenuClass="KFGUI.KFInvasionLoginMenu"
      bAllowVehicles=True
      DefaultPlayerClassName="KFmod.KFHumanPawn"
-     ScoreBoardType="KFMod.KFScoreBoardNew"
+     ScoreBoardType="KFMod.KFScoreBoard"
      HUDType="KFmod.HUDKillingFloor"
      MapListType="KFMod.KFMapList"
      MapPrefix="KF"
@@ -2864,7 +1943,6 @@ defaultproperties
      ResetTimeDelay=10
      DefaultPlayerName="Fresh Meat"
      TimeLimit=0
-	 SineWaveFreq=0.040000
      DeathMessageClass=Class'KFMod.KFDeathMessage'
      GameMessageClass=Class'KFMod.KFGameMessages'
      MutatorClass="KFmod.KillingFloorMut"
@@ -2878,5 +1956,4 @@ defaultproperties
      GIPropsDisplayText(0)="KF Game Difficulty"
      GIPropDescText(0)="Change the game difficulty. Anything above Normal will cause increased zombie speed, damage and health among other things..."
      GIPropsExtras(0)="1.500000;Easy;3.000000;Normal;4.000000;Skilled;5.000000;Elite;7.000000;Suicidal"
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

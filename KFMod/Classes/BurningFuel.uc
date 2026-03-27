@@ -22,11 +22,7 @@ function TakeDamage(int Damage, Pawn EventInstigator, vector HitLocation, vector
 		SetTimer(BurnDuration,False);
 		bBurning = true;
 		Flames = Spawn(class 'KFMod.FuelFlame',,,location,rotation);
-<<<<<<< HEAD
 		Flames.Parent = self;
-=======
-		//Flames.Parent = self;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 		if( Level.NetMode!=NM_DedicatedServer )
 			Spawn(class 'XEffects.LavaDeath',,,location,rotation);
 	}
@@ -60,11 +56,7 @@ simulated function PostNetReceive()
 		if( bBurning )
 		{
 			Flames = Spawn(class 'KFMod.FuelFlame',,,location,rotation);
-<<<<<<< HEAD
 			Flames.Parent = self;
-=======
-			//Flames.Parent = self;
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 			Spawn(class 'XEffects.LavaDeath',,,location,rotation);
 		}
 		else if( Flames!=None )
@@ -74,15 +66,6 @@ simulated function PostNetReceive()
 
 defaultproperties
 {
-<<<<<<< HEAD
-	BurnDuration=10.000000
-	DrawType=DT_StaticMesh
-	bAcceptsProjectors=False
-	RemoteRole=ROLE_SimulatedProxy
-	bStaticLighting=True
-	bCollideActors=True
-	bNetNotify=True
-=======
      BurnDuration=10.000000
      DrawType=DT_StaticMesh
      bAcceptsProjectors=False
@@ -90,5 +73,4 @@ defaultproperties
      bStaticLighting=True
      bCollideActors=True
      bNetNotify=True
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
 }

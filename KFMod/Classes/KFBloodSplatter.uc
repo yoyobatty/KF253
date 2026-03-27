@@ -47,15 +47,10 @@ simulated function PostBeginPlay()
 
 defaultproperties
 {
-	FOV=6
-	bProjectActor=False
-	bLevelStatic=True
-	bClipBSP=True
-	bClipStaticMesh=True
-	CullDistance=7000.000000
-<<<<<<< HEAD
-=======
-	bNoDelete=false
-	bStatic=false
->>>>>>> 5492ba9971464e8a4fa56f166d61815486915c92
+     FOV=6
+     bProjectActor=False
+     bLevelStatic=True
+     bClipBSP=True
+     bClipStaticMesh=True
+     CullDistance=7000.000000
 }
