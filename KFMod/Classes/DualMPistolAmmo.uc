@@ -1,0 +1,16 @@
+//=============================================================================
+// Dualies Ammo.
+//=============================================================================
+class DualMPistolAmmo extends KFAmmunition;
+
+#EXEC OBJ LOAD FILE=InterfaceContent.utx
+
+defaultproperties
+{
+     MaxAmmo=480
+     InitialAmount=480
+     PickupClass=Class'KFMod.DualiesAmmoPickup'
+     IconMaterial=Texture'KillingFloorHUD.Generic.HUD'
+     IconCoords=(X1=413,Y1=82,X2=457,Y2=125)
+     ItemName="Dualies bullets"
+}
