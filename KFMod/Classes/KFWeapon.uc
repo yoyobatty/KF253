@@ -114,6 +114,16 @@ replication
 		ClientInterruptReload, ClientForceKFAmmoUpdate;
 }
 
+simulated function PostBeginPlay()
+{
+	if (Level.GetLocalPlayerController() != None)
+	{
+		Level.GetLocalPlayerController().ConsoleCommand("nearclip 3");
+	}
+
+	Super.PostBeginPlay();
+}
+
 function bool HandlePickupQuery( pickup Item )
 {
 	if ( Item.InventoryType==Class )

@@ -46,7 +46,7 @@ defaultproperties
      CenteredYaw=-1500
      CustomCrosshair=-1
      CustomCrossHairColor=(B=0,G=0,R=0,A=0)
-     CustomCrossHairTextureName=
+     CustomCrossHairTextureName=""
      GroupOffset=1
      PickupClass=Class'KFMod.PlaceCalPickup'
      PlayerViewOffset=(X=10.000000,Y=3.000000,Z=-5.000000)

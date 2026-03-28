@@ -38,15 +38,6 @@ var KFSPNoteMessage ActiveNote;
 
 var Rotator								BehindViewAimRotator;
 
-var array<rotator> CameraKeyframes; // Keyframes for the animation
-var array<float> KeyframeDurations; // Duration for each keyframe transition
-var int CurrentKeyframeIndex;       // Current keyframe index
-var float KeyframeElapsedTime;      // Time elapsed in the current keyframe
-var bool bIsAnimatingCamera;        // Whether the camera is animating
-
-var rotator BezierControlPoint1;    // First control point for the Bezier curve
-var rotator BezierControlPoint2;    // Second control point for the Bezier curve
-
 var() float FlySpeedMulti;
 
 // Fractional Parts of Pitch/Yaw Input
@@ -158,23 +149,6 @@ function TransitionFOV(float NewFOV, float TransitionTime)
 	}
 }
 
-function StartCameraAnimation(array<rotator> Keyframes, array<float> Durations, rotator ControlPoint1, rotator ControlPoint2)
-{
-	// Check if the keyframes and durations are valid
-    if (Keyframes.Length != Durations.Length || Keyframes.Length < 2)
-    {
-        Log("Invalid keyframe or duration data for camera animation.");
-        return;
-    }
-
-    CameraKeyframes = Keyframes;
-    KeyframeDurations = Durations;
-    BezierControlPoint1 = ControlPoint1;
-    BezierControlPoint2 = ControlPoint2;
-    CurrentKeyframeIndex = 0;
-    KeyframeElapsedTime = 0.0;
-    bIsAnimatingCamera = true;
-}
 function bool FindStatsObject()
 {
 	local string ID;
@@ -555,41 +529,9 @@ function NetStopMusic(float FadeOutTime)
 
 event PlayerTick( float DeltaTime )
 {
-	local float T;
-	local rotator StartRot;
-	local rotator EndRot;
-	local rotator InterpolatedRot;
 	if( bHasDelayedSong && Player!=None )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
     Super.PlayerTick(DeltaTime);
-
-    if (bIsAnimatingCamera)
-    {
-        // Update the elapsed time for the current keyframe
-        KeyframeElapsedTime += DeltaTime;
-
-        // Check if we need to move to the next keyframe
-        if (KeyframeElapsedTime >= KeyframeDurations[CurrentKeyframeIndex])
-        {
-            KeyframeElapsedTime -= KeyframeDurations[CurrentKeyframeIndex];
-            CurrentKeyframeIndex++;
-
-            // If we've reached the end of the keyframes, stop animating
-            if (CurrentKeyframeIndex >= CameraKeyframes.Length - 1)
-            {
-                bIsAnimatingCamera = false;
-                return;
-            }
-        }
-
-        // Interpolate between the current and next keyframe
-		T = KeyframeElapsedTime / KeyframeDurations[CurrentKeyframeIndex];
-		StartRot = CameraKeyframes[CurrentKeyframeIndex];
-		EndRot = CameraKeyframes[CurrentKeyframeIndex + 1];
-		InterpolatedRot = BezierInterpolate(StartRot, BezierControlPoint1, BezierControlPoint2, EndRot, T);
-        // Apply the interpolated rotation to the player's view
-        SetRotation(GetViewRotation() + InterpolatedRot);
-    }
 }
 
 //===========================================================================
@@ -783,50 +725,6 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
     return rotator(AimSpot - projStart);
 }
 
-
-static final function Rotator RLerp (float Alpha, Rotator A, Rotator B, optional bool bClampRange)
-{
-	local Rotator R;
-	R.Yaw	= Lerp(Alpha, A.Yaw, B.Yaw, bClampRange);
-	R.Pitch	= Lerp(Alpha, A.Pitch, B.Pitch, bClampRange);
-	R.Roll	= Lerp(Alpha, A.Roll, B.Roll, bClampRange);
-	return R;
-}
-
-function rotator BezierInterpolate(rotator Start, rotator Control1, rotator Control2, rotator End, float T)
-{
-    local rotator A, B, C, D;
-
-    // Bezier curve formula: B(t) = (1-t)^3 * Start + 3(1-t)^2 * t * Control1 + 3(1-t) * t^2 * Control2 + t^3 * End
-    A = RLerp(T, Start, Control1);  // Interpolate between Start and Control1
-    B = RLerp(T, Control1, Control2);  // Interpolate between Control1 and Control2
-    C = RLerp(T, Control2, End);  // Interpolate between Control2 and End
-    D = RLerp(T, A, B);  // Interpolate between A and B
-    return RLerp(T, D, C);  // Final interpolation between D and C
-}
-
-exec function PlayCameraAnimation()
-{
-    local array<rotator> Keyframes;
-    local array<float> Durations;
-    local rotator ControlPoint1, ControlPoint2;
-
-    // Define keyframes (rotations) and durations
-	Keyframes[0] = rot(-1500, 500, 0);    // Slight downward and right tilt
-	Keyframes[1] = rot(-3000, -1000, 0);  // Further downward and left tilt
-	Keyframes[2] = rot(0, 0, 0);          // Return to neutral position
-
-	Durations[0] = 0.9; // 0.3 seconds to transition to the first tilt
-	Durations[1] = 0.3; // 0.4 seconds to transition to the second tilt
-	Durations[2] = 0.6; // 0.3 seconds to return to the neutral position
-
-	// Define Bezier control points for smoother motion
-	ControlPoint1 = rot(-2000, 250, 0);   // Control point for the first curve
-	ControlPoint2 = rot(-2500, -500, 0);  // Control point for the second curve
-
-    // Start the animation
-    StartCameraAnimation(Keyframes, Durations, ControlPoint1, ControlPoint2);
-}
 
 //  enforce Lobby menu appearance here - there were all sorts of conditions attached,
 //  but none of them should occur in KF. This simplifies matters ;)

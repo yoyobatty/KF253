@@ -19,6 +19,6 @@ defaultproperties
 {
      ProjPerFire=1
      ProjectileClass=Class'KFMod.BoomStickSlug'
-     Spread = 0.010000;
-	 SpreadStyle = SS_Line;
+     Spread = 0.010000
+	 SpreadStyle = SS_Line
 }

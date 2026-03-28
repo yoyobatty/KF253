@@ -46,7 +46,7 @@ var rotator LastViewRotation;
 var() float SmoothTurnSpeed;
 
 var int ShoppingAttempts, RoamingAttempts;
-var float BestShopDist; // Best (closest) distance to ShoppingPath during current trip
+var float ShopDist, BestShopDist;
 
 var KFNadeHealingExplosion NearbyHealCloud;
 
@@ -1251,7 +1251,6 @@ function DoTrading()
 		return;
 	//log(PlayerReplicationInfo.PlayerName$" Starting Trading. Cash available: " $PlayerReplicationInfo.Score);
     ShoppingAttempts = 0;
-    BestShopDist = 999999;
 	LastShopTime = Level.TimeSeconds+60+60*FRand();
 	OldCash = PlayerReplicationInfo.Score + 1;
 
@@ -1563,7 +1562,6 @@ function PawnDied(Pawn P)
     bTriedRecoverLastDrop = false;
     LastDroppedWeaponClasses.Length = 0;
     ShoppingAttempts = 0;
-    BestShopDist = 999999;
 
 	Super.PawnDied(P);
 }
@@ -3650,7 +3648,7 @@ Begin:
 	WaitForLanding();
 	AssignPersonality(); // Gain new personality on new wave.
 	SwitchToBestWeapon();
-	BestShopDist = 999999;
+	BestShopDist = 9999.f; //Need to set this up first
 KeepMoving:
     if( KFGameType(Level.Game).bWaveInProgress )
     {
@@ -3661,10 +3659,10 @@ KeepMoving:
         MoveToward(ShoppingPath,ShopVolumeActor,,true);
     else if( FindBestPathToward(ShoppingPath,true,false) )
     {
-        if (VSize(Pawn.Location - ShoppingPath.Location) < BestShopDist - 64)
+        ShopDist = VSize(Pawn.Location - ShoppingPath.Location);
+        if (ShopDist < BestShopDist - 64)
         {
-            // Making real progress toward the shop - update best distance and reset attempts
-            BestShopDist = VSize(Pawn.Location - ShoppingPath.Location);
+            BestShopDist = ShopDist;
             ShoppingAttempts = 0;
         }
         else
@@ -3756,13 +3754,13 @@ state Roaming
         }
         return Super.NotifyHitWall(HitNormal,Wall);
     }
-	function float RateWeapon(Weapon W)
+	function float RateWeapon(Weapon W) // Use our strongest melee weapon when roaming.
 	{
 		if( KFWeapon(W)==None )
 			return Global.RateWeapon(W);
 		if( !KFWeapon(W).bMeleeWeapon )
 			return 0;
-		return FMax(KFWeapon(W).Weight, 1.f) * 0.75;
+		return FMax(KFWeapon(W).Weight, 1.f);
 	}
     function EndState()
     {
@@ -3803,14 +3801,21 @@ Begin:
 			GotoState('RestFormation','ShortWait');
 		}
 	}
-	if(actorReachable(MoveTarget))
-		MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
-	else if( FindBestPathToward(MoveTarget,true,true) )
+	if(actorReachable(RouteGoal))
+		MoveToward(RouteGoal,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+	else if( FindBestPathToward(RouteGoal,true,true) )
 	{
 		RoamingAttempts++;
-        if(RoamingAttempts >= 10)
+        if(RoamingAttempts >= 15)
         {
-			if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
+			RoamingAttempts = 0;
+			if (InventorySpot(RouteGoal) != None)
+			{
+				//Abandon unreachable inventory and try to find another one or roam
+				RouteGoal = None;
+				WhatToDoNext(157);
+			}
+			else if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
 			{
 				if (Pawn.SetLocation(FindNavNear(Squad.SquadLeader.Pawn).Location))
 				{
@@ -3819,7 +3824,6 @@ Begin:
 				else if (RouteCache[1] != None)
 					Pawn.SetLocation(RouteCache[1].Location);
 			}
-			RoamingAttempts = 0;
             WhatToDoNext(157);
         }
 		MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));

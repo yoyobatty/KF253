@@ -107,8 +107,6 @@ var() globalconfig int MaxZombiesOnce;
 var bool bWaveBossInProgress,bHasSetViewYet,bBossHasSaidWord;
 var KFMonster ViewingBoss;
 
-var ShopObjective SO;
-
 function DoBossDeath()
 {
     local Controller C;
@@ -297,7 +295,6 @@ event InitGame( string Options, out string Error )
 	foreach AllActors(class'ShopVolume',SH)
 	{
 		ShopList[ShopList.Length] = SH;
-        //SO = Spawn(class'ShopObjective',,,SH.Location);
 	}
 
 	//provide default rules if mapper did not need custom one
@@ -315,9 +312,6 @@ event InitGame( string Options, out string Error )
 	//Spawn(Class'KFBotChatManager');
 	AccessControl.AdminClass = class'KFMod.KFAdmin';
 	LoadUpMonsterList();
-
-	if (Level.GetLocalPlayerController() != None)
-		Level.GetLocalPlayerController().ConsoleCommand("nearclip 3");
 }
 
 function FixAFewActors()
@@ -1868,12 +1862,7 @@ function bool AllowTransloc()
 
 function AddGameSpecificInventory(Pawn p);
 
-event PlayerController Login
-(
-	string Portal,
-	string Options,
-	out string Error
-)
+event PlayerController Login(string Portal, string Options, out string Error)
 {
 	local PlayerController NewPlayer;
 	local Controller C;
