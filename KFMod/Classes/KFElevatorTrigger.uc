@@ -15,6 +15,12 @@ var byte MyFloorNum; // 255 - Elevator itself.
 var() string MessageMoving;
 var float NextMessageTimer;
 
+simulated function PostBeginPlay()
+{
+    Super.PostBeginPlay();
+    SetTimer(2.0, true);
+}
+
 function bool SelfTriggered()
 {
     return true;
@@ -67,7 +73,9 @@ function Timer()
 	local Pawn P;
 
 	foreach TouchingActors(Class'Pawn',P)
+	{
 		Touch(P);
+	}
 }
 
 function Touch( Actor Other )

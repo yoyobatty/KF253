@@ -3802,8 +3802,11 @@ Begin:
 		}
 	}
 	if(actorReachable(RouteGoal))
-		MoveToward(RouteGoal,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
-	else if( FindBestPathToward(RouteGoal,true,true) )
+	{
+		GoalString = "Roaming directly to goal";
+		MoveToward(RouteGoal,MoveTarget,,true);
+	}
+	else if( FindBestPathToward(RouteGoal,true,false) )
 	{
 		RoamingAttempts++;
         if(RoamingAttempts >= 15)
@@ -3826,7 +3829,8 @@ Begin:
 			}
             WhatToDoNext(157);
         }
-		MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+		GoalString = "Roaming to goal via path";
+		MoveToward(MoveTarget,MoveTarget,,false);
 	}
 DoneRoaming:
 	WaitForLanding();
@@ -3871,7 +3875,7 @@ final function KFNadeHealingExplosion FindNearbyHealCloud()
 
 function MoverFinished()
 {
-	if ( ProceedWithMove() )
+	if ( PendingMover.MyMarker == None || ProceedWithMove() )
 	{
 		//SendChatMsg("Elevator finished, proceeding.");
 		PendingMover = None;
@@ -3929,12 +3933,13 @@ function bool ProceedWithMove()
         return true;
     }
 
-    // If lift is closed, treat move as allowed (doors should be open by now)
+    // If lift is closed, treat move as allowed
     if ( Lift.bClosed )
-	{
-		Pawn.SetMoveTarget(LiftCenter(Lift.MyMarker).SpecialHandling(Pawn));
+    {
+        if ( LiftCenter(Lift.MyMarker) != None )
+            Pawn.SetMoveTarget(LiftCenter(Lift.MyMarker).SpecialHandling(Pawn));
         return true;
-	}
+    }
 
     return false;
 }
