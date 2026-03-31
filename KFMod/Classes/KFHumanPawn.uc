@@ -48,6 +48,8 @@ var float  CrouchEndTime;
 var float  LandedTime;
 var() float JumpCrouchBonus;   // Jump height multiplier for crouching
 var() float JumpCrouchTime;
+var bool   bAirCrouched;       // True when we applied the mid-air crouch offset
+var bool   bCrouchJumped;      // True when player was crouched at time of jump
 
 replication
 {
@@ -95,7 +97,52 @@ event PreBeginPlay()
 
 Simulated function tick(float DeltaTime)
 {
+	local float HeightDiff;
+	local bool bDuckInput;
+
 	super.Tick(DeltaTime);
+
+	// --- Air-crouch: the engine's ProcessMove skips ShouldCrouch() during
+	// PHYS_Falling, so bWantsToCrouch never gets set mid-air.  Read the raw
+	// bDuck input directly from the controller instead. ---
+	bDuckInput = (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0);
+	HeightDiff = default.CollisionHeight - CrouchHeight;
+
+	if (Physics == PHYS_Falling && bDuckInput && !bAirCrouched)
+	{
+		SetCollisionSize(CollisionRadius, CrouchHeight);
+		Move(vect(0,0,1) * HeightDiff);  // keep top of collision fixed, raise bottom
+		if (bCrouchJumped)
+		{
+			// Crouch-then-jump: keep camera at crouch eye level.
+			// Offset EyeHeight by -HeightDiff to cancel the Move so the camera
+			// stays at the same world height; UpdateEyeHeight smooths to target.
+			BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
+			EyeHeight -= HeightDiff;
+		}
+		else
+		{
+			// Mid-air crouch: keep camera at same world position (compensate for Move)
+			BaseEyeHeight = default.BaseEyeHeight - HeightDiff;
+			EyeHeight = BaseEyeHeight;
+		}
+		bAirCrouched = true;
+	}
+	else if (bAirCrouched && Physics == PHYS_Falling && !bDuckInput)
+	{
+		// Player released crouch mid-air — restore standing collision
+		Move(vect(0,0,-1) * HeightDiff);
+		SetCollisionSize(CollisionRadius, default.CollisionHeight);
+		BaseEyeHeight = default.BaseEyeHeight;
+		EyeHeight = BaseEyeHeight;
+		bAirCrouched = false;
+	}
+	else if (Physics == PHYS_Falling && bCrouchJumped && !bDuckInput && !bAirCrouched)
+	{
+		// Crouch-jump but player released crouch before air-crouch was applied;
+		// let UpdateEyeHeight smooth toward standing height.
+		BaseEyeHeight = default.BaseEyeHeight;
+	}
 
 	if (PlayerController(Controller) != None)
 	{
@@ -599,14 +646,41 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 
 event Landed(vector HitNormal)
 {
-    super.Landed( HitNormal );
-	LandedTime = Level.TimeSeconds;
+    local float HeightDiff;
+
+    if (bAirCrouched)
+    {
+        // Restore standing collision before Super handles the landing.
+        // Move up to make room for the taller cylinder, keeping feet at ground.
+        HeightDiff = default.CollisionHeight - CrouchHeight;
+        Move(vect(0,0,1) * HeightDiff);
+        SetCollisionSize(CollisionRadius, default.CollisionHeight);
+        BaseEyeHeight = default.BaseEyeHeight;
+        EyeHeight = BaseEyeHeight;
+        bAirCrouched = false;
+    }
+    bCrouchJumped = false;
+    super.Landed(HitNormal);
+    LandedTime = Level.TimeSeconds;
 }
 
 event EndCrouch(float HeightAdjust)
-{	
+{
     CrouchEndTime = Level.TimeSeconds;
-    Super.EndCrouch(HeightAdjust);
+    if (bCrouchJumped)
+    {
+        // Crouch-jump: keep BaseEyeHeight at crouch level so UpdateEyeHeight
+        // doesn't smooth the camera toward standing height before Tick applies
+        // the air-crouch.  Still do the EyeHeight/OldZ adjustments so the
+        // camera doesn't pop from the native position change.
+        EyeHeight -= HeightAdjust;
+        OldZ += HeightAdjust;
+        BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
+    }
+    else
+    {
+        Super.EndCrouch(HeightAdjust);
+    }
 }
 
 //Player Jumped
@@ -633,7 +707,10 @@ function bool DoJump( bool bUpdating )
 			Velocity += Base.Velocity;
 
         if( bIsCrouched || bWantsToCrouch || Level.TimeSeconds - CrouchEndTime < JumpCrouchTime )
+		{
             Velocity.Z -= JumpZ * JumpCrouchBonus;
+			bCrouchJumped = true;
+		}
 		
 		SetPhysics(PHYS_Falling);
 		if ( !bUpdating )
