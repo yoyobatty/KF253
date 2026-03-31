@@ -45,6 +45,7 @@ var float BaseMeleeIncrease;
 
 // --- Crouch/Jump Parameters ---
 var float  CrouchEndTime;
+var float  LandedTime;
 var() float JumpCrouchBonus;   // Jump height multiplier for crouching
 var() float JumpCrouchTime;
 
@@ -90,8 +91,6 @@ event PreBeginPlay()
 {
 	Super.PreBeginPlay();
 	SetTimer(1.5,true);
-	//PC = PlayerController(Controller);
-	PhysicsVolume.GroundFriction = 4.000000; //default is 8, this feels more natural, like there's a slight bit of slip to the floor
 }
 
 Simulated function tick(float DeltaTime)
@@ -115,7 +114,6 @@ Simulated function tick(float DeltaTime)
 simulated event PhysicsVolumeChange( PhysicsVolume NewVolume )
 {
     Super.PhysicsVolumeChange(NewVolume);
-	NewVolume.GroundFriction = 4.000000; //default is 8, this feels more natural, like there's a slight bit of slip to the floor
 }
 
 function SetAiming(bool IsAiming)
@@ -519,8 +517,9 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
     local float HealthMod, SprintMod, WeightMod;
 	local float EncumbrancePercentage;
 	local float InitialCrouchSpeed, CrouchDecayRate;
+	local float Speed2D, FrictionBlend, Drop, NewSpeed;
 
-    super.ModifyVelocity(DeltaTime, OldVelocity);
+    Super.ModifyVelocity(DeltaTime, OldVelocity);
 
 	if (Controller == none)
 		return;
@@ -548,6 +547,7 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	GroundSpeed = default.GroundSpeed * HealthMod;
 	GroundSpeed *= WeightMod;
 	GroundSpeed *= SprintMod;
+	AccelRate = default.AccelRate * SprintMod;
 
 	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
 	{
@@ -568,8 +568,39 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	{
 		CrouchedPct = FClamp(CrouchedPct + (DeltaTime * 200), default.CrouchedPct, InitialCrouchSpeed);
 	}
+	// HL2-style ground friction
+	if (Physics == PHYS_Walking)
+	{
+		//if (OldVelocity.Z < -50.0)
+		//	LandedTime = Level.TimeSeconds;
+		if (Acceleration.X * Acceleration.X + Acceleration.Y * Acceleration.Y < 1.0)
+		{
+			if (Level.TimeSeconds - LandedTime < 0.3)
+				FrictionBlend = 0.97 - (Level.TimeSeconds - LandedTime) * 0.10;
+			else
+				FrictionBlend = 0.94;
+			Velocity.X += (OldVelocity.X - Velocity.X) * FrictionBlend;
+			Velocity.Y += (OldVelocity.Y - Velocity.Y) * FrictionBlend;
+
+			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
+			if (Speed2D > 1.0)
+			{
+				Drop = FMax(Speed2D, 75.0) * 2.0 * DeltaTime;
+				NewSpeed = FMax(Speed2D - Drop, 0.0) / Speed2D;
+				Velocity.X *= NewSpeed;
+				Velocity.Y *= NewSpeed;
+			}
+		}
+	}
+
 	if(VSize(Velocity) < 1.f && Bot(Controller) == None) //No sprinting when standing still, except for bots
 		bIsSprinting = False;
+}
+
+event Landed(vector HitNormal)
+{
+    super.Landed( HitNormal );
+	LandedTime = Level.TimeSeconds;
 }
 
 event EndCrouch(float HeightAdjust)
@@ -612,7 +643,7 @@ function bool DoJump( bool bUpdating )
     return false;
 }
 
-exec simulated function StartSprintKF()
+simulated function StartSprintKF()
 {
 	if(!bIsSprinting && !bIsCrouched)
 		bIsSprinting = True;
@@ -625,7 +656,7 @@ function ServerStartSprintKF()
 		bIsSprinting = True;
 }
 
-exec simulated function StopSprintKF()
+simulated function StopSprintKF()
 {
 	if(bIsSprinting)
 		bIsSprinting = False;
@@ -645,6 +676,17 @@ singular event BaseChange()
 	if ( AIController(Controller)!=None && KActor(Base)!=None )
 		JumpOffPawn();
 }
+
+simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
+{
+	super.DisplayDebug(Canvas, YL, YPos);
+
+    Canvas.SetDrawColor(255,128,0);
+    Canvas.DrawText("CrouchedPct: " @ CrouchedPct @ " Sprinting: " @ bIsSprinting @ " GroundSpeed: " @ GroundSpeed);
+    YPos += YL;
+    Canvas.SetPos(4,YPos);
+}
+
 
 defaultproperties
 {

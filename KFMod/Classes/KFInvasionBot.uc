@@ -2711,6 +2711,7 @@ Ignores EnemyNotVisible,NotifyBump,EnemyAquired,WaitForMover;
 		//ClearStayingDebugLines();
 	}
 Begin:
+	SwitchToBestWeapon();
 	RetreatTime = Level.TimeSeconds+5.f+FRand()*5.f;
 	CurrentMov = None;
 	OldMovesCount = 0;
@@ -3809,7 +3810,7 @@ Begin:
 	else if( FindBestPathToward(RouteGoal,true,false) )
 	{
 		RoamingAttempts++;
-        if(RoamingAttempts >= 15)
+        if(RoamingAttempts >= 20)
         {
 			RoamingAttempts = 0;
 			if (InventorySpot(RouteGoal) != None)

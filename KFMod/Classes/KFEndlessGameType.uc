@@ -617,9 +617,6 @@ State MatchInProgress
         bWaveBossInProgress = false;
         CurrentWaveType = EWT_Normal;
 
-        MusicPlaying = false;
-        StartGameMusic(true);
-
         // Only reset this at the end of wave 0. That way the sine wave that scales
         // the intensity up/down will be somewhat random per wave
         if( WaveNum < 1 )

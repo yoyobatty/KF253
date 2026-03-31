@@ -39,6 +39,7 @@ var KFSPNoteMessage ActiveNote;
 var Rotator								BehindViewAimRotator;
 
 var() float FlySpeedMulti;
+var bool bWantsSprint;
 
 // Fractional Parts of Pitch/Yaw Input
 var transient float PitchFraction, YawFraction;
@@ -355,6 +356,20 @@ exec function ThrowGrenade()
 {
 	KFPawn(Pawn).ThrowGrenade();
 	//Level.Game.Broadcast(Pawn, Pawn.GetHumanReadableName()$" bot threw nade via quick throw");
+}
+
+exec simulated function StartSprintKF()
+{
+	bWantsSprint = true;
+	if (KFHumanPawn(Pawn) != None)
+		KFHumanPawn(Pawn).StartSprintKF();
+}
+
+exec simulated function StopSprintKF()
+{
+	bWantsSprint = false;
+	if (KFHumanPawn(Pawn) != None)
+		KFHumanPawn(Pawn).StopSprintKF();
 }
 
 exec function ShoutSupport()
@@ -1081,14 +1096,61 @@ ignores SeePlayer, HearNoise, Bump, ServerSpectate;
             NewAccel = vect(0,0,0); 
 		if ( bCheatFlying && (Pawn.Acceleration == vect(0,0,0)) )
             Pawn.Velocity = vect(0,0,0);
-        if (KFHumanPawn(Pawn) != None && KFHumanPawn(Pawn).bIsSprinting)
+        if (bWantsSprint)
             Pawn.AirSpeed = Pawn.default.AirSpeed * FlySpeedMulti;
 		else Pawn.AirSpeed = Pawn.default.AirSpeed;
 		Pawn.AccelRate = 4096.0;
-        // --- End sprinting boost ---
 
         // Update rotation.
         UpdateRotation(DeltaTime, 2);
+
+        if ( Role < ROLE_Authority ) // then save this move and replicate it
+            ReplicateMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+        else
+            ProcessMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+    }
+}
+
+state Spectating
+{
+	ignores SwitchWeapon, RestartLevel, ClientRestart, Suicide,
+	ThrowWeapon, NotifyPhysicsVolumeChange, NotifyHeadVolumeChange;
+
+	function bool IsSpectating()
+	{
+		return true;
+	}
+
+    function ProcessMove(float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot)
+    {
+        Acceleration = NewAccel;
+        MoveSmooth(SpectateSpeed * Normal(Acceleration) * DeltaTime);
+    }
+
+    function PlayerMove(float DeltaTime)
+    {
+        local vector X,Y,Z, NewAccel;
+
+		if ( (Pawn(ViewTarget) != None) && (Level.NetMode == NM_Client) )
+		{
+			if ( Pawn(ViewTarget).bSimulateGravity )
+				TargetViewRotation.Roll = 0;
+			BlendedTargetViewRotation.Pitch = BlendRot(DeltaTime, BlendedTargetViewRotation.Pitch, TargetViewRotation.Pitch & 65535);
+			BlendedTargetViewRotation.Yaw = BlendRot(DeltaTime, BlendedTargetViewRotation.Yaw, TargetViewRotation.Yaw & 65535);
+			BlendedTargetViewRotation.Roll = BlendRot(DeltaTime, BlendedTargetViewRotation.Roll, TargetViewRotation.Roll & 65535);
+		}
+        GetAxes(Rotation,X,Y,Z);
+
+        NewAccel = aForward*X + aStrafe*Y + aUp*vect(0,0,1);
+		
+        if ( VSize(NewAccel) < 1.0 )
+            NewAccel = vect(0,0,0); 
+		if (bWantsSprint)
+			SpectateSpeed = default.SpectateSpeed * FlySpeedMulti;
+		else
+			SpectateSpeed = default.SpectateSpeed;
+
+        UpdateRotation(DeltaTime, 1);
 
         if ( Role < ROLE_Authority ) // then save this move and replicate it
             ReplicateMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
