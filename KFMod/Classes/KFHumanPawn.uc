@@ -50,6 +50,9 @@ var() float JumpCrouchBonus;   // Jump height multiplier for crouching
 var() float JumpCrouchTime;
 var bool   bAirCrouched;       // True when we applied the mid-air crouch offset
 var bool   bCrouchJumped;      // True when player was crouched at time of jump
+var bool   bCrouchLanded;      // True when last landing was a crouch-landing (persists through slide window)
+var() float CrouchSlideBoost;  // Horizontal speed multiplier when landing while crouched
+var() float CrouchSlideWindow; // Duration (seconds) of the slide momentum window
 
 replication
 {
@@ -111,7 +114,7 @@ Simulated function tick(float DeltaTime)
 	if (Physics == PHYS_Falling && bDuckInput && !bAirCrouched)
 	{
 		SetCollisionSize(CollisionRadius, CrouchHeight);
-		Move(vect(0,0,1) * HeightDiff);  // keep top of collision fixed, raise bottom
+		MoveSmooth(vect(0,0,1) * HeightDiff);  // keep top of collision fixed, raise bottom
 		if (bCrouchJumped)
 		{
 			// Crouch-then-jump: keep camera at crouch eye level.
@@ -131,7 +134,7 @@ Simulated function tick(float DeltaTime)
 	else if (bAirCrouched && Physics == PHYS_Falling && !bDuckInput)
 	{
 		// Player released crouch mid-air — restore standing collision
-		Move(vect(0,0,-1) * HeightDiff);
+		MoveSmooth(vect(0,0,-1) * HeightDiff);
 		SetCollisionSize(CollisionRadius, default.CollisionHeight);
 		BaseEyeHeight = default.BaseEyeHeight;
 		EyeHeight = BaseEyeHeight;
@@ -141,6 +144,14 @@ Simulated function tick(float DeltaTime)
 	{
 		// Crouch-jump but player released crouch before air-crouch was applied;
 		// let UpdateEyeHeight smooth toward standing height.
+		BaseEyeHeight = default.BaseEyeHeight;
+	}
+
+	// Safety: if grounded and standing, ensure BaseEyeHeight isn't stuck
+	// low from EndCrouch's crouch-jump path (fast landings, etc.)
+	if (Physics != PHYS_Falling && !bIsCrouched && !bAirCrouched && !bWantsToCrouch
+	    && BaseEyeHeight < default.BaseEyeHeight)
+	{
 		BaseEyeHeight = default.BaseEyeHeight;
 	}
 
@@ -564,7 +575,7 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
     local float HealthMod, SprintMod, WeightMod;
 	local float EncumbrancePercentage;
 	local float InitialCrouchSpeed, CrouchDecayRate;
-	local float Speed2D, FrictionBlend, Drop, NewSpeed;
+	local float Speed2D, FrictionBlend, Drop, NewSpeed, SpeedFraction;
 
     Super.ModifyVelocity(DeltaTime, OldVelocity);
 
@@ -577,7 +588,7 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	WeightMod = (1.0 - (EncumbrancePercentage * 0.13));
 	// Calculate the health modifier to speed
 	HealthMod = ((Health/HealthMax) * HealthSpeedModifier) + (1.0 - HealthSpeedModifier);
-	if(bIsSprinting || Physics == PHYS_Falling)
+	if(!bCrouchLanded && (bIsSprinting || Physics == PHYS_Falling)) 
 	{
 		if(!bIsCrouched)
 			SprintMod = SprintMulti;
@@ -607,32 +618,60 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	if (bIsCrouched)
 	{
 		// Gradually reduce the ground speed towards the crouch speed
-		//Check if we are falling too, as we wouldn't want to reduce or crouch multiplayer if still falling
-		if(Physics != PHYS_Falling)
+		// Don't decay during falling or the landing slide window (native physics
+		// scales speed by CrouchedPct — decaying it eats slide momentum).
+		if(Physics != PHYS_Falling && Level.TimeSeconds - LandedTime >= CrouchSlideWindow)
 			CrouchedPct = FClamp(CrouchedPct - (DeltaTime * CrouchDecayRate), default.CrouchedPct, InitialCrouchSpeed);
 	}
-	else
+	else if (!bCrouchLanded)
 	{
+		// Don't ramp up during the crouch-landing slide window — preserve
+		// the default CrouchedPct that Landed set.
 		CrouchedPct = FClamp(CrouchedPct + (DeltaTime * 200), default.CrouchedPct, InitialCrouchSpeed);
 	}
-	// HL2-style ground friction
+
+	// Clear crouch-landed flag once the slide window expires.
+	if (bCrouchLanded && Level.TimeSeconds - LandedTime >= CrouchSlideWindow)
+		bCrouchLanded = false;
+
+	// Preserve slide momentum after landing — don't let GroundSpeed cap the
+	// slide velocity (including any CrouchSlideBoost) during the slide window.
+	if (Physics == PHYS_Walking && bCrouchLanded && Level.TimeSeconds - LandedTime < CrouchSlideWindow)
+		GroundSpeed = FMax(GroundSpeed, Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y));
+
+	// Ground friction when not accelerating.
 	if (Physics == PHYS_Walking)
 	{
-		//if (OldVelocity.Z < -50.0)
-		//	LandedTime = Level.TimeSeconds;
 		if (Acceleration.X * Acceleration.X + Acceleration.Y * Acceleration.Y < 1.0)
 		{
-			if (Level.TimeSeconds - LandedTime < 0.3)
-				FrictionBlend = 0.97 - (Level.TimeSeconds - LandedTime) * 0.10;
+			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
+			SpeedFraction = FClamp(Speed2D / FMax(default.GroundSpeed, 1.0), 0.0, 2.0);
+
+			if (bCrouchLanded && Level.TimeSeconds - LandedTime < CrouchSlideWindow)
+			{
+				// Crouch-landing slide: high momentum preservation, gentle decel
+				FrictionBlend = 0.98 - (Level.TimeSeconds - LandedTime) * (0.03 / FMax(CrouchSlideWindow, 0.01));
+			}
+			else if (Level.TimeSeconds - LandedTime < 0.3)
+			{
+				// Normal landing: brief grace period but shorter
+				FrictionBlend = 0.93 - (Level.TimeSeconds - LandedTime) * 0.20;
+			}
 			else
-				FrictionBlend = 0.94;
+			{
+				FrictionBlend = FMin(0.80 + 0.10 * SpeedFraction, 0.93);
+			}
+
 			Velocity.X += (OldVelocity.X - Velocity.X) * FrictionBlend;
 			Velocity.Y += (OldVelocity.Y - Velocity.Y) * FrictionBlend;
 
 			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
 			if (Speed2D > 1.0)
 			{
-				Drop = FMax(Speed2D, 75.0) * 2.0 * DeltaTime;
+				if (bCrouchLanded)
+					Drop = default.GroundSpeed * 1.0 * DeltaTime;
+				else
+					Drop = Speed2D * 4.0 * DeltaTime;
 				NewSpeed = FMax(Speed2D - Drop, 0.0) / Speed2D;
 				Velocity.X *= NewSpeed;
 				Velocity.Y *= NewSpeed;
@@ -647,21 +686,71 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 event Landed(vector HitNormal)
 {
     local float HeightDiff;
+    local bool bWasCrouchLanding;
+    local float Speed2D, MaxSlideSpeed, BoostedSpeed;
+
+    bWasCrouchLanding = bAirCrouched;
 
     if (bAirCrouched)
     {
-        // Restore standing collision before Super handles the landing.
-        // Move up to make room for the taller cylinder, keeping feet at ground.
         HeightDiff = default.CollisionHeight - CrouchHeight;
-        Move(vect(0,0,1) * HeightDiff);
+
+        // Always restore standing collision so native crouch tracking
+        // (StartCrouch/EndCrouch/bIsCrouched) stays consistent.
+        MoveSmooth(vect(0,0,1) * HeightDiff);
         SetCollisionSize(CollisionRadius, default.CollisionHeight);
-        BaseEyeHeight = default.BaseEyeHeight;
-        EyeHeight = BaseEyeHeight;
+
+        if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
+        {
+            // Still holding crouch — compensate EyeHeight for the upward move
+            // so the camera stays at the same world position.  The engine will
+            // re-crouch us next tick (StartCrouch adds HeightDiff back).
+            EyeHeight -= HeightDiff;
+            BaseEyeHeight = EyeHeight;
+            bWantsToCrouch = true;
+        }
+        else
+        {
+            BaseEyeHeight = default.BaseEyeHeight;
+            EyeHeight = BaseEyeHeight;
+        }
         bAirCrouched = false;
+    }
+    else if (bCrouchJumped)
+    {
+        // Crouch-jump that landed before Tick applied air-crouch.
+        // EndCrouch lowered BaseEyeHeight; restore it now.
+        if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
+            bWantsToCrouch = true;
+        else
+            BaseEyeHeight = default.BaseEyeHeight;
     }
     bCrouchJumped = false;
     super.Landed(HitNormal);
     LandedTime = Level.TimeSeconds;
+
+    // Crouch-landing speed boost: reward landing while holding crouch.
+    // Cap so repeated crouch-landings can't compound beyond sprint speed.
+    if (bWasCrouchLanding && CrouchSlideBoost > 0)
+    {
+        CrouchedPct = default.CrouchedPct;
+        Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
+        MaxSlideSpeed = default.GroundSpeed * SprintMulti * (1.0 + CrouchSlideBoost);
+        if (Speed2D < MaxSlideSpeed)
+        {
+            BoostedSpeed = FMin(Speed2D * (1.0 + CrouchSlideBoost), MaxSlideSpeed);
+            if (Speed2D > 0)
+            {
+                Velocity.X *= (BoostedSpeed / Speed2D);
+                Velocity.Y *= (BoostedSpeed / Speed2D);
+            }
+        }
+        bCrouchLanded = true;
+    }
+    else
+    {
+        bCrouchLanded = false;
+    }
 }
 
 event EndCrouch(float HeightAdjust)
@@ -669,13 +758,21 @@ event EndCrouch(float HeightAdjust)
     CrouchEndTime = Level.TimeSeconds;
     if (bCrouchJumped)
     {
-        // Crouch-jump: keep BaseEyeHeight at crouch level so UpdateEyeHeight
-        // doesn't smooth the camera toward standing height before Tick applies
-        // the air-crouch.  Still do the EyeHeight/OldZ adjustments so the
-        // camera doesn't pop from the native position change.
+        // Crouch-jump: suppress camera snap to standing height; Tick will
+        // re-apply air-crouch next frame.
         EyeHeight -= HeightAdjust;
         OldZ += HeightAdjust;
         BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
+    }
+    else if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
+    {
+        // Engine forced uncrouch (walked off ledge) but player still holding
+        // duck.  Undo the native position/collision change immediately so the
+        // pawn stays crouched with no visual pop.
+        MoveSmooth(vect(0,0,-1) * HeightAdjust);
+        SetCollisionSize(CollisionRadius, CrouchHeight);
+        BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
+        bAirCrouched = true;
     }
     else
     {
@@ -767,45 +864,47 @@ simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 
 defaultproperties
 {
-     BreathingSound=Sound'KFPlayerSound.Malebreath'
-     BaseMeleeIncrease=0.200000
-     MaxCarryWeight=15.000000
-     InjuredOverlay=Shader'KFCharacters.BloodiedShader'
-     CriticalOverlay=Shader'KFCharacters.BloodiedShader'
-     TorchBatteryLife=500
-     GruntVolume=10.000000
-     RequiredEquipment(0)="KFMod.Knife"
-     RequiredEquipment(1)="KFMod.Single"
-     RequiredEquipment(2)="KFMod.Frag"
-     RequiredEquipment(3)="KFMod.Syringe"
-     RequiredEquipment(4)="KFMod.Welder"
-	 bCanDodgeDoubleJump=False
-     bCanDoubleJump=False
-     bCanWallDodge=False
-	 bCanWalkOffLedges=True
-     MultiJumpRemaining=0
-     MaxMultiJump=0
-     GroundSpeed=200.000000
-     WaterSpeed=200.000000
-     AirSpeed=400.000000
-     JumpZ=325.000000
-     AirControl=0.150000
-     MaxFallSpeed=700.000000
-     BaseEyeHeight=48.000000
-     EyeHeight=48.000000
-     CrouchHeight=28.000000
-	 AccelRate=750.000000
-	 SprintMulti=1.400000
-	 CrouchedPct=0.500000
-	 JumpCrouchBonus=0.15
-	 JumpCrouchTime=0.30
-	 HealthSpeedModifier=0.300000
-     ControllerClass=Class'KFMod.KFInvasionBot'
-     CrouchTurnRightAnim="CrouchR"
-     CrouchTurnLeftAnim="CrouchL"
-     bDramaticLighting=False
-     Mesh=SkeletalMesh'KFSoldiers.Soldier'
-     Skins(0)=Texture'KFCharacters.DavinSkin'
-     Skins(1)=Shader'KFCharacters.GasMaskShader'
-     CollisionHeight=50.000000
+	BreathingSound=Sound'KFPlayerSound.Malebreath'
+	BaseMeleeIncrease=0.200000
+	MaxCarryWeight=15.000000
+	InjuredOverlay=Shader'KFCharacters.BloodiedShader'
+	CriticalOverlay=Shader'KFCharacters.BloodiedShader'
+	TorchBatteryLife=500
+	GruntVolume=10.000000
+	RequiredEquipment(0)="KFMod.Knife"
+	RequiredEquipment(1)="KFMod.Single"
+	RequiredEquipment(2)="KFMod.Frag"
+	RequiredEquipment(3)="KFMod.Syringe"
+	RequiredEquipment(4)="KFMod.Welder"
+	bCanDodgeDoubleJump=False
+	bCanDoubleJump=False
+	bCanWallDodge=False
+	bCanWalkOffLedges=True
+	MultiJumpRemaining=0
+	MaxMultiJump=0
+	GroundSpeed=200.000000
+	WaterSpeed=200.000000
+	AirSpeed=400.000000
+	JumpZ=325.000000
+	AirControl=0.150000
+	MaxFallSpeed=700.000000
+	BaseEyeHeight=48.000000
+	EyeHeight=48.000000
+	CrouchHeight=28.000000
+	AccelRate=1500.000000
+	SprintMulti=1.400000
+	CrouchedPct=0.500000
+	JumpCrouchBonus=0.350000
+	JumpCrouchTime=0.300000
+	CrouchSlideBoost=0.300000
+	CrouchSlideWindow=0.800000
+	HealthSpeedModifier=0.300000
+	ControllerClass=Class'KFMod.KFInvasionBot'
+	CrouchTurnRightAnim="CrouchR"
+	CrouchTurnLeftAnim="CrouchL"
+	bDramaticLighting=False
+	Mesh=SkeletalMesh'KFSoldiers.Soldier'
+	Skins(0)=Texture'KFCharacters.DavinSkin'
+	Skins(1)=Shader'KFCharacters.GasMaskShader'
+	CollisionHeight=50.000000
 }
