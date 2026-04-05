@@ -254,6 +254,7 @@ function RangedAttack(Actor A)
 	local float D;
 	local bool bOnlyE;
     local bool bDesireChainGun;
+    local float MissileChance, MissileCooldown;
 
     // Randomly make him want to chaingun more
     if( Controller.LineOfSightTo(A) && FRand() < 0.15 && LastChainGunTime<Level.TimeSeconds )
@@ -315,12 +316,14 @@ function RangedAttack(Actor A)
 	}
 	else if( LastMissileTime<Level.TimeSeconds && D > 500 )
 	{
-		if( !Controller.LineOfSightTo(A) || FRand() >0.75)
+		MissileChance = 0.25 + Level.Game.GameDifficulty * 0.05 + FMax(Level.Game.NumPlayers - 1, 0) * 0.05;
+		if( !Controller.LineOfSightTo(A) || FRand() > FClamp(MissileChance, 0.25, 0.85) )
 		{
 			LastMissileTime = Level.TimeSeconds+FRand()*3;
 			Return;
 		}
-		LastMissileTime = Level.TimeSeconds+10+FRand()*10;
+		MissileCooldown = FClamp(1.0 - Level.Game.GameDifficulty * 0.06 - FMax(Level.Game.NumPlayers - 1, 0) * 0.04, 0.3, 1.0);
+		LastMissileTime = Level.TimeSeconds + (10 + FRand() * 10) * MissileCooldown;
 		bShotAnim = true;
 		Acceleration = vect(0,0,0);
 		SetAnimAction('PreFireMG');
@@ -653,7 +656,9 @@ State FireMissile
 	{
 		Acceleration = vect(0,0,0);
 		if(SyringeCount>=2)
-			MissilesLeft = 3;
+			MissilesLeft = 3 + int(Level.Game.NumPlayers > 4);
+		else if(Level.Game.GameDifficulty >= 5.0 || Level.Game.NumPlayers >= 4)
+			MissilesLeft = RandRange(2,3);
 		else MissilesLeft = RandRange(1,2);
 		SavedFireProperties.bInitialized = false; // Reset saved properties 
 	}

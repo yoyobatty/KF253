@@ -19,15 +19,6 @@ var bool bPlayBileSplash;
 // Why? Cus if they didn't at least have that functionality, they would be fundamentally useless. And anyone willing to take on a hoarde of zombies
 // with only the gloves on his hands, deserves more respect than that!
 
-function BodyPartRemoval(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
-{
-	super.BodyPartRemoval(Damage, instigatedBy, hitlocation, momentum, damageType);
-
-	if((Health - Damage)<=0)
-		Gored=3;
-	if(Gored>=3 && Gored < 5)
-		BileBomb();
-}
 function bool FlipOver()
 {
 	Return False;
@@ -85,60 +76,58 @@ function RangedAttack(Actor A)
 
 function SpawnTwoShots()
 {
-	local vector X,Y,Z, FireStart;
-	local rotator FireRotation;
+    local vector X,Y,Z, FireStart;
+    local rotator FireRotation;
 
-	if( Controller!=None && KFDoorMover(Controller.Target)!=None )
-	{
-		Controller.Target.TakeDamage(22,Self,Location,vect(0,0,0),Class'DamTypeVomit');
-		return;
-	}
+    if( Controller!=None && KFDoorMover(Controller.Target)!=None )
+    {
+        Controller.Target.TakeDamage(22,Self,Location,vect(0,0,0),Class'DamTypeVomit');
+        return;
+    }
 
-	GetAxes(Rotation,X,Y,Z);
-	FireStart = Location+(vect(30,0,64) >> Rotation)*DrawScale;
-	if ( !SavedFireProperties.bInitialized )
-	{
-		SavedFireProperties.AmmoClass = MyAmmo.Class;
-		SavedFireProperties.ProjectileClass = MyAmmo.ProjectileClass;
-		SavedFireProperties.WarnTargetPct = 1;
-		SavedFireProperties.MaxRange = 500;
-		SavedFireProperties.bTossed = False;
-		SavedFireProperties.bTrySplash = False;
-		SavedFireProperties.bLeadTarget = True;
-		SavedFireProperties.bInstantHit = True;
-		SavedFireProperties.bInitialized = True;
-	}
-  ToggleAuxCollision(false);
-	FireRotation = Controller.AdjustAim(SavedFireProperties,FireStart,600);
-	Spawn(MyAmmo.ProjectileClass,,,FireStart,FireRotation);
+    GetAxes(Rotation,X,Y,Z);
+    FireStart = Location+(vect(30,0,64) >> Rotation)*DrawScale;
+    if ( !SavedFireProperties.bInitialized )
+    {
+        SavedFireProperties.AmmoClass = MyAmmo.Class;
+        SavedFireProperties.ProjectileClass = MyAmmo.ProjectileClass;
+        SavedFireProperties.WarnTargetPct = 1;
+        SavedFireProperties.MaxRange = 500;
+        SavedFireProperties.bTossed = False;
+        SavedFireProperties.bTrySplash = False;
+        SavedFireProperties.bLeadTarget = True;
+        SavedFireProperties.bInstantHit = True;
+        SavedFireProperties.bInitialized = True;
+    }
+    ToggleAuxCollision(false);
+    FireRotation = Controller.AdjustAim(SavedFireProperties,FireStart,600);
+    Spawn(MyAmmo.ProjectileClass,,,FireStart,FireRotation);
 
-	FireStart-=(0.5*CollisionRadius*Y);
-	FireRotation.Yaw -= 1200;
-	spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
-	FireStart+=(CollisionRadius*Y);
-	FireRotation.Yaw += 2400;
-	spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
-  ToggleAuxCollision(true);
+    FireStart-=(0.5*CollisionRadius*Y);
+    FireRotation.Yaw -= 1200;
+    spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
+    FireStart+=(CollisionRadius*Y);
+    FireRotation.Yaw += 2400;
+    spawn(MyAmmo.ProjectileClass,,,FireStart, FireRotation);
+    ToggleAuxCollision(true);
 }
 
 
 simulated function Tick(float deltatime)
 {
-  local vector BileExplosionLoc;
-  local BileExplosion GibBileExplosion;
-  
-  Super.tick(deltatime);
-  
- if( Level.NetMode!=NM_DedicatedServer &&
-  Gored>0 && 
-  !bPlayBileSplash )
- {
-   BileExplosionLoc = self.Location;
-   BileExplosionLoc.z += (CollisionHeight - (CollisionHeight * 0.5));
+    local vector BileExplosionLoc;
+    local BileExplosion GibBileExplosion;
 
-   GibBileExplosion = Spawn(class 'BileExplosion',self,, BileExplosionLoc );
-   bPlayBileSplash = true;
- }
+    Super.tick(deltatime);
+
+    if( Level.NetMode!=NM_DedicatedServer && BloatJet!=None && !bPlayBileSplash )
+    {
+        BileExplosionLoc = self.Location;
+        BileExplosionLoc.z += (CollisionHeight - (CollisionHeight * 0.5));
+
+        GibBileExplosion = Spawn(class 'BileExplosion',self,, BileExplosionLoc );
+        bPlayBileSplash = true;
+    }
 }
 
 function BileBomb()
@@ -147,8 +136,7 @@ function BileBomb()
 
 	BloatJet = spawn(class'BileJet', self,,,);
 
-	if(Gored < 5)
-		AttachSucess=AttachToBone(BloatJet,'Bip01 Spine');
+	AttachSucess=AttachToBone(BloatJet,'Bip01 Spine');
 
 	if(!AttachSucess)
 		BloatJet.SetBase(self);
@@ -163,8 +151,7 @@ function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
   
   if(BloatJet!=none)
   {
-    if(Gored < 5)
-      AttachSucess=AttachToBone(BloatJet,'Bip01 Spine');
+    AttachSucess=AttachToBone(BloatJet,'Bip01 Spine');
    // else
      // AttachSucess=AttachToBone(BloatJet,'Bip01 Spine1');
 
@@ -176,7 +163,6 @@ function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
     BloatJet.SetRelativeRotation(rot(0,-4096,0));
   }
 }
-
 
 State Dying
 {
@@ -204,6 +190,13 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 		Damage *= 1.5;
 	if( damageType==Class'DamTypeVomit' )
 		return;
+
+	// Bile bomb on lethal hit
+	if( (Health - Damage) <= 0 && BloatJet == None )
+	{
+		BileBomb();
+	}
+
   Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
 }
 

@@ -43,12 +43,6 @@ var Actor SpawnActor;
 
 var float WideDamageMinHitAngle; // The angle to do sweeping strikes in front of the player. If zero do no strikes
 
-//Our swing variables
-var() rotator UpSwingRot;
-var() float UpSwingTime;
-var() rotator DownSwingRot;
-var() float DownSwingTime;
-
 static final function vector GetAimPos( Actor Other )
 {
 	local KFMonster P;
@@ -76,12 +70,6 @@ simulated function Timer()
 	local float DiffAngle, VictimDist;
 
 	MyDamage = damageConst + Rand(MaxAdditionalDamage);
-	
-	KFWeapon(Weapon).NewSwingPhase = 1.0;
-	//KFWeapon(Weapon).SwingRot = rot(-80,-40,0);
-	KFWeapon(Weapon).SwingRot = DownSwingRot;
-	//KFWeapon(Weapon).SwingTime = 0.2;
-	KFWeapon(Weapon).SwingTime = DownSwingTime;
 
 	If( Weapon!=None && Instigator!=None && !KFWeapon(Weapon).bNoHit )
 	{
@@ -265,12 +253,6 @@ function DoFireEffect()
 	kf = KFMeleeGun(Weapon);
 
 	damage = damageConst + Rand(MaxAdditionalDamage) ;
-
-	kf.NewSwingPhase = 1.0;
-	//kf.SwingRot = rot(50,20,0);
-	kf.SwingRot = UpSwingRot;
-	//kf.SwingTime = 0.4;
-	kf.SwingTime = UpSwingTime;
 }
 
 
@@ -317,10 +299,6 @@ defaultproperties
      ImpactShakeOffsetMag=(X=10.000000,Y=10.000000,Z=10.000000)
      ImpactShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
      ImpactShakeOffsetTime=2.000000
-     UpSwingRot=(Pitch=50,Yaw=20)
-     UpSwingTime=0.400000
-     DownSwingRot=(Pitch=-80,Yaw=-40)
-     DownSwingTime=0.200000
      FireEndAnim=
      FireForce="ShockRifleFire"
      aimerror=100.000000

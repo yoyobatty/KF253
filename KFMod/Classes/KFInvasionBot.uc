@@ -1020,7 +1020,7 @@ final function Actor GetRandomDest()
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1057,7 +1057,7 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1085,7 +1085,7 @@ function bool FindBestPathTo( vector Dest )
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -3810,7 +3810,7 @@ Begin:
 	else if( FindBestPathToward(RouteGoal,true,false) )
 	{
 		RoamingAttempts++;
-        if(RoamingAttempts >= 20)
+        if(RoamingAttempts >= 30)
         {
 			RoamingAttempts = 0;
 			if (InventorySpot(RouteGoal) != None)

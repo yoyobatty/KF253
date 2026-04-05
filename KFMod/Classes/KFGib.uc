@@ -7,6 +7,7 @@ var() xEmitter TrailFlame;
 simulated function HitWall( Vector HitNormal, Actor Wall )
 {
     local float Speed, MinSpeed;
+    local KFBloodStreakDecal Streak;
 
     Velocity = DampenFactor * ((Velocity dot HitNormal) * HitNormal*(-2.0) + Velocity);
     RandSpin(100000);
@@ -25,6 +26,13 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
                 Spawn( GibGroupClass.default.BloodGibClass,,, Location, Rotator(-HitNormal) );
             if ( (LifeSpan < 7.3)  && (Level.DetailMode != DM_Low) )
                 PlaySound(HitSounds[Rand(2)]);
+
+            if ( Speed > 100 )
+            {
+                Streak = Spawn(class'KFMod.KFBloodStreakDecal',,, Location + 20 * HitNormal, Rotator(HitNormal));
+                if ( Streak != None )
+                    Streak.SetRotation(Rotator(Velocity));
+            }
         }
 
     if( Speed < 20 ) 
@@ -34,6 +42,21 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
         bBounce = False;
         SetPhysics(PHYS_None);
     }
+}
+
+simulated event TakeDamage(int Damage, Pawn EventInstigator, vector HitLocation, vector Momentum, class<DamageType> DamageType)
+{
+    if ( DamageType != class'DamTypeLAW' && DamageType != class'DamTypeFrag' )
+        return;
+
+    if ( Physics == PHYS_None )
+    {
+        SetPhysics(PHYS_Falling);
+        bBounce = True;
+    }
+    Velocity += Momentum / Mass;
+    Velocity.Z += 200 + FRand() * 300;
+    RandSpin(100000);
 }
 
 simulated function SpawnTrail()
@@ -61,4 +84,9 @@ defaultproperties
     LifeSpan=12.000000
     Mass=280.000000
     DrawScale=1.100000
+    bCollideActors=True
+    bProjTarget=True
+    CollisionRadius=5.000000
+    CollisionHeight=5.000000
+    GibGroupClass=Class'KFMod.KFGibGroup'
 }

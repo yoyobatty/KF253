@@ -35,7 +35,7 @@ event InitGame( string Options, out string Error )
     Super.InitGame(Options, Error);
 
     InitialCountDownValue = 15;
-    InitialWave = 1;
+    //InitialWave = 1;
     FinalWave = 99999;
 
     SirenClass = class<KFMonster>(DynamicLoadObject("KFChar.ZombieSiren", class'Class'));
@@ -71,6 +71,8 @@ static function FillPlayInfo(PlayInfo PlayInfo)
     PlayInfo.AddSetting(default.ServerGroup, "MaxSpectators",			GetDisplayText("MaxSpectators"),		1, 1, "Text",		"3;0:32",				,True,True);
     PlayInfo.AddSetting(default.ServerGroup, "MaxPlayers",				GetDisplayText("MaxPlayers"),			0, 1, "Text",		"3;0:32",				,True);
     PlayInfo.AddSetting(default.ServerGroup, "MaxIdleTime",			GetDisplayText("MaxIdleTime"),			0, 1, "Text",		"3;0:300",				,True,True);
+
+	PlayInfo.AddSetting(default.GameGroup,   "InitialWave",  GetDisplayText("InitialWave"), 50,  0,  "Text", "2;1:"$(ArrayCount(default.Waves)) );
 
     PlayInfo.AddSetting(default.GameGroup,"TmpWavesInf","Waves Config",60,0,"Custom",";;KFGui.KFInvWaveConfig",,,True);
     PlayInfo.AddSetting(default.GameGroup,"TmpSquadsInf","Squads Config",60,0,"Custom",";;KFGui.KFInvSquadConfig",,,True);

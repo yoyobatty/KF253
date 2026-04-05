@@ -992,6 +992,7 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 		local vector HitRay;
 		local Name HitBone;
 		local float HitBoneDist;
+		local int ExtraGibCount, i;
 
 		if( Physics == PHYS_KarmaRagdoll )
 		{
@@ -1049,6 +1050,25 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 					SpawnGiblet(MonsterThighGiblet,Hitlocation, HitRotation, 1.0 ) ;
 					SpawnGiblet(MonsterLegGiblet,Hitlocation, HitRotation, 1.0 ) ;
 					SpawnGiblet(MonsterLegGiblet,Hitlocation, HitRotation, 1.0 ) ;
+
+					// Randomly spawn extra gibs for a more satisfying obliteration
+					if ( !Level.bDropDetail && Level.DetailMode != DM_Low && FRand() < 0.5 )
+					{
+						ExtraGibCount = 1 + Rand(4);
+						for ( i = 0; i < ExtraGibCount; i++ )
+						{
+							switch ( Rand(6) )
+							{
+								case 0: SpawnGiblet(MonsterArmGiblet, Hitlocation, HitRotation, 1.5); break;
+								case 1: SpawnGiblet(MonsterLegGiblet, Hitlocation, HitRotation, 1.5); break;
+								case 2: SpawnGiblet(MonsterThighGiblet, Hitlocation, HitRotation, 1.5); break;
+								case 3: SpawnGiblet(MonsterTorsoGiblet, Hitlocation, HitRotation, 1.5); break;
+								case 4: SpawnGiblet(MonsterLowerTorsoGiblet, Hitlocation, HitRotation, 1.5); break;
+								case 5: SpawnGiblet(MonsterHeadGiblet, Hitlocation, HitRotation, 1.5); break;
+							}
+						}
+					}
+
 					if( Physics == PHYS_KarmaRagdoll )
 					{
 						bDestroyAfterRagDollTick = true;

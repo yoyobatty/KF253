@@ -42,6 +42,7 @@ var bool bDoorIsDead; // Used to trigger explosion on clients.
 
 var () bool bZombiesIgnore;  // if true, zombies ignore this door, when its welded.
 var bool bShouldBeOpen;
+var bool bTriggerTooFar;  // true if the use trigger is too far for bots to realistically use
 
 // If true, this door does not block actors when in an open state.
 var (Collision) const bool bNoBlockWhileOpen;
@@ -109,6 +110,10 @@ function PostBeginPlay()
 			WeldIconLocation = MyTrigger.Location;
 		}
 	}
+
+	// If the trigger is too far from the door, bots can't figure out how to open it
+	if( MyTrigger != None && VSize(MyTrigger.Location - Location) > 300 )
+		bTriggerTooFar = true;
 
 	// Establish hit Sounds based on material
 	if (SurfaceType == EST_Metal)
@@ -250,13 +255,16 @@ simulated function Timer()
 	if(Level.TimeSeconds - LastZombieDamageTime > 1.0) // reset our bool if it's not taking anymore dmg after one second.
 		bZedHittingDoor = false;
 }
+
 function Tick( float Delta )
 {
 	if( DoorPathNode!=None && PathUdpTimer<Level.TimeSeconds )
 	{
 		PathUdpTimer = Level.TimeSeconds+0.5;
 		DoorPathNode.ExtraCost = InitExtraCost;
-		if( bSealed && MyTrigger != none)
+		if( bTriggerTooFar && bClosed && !bHidden )
+			DoorPathNode.ExtraCost = 9999999;
+		else if( bSealed && MyTrigger != none)
 		{
             if (bZombiesIgnore)
                 DoorPathNode.ExtraCost = 9999999;

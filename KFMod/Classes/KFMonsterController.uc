@@ -22,6 +22,7 @@ var byte PathFindState;
 // Used for alternative pathing:
 var Actor LastResult;
 var NavigationPoint BlockedWay,ExtraCostWay;
+var float BlockedWayTime;
 
 function Restart()
 {
@@ -259,6 +260,9 @@ function DoTacticalMove();
 function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 {
 	local vector Dummy;
+	local NavigationPoint CrowdedNode;
+	local KFMonster M;
+	local int NearbyZeds, CrowdCost;
 
 	RouteCache[1] = None;
 	if( A==None )
@@ -267,39 +271,51 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 		MoveTarget = A;
 	else
 	{
-		// Sometimes they may attempt to find another way around if this way leads to i.e. a welded door.
-		if( ExtraCostWay!=None )
-			ExtraCostWay.ExtraCost+=200;
+		// Expire stale blocked node after 5 seconds
+		if( BlockedWay!=None && Level.TimeSeconds - BlockedWayTime > 5.0 )
+			BlockedWay = None;
+
 		if( BlockedWay!=None )
 		{
-			BlockedWay.ExtraCost+=10000;
+			BlockedWay.ExtraCost += 10000;
 			MoveTarget = FindPathToward(A);
-			BlockedWay.ExtraCost-=10000;
+			BlockedWay.ExtraCost -= 10000;
 		}
 		else MoveTarget = FindPathToward(A);
-		if( ExtraCostWay!=None )
-			ExtraCostWay.ExtraCost-=200;
+
 		if( MoveTarget!=None )
 		{
-			if( LastResult==MoveTarget && NavigationPoint(MoveTarget)!=None && NumAttmpts>3 && FRand()<0.6 )
+			// Stuck detection: same nav point too many times in a row, mark it blocked
+			if( LastResult==MoveTarget && NavigationPoint(MoveTarget)!=None && NumAttmpts > 3 )
 			{
 				BlockedWay = NavigationPoint(MoveTarget);
+				BlockedWayTime = Level.TimeSeconds;
 				LastResult = None;
 				NumAttmpts = 0;
-				return FindBestPathToward(A,True,bAllowDetour);
+				return FindBestPathToward(A, True, bAllowDetour);
 			}
 			else if( LastResult==MoveTarget )
-			{
 				NumAttmpts++;
-			}
 			else NumAttmpts = 0;
 			LastResult = MoveTarget;
-			if( NavigationPoint(MoveTarget)!=None && KFMonster(Trace(Dummy,Dummy,MoveTarget.Location,Pawn.Location,True))!=None )
+
+			// Horde avoidance: count zombies near the next nav point
+			if( NavigationPoint(MoveTarget)!=None )
 			{
-				ExtraCostWay = NavigationPoint(MoveTarget);
-				ExtraCostWay.ExtraCost+=200;
-				MoveTarget = FindPathToward(A); // Might consider taking another path if zombie is blocking this one.
-				ExtraCostWay.ExtraCost-=200;
+				NearbyZeds = 0;
+				foreach Pawn.CollidingActors(class'KFMonster', M, 200, MoveTarget.Location)
+				{
+					if( M != Pawn )
+						NearbyZeds++;
+				}
+				if( NearbyZeds > 3 )
+				{
+					CrowdedNode = NavigationPoint(MoveTarget);
+					CrowdCost = NearbyZeds * 500;
+					CrowdedNode.ExtraCost += CrowdCost;
+					MoveTarget = FindPathToward(A);
+					CrowdedNode.ExtraCost -= CrowdCost;
+				}
 			}
 		}
 	}

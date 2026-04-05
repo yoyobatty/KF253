@@ -77,19 +77,57 @@ var() 		enum 			EClientGrenadeState
 	GN_BringUp,
 } ClientGrenadeState; // this will always be none on the server
 
-var	float SwingPhase;
-var float NewSwingPhase;	
-var() Rotator SwingRot;			// Rotate the view for our swing
-var() float	SwingTime;		// Time it takes to move weapon throughout swing
-var() range SwingRand;		// Rand range factor for fun 
+// === View turn inertia / sway (spring-physics, CoD-style) (Yes this is vibe-coded, I'm not smart enough to make this myself)===
+// Core tunables
+var() float LagPosStrength;      // Position responsiveness to angular velocity
+var() float LagRotStrength;      // Rotation responsiveness
+var() float LagSpringK;          // Pos spring stiffness
+var() float LagSpringDamping;    // Pos spring damping
+var() float RotSpringK;          // Rot spring stiffness
+var() float RotSpringDamping;    // Rot spring damping
+var() float FlickThresholdDegPerSec;
+var() float FlickImpulsePos;
+var() float FlickImpulseRot;
+var() float BreathAmplitude;     // Vertical breathing offset
+var() float BreathPitchAmplitude;
+var() float BreathFreq;
+var() float MoveBobAmp;
+var() float MoveBobFreq;
+var() float MoveBobYawRot;
+var() float MoveBobPitchRot;
+var() float MoveBobRollRot;          // Roll tilt per bob cycle (side-to-side rock)
+var() float MoveBobSprintMulti;      // Bob amplitude multiplier when sprinting
+var() float MoveBobHorizScale;       // Horizontal bob relative to vertical (figure-8)
+var() float StrafeRollStrength;      // Roll lean from strafing (degrees at full strafe)
+var() float StrafePosStrength;       // Lateral position shift from strafing
+var() float StrafeLeanSpeed;         // How fast lean blends in/out
+var() float MoveReactStrength;       // Weapon reacts to velocity changes (acceleration)
+var() float JumpKickPos;             // Positional impulse on jump (weapon drops back)
+var() float JumpKickRot;             // Rotational impulse on jump (pitch up)
+var() float LandKickPos;             // Positional impulse on landing (weapon slams down)
+var() float LandKickRot;             // Rotational impulse on landing (pitch forward)
+var() float LandKickSpeedScale;      // Scale land kick by fall speed (0=fixed, 1=fully proportional)
+var() float ViewLagMaxOffset;    // Clamp positional offset magnitude
 
-var rotator ViewLag_LastViewRot;
-var vector  ViewLag_Offset;
-var() float   ViewLag_StrengthYaw, ViewLag_StrengthPitch;   // How much lag (higher = more lag)
-var() float   MaxLag;
-var() float   TurnSpeed;
+// Runtime state
+var rotator PrevViewRot;
+var vector  VM_PosOffset, VM_PosVel;
+var vector  VM_RotOffset, VM_RotVel;   // (Pitch,Yaw,Roll) in degrees
+var float   LastMotionUpdateTime;
+var float   BobPhase;                  // Bob cycle phase accumulator (radians)
+var vector  PrevVelocity;              // Previous frame velocity for movement reaction
 
-var float WallOffsetFactor, TargetWallOffsetFactor; // 0 (at wall) to 1 (far from wall)
+// Direct offsets (bypass spring entirely, applied in RenderOverlays)
+var vector  BobPosOffset;              // Direct bob positional offset (local X,Y,Z)
+var vector  BobRotOffset;              // Direct bob rotational offset (Pitch,Yaw,Roll) degrees
+var float   StrafeRoll;                // Current strafe lean in degrees
+var float   StrafeOffsetY;             // Current strafe lateral shift
+var EPhysics  PrevPhysics;               // Previous frame physics for jump/land detection
+var float   BreathOffsetZ;
+var float   BreathPitchOffset;
+
+// === Wall offset (weapon pivots up near walls) ===
+var float WallOffsetFactor, TargetWallOffsetFactor;
 var() float GunLengthDist;
 var() rotator WallPivotRot;
 var() vector WallPivotOffset;
@@ -122,6 +160,11 @@ simulated function PostBeginPlay()
 	}
 
 	Super.PostBeginPlay();
+
+	// Initialize motion state
+	if (Instigator != None)
+		PrevViewRot = Instigator.GetViewRotation();
+	LastMotionUpdateTime = Level.TimeSeconds;
 }
 
 function bool HandlePickupQuery( pickup Item )
@@ -212,15 +255,24 @@ simulated event RenderOverlays( Canvas Canvas )
 	WallPivotOffset = default.WallPivotOffset * PivotAmount;
 	WeaponOffset = (X*WallPivotOffset.X + Y*WallPivotOffset.Y + Z*WallPivotOffset.Z);
 
-    // ---------------------------------------------------------------
-	SetLocation(Instigator.Location + Instigator.CalcDrawOffset(self) + WeaponOffset + (ViewLag_Offset.X * X + ViewLag_Offset.Y * Y + ViewLag_Offset.Z * Z));
+    // Apply spring positional offset in local space
+    WeaponOffset += X * VM_PosOffset.X + Y * VM_PosOffset.Y + Z * (VM_PosOffset.Z + BreathOffsetZ);
+    // Apply direct bob + strafe offsets (bypass spring entirely)
+    WeaponOffset += X * BobPosOffset.X + Y * (BobPosOffset.Y + StrafeOffsetY) + Z * BobPosOffset.Z;
 
+    // Final location
+    SetLocation(Instigator.Location + Instigator.CalcDrawOffset(self) + WeaponOffset);
+
+    // Final rotation (add dynamic rotation offset)
     if ( Hand == 0 )
     {
         CenteredRotation = Instigator.GetViewRotation();
         CenteredRotation.Yaw += CenteredYaw + WallPivotRot.Yaw;
         CenteredRotation.Roll = CenteredRoll + WallPivotRot.Roll;
         CenteredRotation.Pitch += WallPivotRot.Pitch;
+        CenteredRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * (65536.0/360.0) );
+        CenteredRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * (65536.0/360.0) );
+        CenteredRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * (65536.0/360.0) );
         SetRotation(CenteredRotation);
     }
     else
@@ -229,6 +281,9 @@ simulated event RenderOverlays( Canvas Canvas )
         NewRotation.Yaw += WallPivotRot.Yaw;
         NewRotation.Pitch += WallPivotRot.Pitch;
         NewRotation.Roll += WallPivotRot.Roll;
+        NewRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * (65536.0/360.0) );
+        NewRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * (65536.0/360.0) );
+        NewRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * (65536.0/360.0) );
         SetRotation(NewRotation);
     }
     bDrawingFirstPerson = true;
@@ -767,11 +822,24 @@ simulated function BringUp(optional Weapon PrevWeapon)
 	IdleAnim = Default.IdleAnim;
 	//Super.BringUp(PrevWeapon);
 
-    // Fix: Initialize viewmodel lag variables to prevent network glitch
+    // Fix: Initialize viewmodel motion variables to prevent network glitch
     if (Instigator != None && Instigator.IsHumanControlled())
     {
-        ViewLag_LastViewRot = Instigator.GetViewRotation();
-        ViewLag_Offset = vect(0,0,0);
+        PrevViewRot = Instigator.GetViewRotation();
+        VM_PosOffset = vect(0,0,0);
+        VM_PosVel    = vect(0,0,0);
+        VM_RotOffset = vect(0,0,0);
+        VM_RotVel    = vect(0,0,0);
+        BreathOffsetZ = 0;
+        BreathPitchOffset = 0;
+        BobPhase = 0;
+        BobPosOffset = vect(0,0,0);
+        BobRotOffset = vect(0,0,0);
+        StrafeRoll = 0;
+        StrafeOffsetY = 0;
+        PrevPhysics = PHYS_Walking;
+        PrevVelocity = vect(0,0,0);
+        LastMotionUpdateTime = Level.TimeSeconds;
     }
 
 	// From Weapon.uc
@@ -932,59 +1000,174 @@ simulated function WeaponTick(float DT)
 simulated function Tick(float DeltaTime)
 {
 	Super.Tick(DeltaTime);
-	//TickSwingCamera(DeltaTime);
-	UpdateViewModelLag(DeltaTime);
 	WallOffsetFactor += (TargetWallOffsetFactor - WallOffsetFactor) * FMin(DeltaTime * 8.0, 1.0);
+    if (Instigator != None && Instigator.Controller != None && Instigator.IsFirstPerson())
+		if (Level.NetMode != NM_DedicatedServer)
+        	UpdateViewModelMotion(Instigator.GetViewRotation(), DeltaTime);
 }
 
-simulated function UpdateViewModelLag(float DeltaTime)
+simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
 {
-    local rotator CurViewRot, DeltaRot;
-    local vector  LagMove, VDiff;
-    local float LagScale, SpeedScale;
-    local float   PitchDeg;
+    local rotator dR;
+    local float dyawDeg, dpitchDeg;
+    local float angVelYaw, angVelPitch;
+    local vector forcePos, torqueRot;
+    local float speed2D, speedNorm, bobHz, ampScale, breathVal, strafeSpeed, strafeNorm;
+    local vector viewX, viewY, viewZ, accelVec;
+    local vector targetBobPos, targetBobRot;
+    local float targetStrafeRoll, targetStrafeY;
+    local bool bOnGround, bSprinting;
+    local EPhysics curPhysics;
+    local float fallSpeed, landScale;
 
-	// Only update for the human player's weapon
-    if (Instigator == None || !Instigator.IsHumanControlled())
+    if (DeltaTime <= 0.0)
         return;
 
-    if (Level.NetMode != NM_Client && !Instigator.IsLocallyControlled())
-        return;		
+    dR.Yaw   = CurViewRot.Yaw - PrevViewRot.Yaw;
+    dR.Pitch = CurViewRot.Pitch - PrevViewRot.Pitch;
+    if (dR.Yaw > 32768) dR.Yaw -= 65536; else if (dR.Yaw < -32768) dR.Yaw += 65536;
+    if (dR.Pitch > 32768) dR.Pitch -= 65536; else if (dR.Pitch < -32768) dR.Pitch += 65536;
 
-    CurViewRot = Instigator.GetViewRotation();
-    DeltaRot = CurViewRot - ViewLag_LastViewRot;
-	DeltaRot = Normalize(DeltaRot);
+    dyawDeg   = float(dR.Yaw)   * (360.0/65536.0);
+    dpitchDeg = float(dR.Pitch) * (360.0/65536.0);
 
-	DeltaRot.Pitch = Clamp(DeltaRot.Pitch, -8192, 8192); 
-	DeltaRot.Yaw   = Clamp(DeltaRot.Yaw,   -16384, 16384); 
-	LagMove.X = 0;
-	LagMove.Y = -float(DeltaRot.Yaw) * ViewLag_StrengthYaw;
-	LagMove.Z = -float(DeltaRot.Pitch) * ViewLag_StrengthPitch;
+    angVelYaw   = dyawDeg   / DeltaTime;
+    angVelPitch = dpitchDeg / DeltaTime;
 
-    PitchDeg = float(CurViewRot.Pitch) * (360.0 / 65536.0);
-    if (PitchDeg > 180)       PitchDeg -= 360;
-    else if (PitchDeg < -180) PitchDeg += 360;
+    // Turn inertia forces
+    forcePos.X = -Abs(angVelYaw) * LagPosStrength * 0.015;
+    forcePos.Y = -angVelYaw      * LagPosStrength * 0.010;
+    forcePos.Z =  angVelPitch    * LagPosStrength * 0.010;
 
-	LagMove.X += (PitchDeg * 0.05); // slight offset based on pitch
-	LagMove.Y += (PitchDeg * 0.05);
-	LagMove.Z += (PitchDeg * 0.05);
+    torqueRot.Y = -angVelYaw      * LagRotStrength * 0.020;
+    torqueRot.X =  angVelPitch    * LagRotStrength * 0.025;
+    torqueRot.Z = -angVelYaw      * LagRotStrength * 0.008;
 
-	VDiff = (LagMove - ViewLag_Offset);
-    // HL2-style: Fixed MaxLag, scale catch-up speed if lag is too large
-	SpeedScale = TurnSpeed;
-    if (VSize(VDiff) > MaxLag && MaxLag > 0.0)
-	{
-        LagScale = VSize(VDiff) / MaxLag;
-		SpeedScale *= LagScale; // Scale catch-up speed
-	}
-    // Smoothly interpolate the lag offset, scaling catch-up speed if needed
-	ViewLag_Offset += VDiff * SpeedScale * DeltaTime;
+    // Flick impulses
+    if (Abs(angVelYaw) > FlickThresholdDegPerSec)
+    {
+        if (angVelYaw > 0) { VM_PosVel.Y -= FlickImpulsePos; VM_RotVel.Z -= FlickImpulseRot; }
+        else               { VM_PosVel.Y += FlickImpulsePos; VM_RotVel.Z += FlickImpulseRot; }
+    }
+    if (Abs(angVelPitch) > FlickThresholdDegPerSec)
+    {
+        if (angVelPitch > 0) { VM_PosVel.Z += FlickImpulsePos * 0.2; VM_RotVel.X += FlickImpulseRot * 0.35; }
+        else                 { VM_PosVel.Z -= FlickImpulsePos * 0.2; VM_RotVel.X -= FlickImpulseRot * 0.35; }
+    }
 
-	// Clamp to prevent runaway values
-	if (VSize(ViewLag_Offset) > 32.0)
-		ViewLag_Offset = Normal(ViewLag_Offset) * 32.0;
+    // --- CoD-style Movement Bob (DIRECT offsets, not through spring) ---
+    if (Instigator != None)
+    {
+        curPhysics = Instigator.Physics;
+        bOnGround = (curPhysics == PHYS_Walking || curPhysics == PHYS_Ladder);
+        speed2D = VSize(Instigator.Velocity);
+        bSprinting = (KFHumanPawn(Instigator) != None && KFHumanPawn(Instigator).bIsSprinting);
 
-    ViewLag_LastViewRot = CurViewRot;
+        // --- Jump/Land detection: inject impulses into the spring ---
+        if (PrevPhysics == PHYS_Walking && curPhysics == PHYS_Falling)
+        {
+            // Takeoff: weapon drops back and pitches up
+            VM_PosVel.Z -= JumpKickPos;
+            VM_PosVel.X -= JumpKickPos * 0.3;
+            VM_RotVel.X += JumpKickRot;
+        }
+        else if (PrevPhysics == PHYS_Falling && curPhysics == PHYS_Walking)
+        {
+            // Landing: weapon slams down and pitches forward, scaled by fall speed
+            fallSpeed = FMax(-PrevVelocity.Z, 0.0);
+            landScale = 1.0 + LandKickSpeedScale * FClamp(fallSpeed / 600.0, 0.0, 2.0);
+            VM_PosVel.Z -= LandKickPos * landScale;
+            VM_RotVel.X -= LandKickRot * landScale;
+        }
+        PrevPhysics = curPhysics;
+
+        if (speed2D > 10 && bOnGround)
+        {
+            // Normalize speed against default ground speed so bob caps at normal run
+            speedNorm = FClamp(speed2D / 200.0, 0.0, 1.0);
+
+            // Sprint = slightly faster cadence, heavier footfalls
+            if (bSprinting)
+                bobHz = MoveBobFreq * 1.3;
+            else
+                bobHz = MoveBobFreq;
+
+            // Advance phase
+            BobPhase += DeltaTime * bobHz * 6.283185;
+            if (BobPhase > 6.283185) BobPhase -= 6.283185;
+
+            // Squared speed curve: walking is very subtle, running ramps up hard
+            ampScale = speedNorm * speedNorm;
+            ampScale = FClamp(ampScale, 0.0, 1.0);
+            if (bSprinting)
+                ampScale *= MoveBobSprintMulti;
+
+            // BobPhase = full stride cycle (two footsteps)
+            // Vertical: smooth V-dip per footstep (2x per stride) using -Abs(Cos)
+            targetBobPos.Z = -Abs(Cos(BobPhase)) * MoveBobAmp * ampScale;
+            // Horizontal: simple side-to-side sway, once per stride
+            targetBobPos.Y = Sin(BobPhase) * MoveBobAmp * MoveBobHorizScale * ampScale;
+            // Minimal forward pull
+            targetBobPos.X = 0;
+
+            // Roll follows horizontal sway (lean into step), yaw subtle, pitch minimal
+            targetBobRot.Z = Sin(BobPhase)  * MoveBobRollRot  * ampScale;
+            targetBobRot.Y = Sin(BobPhase)  * MoveBobYawRot   * ampScale;
+            targetBobRot.X = -Abs(Cos(BobPhase)) * MoveBobPitchRot * ampScale;
+        }
+        else
+        {
+            // Decay phase smoothly when stopped/airborne
+            BobPhase *= (1.0 - FMin(1.0, 5.0 * DeltaTime));
+            targetBobPos = vect(0,0,0);
+            targetBobRot = vect(0,0,0);
+        }
+
+        // Smooth blend bob offsets (weighted follow for organic feel)
+        BobPosOffset += (targetBobPos - BobPosOffset) * FMin(DeltaTime * 12.0, 1.0);
+        BobRotOffset += (targetBobRot - BobRotOffset) * FMin(DeltaTime * 12.0, 1.0);
+
+        // --- Strafe lean (DIRECT, not through spring) ---
+        GetAxes(CurViewRot, viewX, viewY, viewZ);
+        strafeSpeed = Instigator.Velocity dot viewY;
+        strafeNorm = strafeSpeed / FMax(Instigator.GroundSpeed, 200.0);
+
+        targetStrafeRoll = -strafeNorm * StrafeRollStrength;
+        targetStrafeY    =  strafeNorm * StrafePosStrength;
+
+        StrafeRoll    += (targetStrafeRoll - StrafeRoll)    * FMin(DeltaTime * StrafeLeanSpeed, 1.0);
+        StrafeOffsetY += (targetStrafeY    - StrafeOffsetY) * FMin(DeltaTime * StrafeLeanSpeed, 1.0);
+
+        // --- Movement reaction: weapon shifts opposite to acceleration (through springs) ---
+        if (DeltaTime > 0.001)
+        {
+            accelVec = (Instigator.Velocity - PrevVelocity) / DeltaTime;
+            forcePos.X += -(accelVec dot viewX) * MoveReactStrength * 0.002;
+            forcePos.Y += -(accelVec dot viewY) * MoveReactStrength * 0.002;
+            forcePos.Z += -(accelVec dot viewZ) * MoveReactStrength * 0.001;
+        }
+        PrevVelocity = Instigator.Velocity;
+    }
+
+    // Integrate springs
+    VM_PosVel    += ( -LagSpringK * VM_PosOffset - LagSpringDamping * VM_PosVel + forcePos ) * DeltaTime;
+    VM_PosOffset += VM_PosVel * DeltaTime;
+    if (VSize(VM_PosOffset) > ViewLagMaxOffset)
+        VM_PosOffset = Normal(VM_PosOffset) * ViewLagMaxOffset;
+
+    VM_RotVel    += ( -RotSpringK * VM_RotOffset - RotSpringDamping * VM_RotVel + torqueRot ) * DeltaTime;
+    VM_RotOffset += VM_RotVel * DeltaTime;
+    if (VM_RotOffset.X > 12) VM_RotOffset.X = 12; else if (VM_RotOffset.X < -12) VM_RotOffset.X = -12;
+    if (VM_RotOffset.Y > 12) VM_RotOffset.Y = 12; else if (VM_RotOffset.Y < -12) VM_RotOffset.Y = -12;
+    if (VM_RotOffset.Z > 15) VM_RotOffset.Z = 15; else if (VM_RotOffset.Z < -15) VM_RotOffset.Z = -15;
+
+    // Direct breathing offsets (NOT through the spring, so always visible)
+    breathVal = Sin(Level.TimeSeconds * BreathFreq * 6.283185);
+    BreathOffsetZ    = breathVal * BreathAmplitude;        // world units
+    BreathPitchOffset= breathVal * BreathPitchAmplitude;   // degrees
+
+    PrevViewRot = CurViewRot;
+    LastMotionUpdateTime = Level.TimeSeconds;
 }
 
 simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
@@ -1483,27 +1666,6 @@ simulated function GetAmmoCount(out float MaxAmmoPrimary, out float CurAmmoPrima
 	}
 }
 
-
-simulated function TickSwingCamera(float DT)
-{
-	if( Instigator == None || !Instigator.IsHumanControlled() || PlayerController(Instigator.Controller).bBehindView )//Don't even run this if we are not a human player
-		return;
-	SwingPhase = SwingPhase + FClamp(NewSwingPhase - SwingPhase, -DT/SwingTime, DT/SwingTime);
-	if(NewSwingPhase > 0.f)
-	{
-		NewSwingPhase = NewSwingPhase - FMin(NewSwingPhase, DT/SwingTime);
-	}
-    if (Abs(SwingPhase) < 0.001 && NewSwingPhase <= 0.0)
-    {
-        SwingPhase     = 0.0;
-        NewSwingPhase  = 0.0;
-        return;
-    }
-	SwingRot *= RandRange(SwingRand.Min, SwingRand.Max);
-	Instigator.SetViewRotation(Instigator.GetViewRotation() + SwingRot * SwingPhase); 
-}
-
-
 simulated function UpdateMagCapacity(PlayerReplicationInfo PRI)
 {
 	if ( KFPlayerReplicationInfo(PRI) != none && KFPlayerReplicationInfo(PRI).ClientVeteranSkill != none )
@@ -1566,13 +1728,46 @@ defaultproperties
 	CustomCrosshair=13
 	CustomCrossHairScale=0.666700
 	CustomCrossHairTextureName="Crosshairs.HUD.Crosshair_Cross5"
-	ViewLag_StrengthYaw=0.015000
-	ViewLag_StrengthPitch=0.025000
-	MaxLag=10.000000
-	TurnSpeed=4.000000
 	GunLengthDist=50.000000
 	WallPivotRot=(Pitch=5000,Yaw=-5000,Roll=0)
 	WallPivotOffset=(x=-10,y=0,z=-10)
 	//PrePivot=(X=0.000000,Y=0.000000,Z=-2.000000)
 	bModeZeroCanDryFire=True
+
+	// Motion system defaults
+	LagPosStrength=1.0
+	LagRotStrength=1.0
+	LagSpringK=12.0
+	LagSpringDamping=7.5
+	RotSpringK=10.0
+	RotSpringDamping=6.5
+	FlickThresholdDegPerSec=260.0
+	FlickImpulsePos=2.0
+	FlickImpulseRot=3.2
+	BreathAmplitude=0.45
+	BreathPitchAmplitude=1.5
+	BreathFreq=0.35
+	ViewLagMaxOffset=6.0
+
+	// CoD-style movement bob (direct offsets)
+	MoveBobAmp=1.4
+	MoveBobFreq=1.1
+	MoveBobYawRot=0.4
+	MoveBobPitchRot=0.3
+	MoveBobRollRot=1.5
+	MoveBobHorizScale=0.35
+	MoveBobSprintMulti=2.0
+
+	// Strafe lean & movement reaction
+	StrafeRollStrength=6.0
+	StrafePosStrength=2.5
+	StrafeLeanSpeed=8.0
+	MoveReactStrength=2.0
+
+	// Jump/Land weapon kick
+	JumpKickPos=25.0
+	JumpKickRot=18.0
+	LandKickPos=40.0
+	LandKickRot=30.0
+	LandKickSpeedScale=0.8
 }

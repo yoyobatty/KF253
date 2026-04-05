@@ -58,10 +58,6 @@ defaultproperties
      DamagedelayMax=0.300000
      hitDamageClass=Class'KFMod.DamTypeKnife'
      WideDamageMinHitAngle=0.750000
-     UpSwingRot=(Pitch=20,Yaw=10)
-     UpSwingTime=0.200000
-     DownSwingRot=(Pitch=-30,Yaw=-20)
-     DownSwingTime=0.100000
      FireRate=0.600000
      BotRefireRate=0.900000
 }

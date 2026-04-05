@@ -146,7 +146,7 @@ defaultproperties
      bCannibal=True
      damageRand=11
      damageConst=14
-     damageForce=-400000
+     damageForce=-100000
      bFatAss=True
      KFRagdollName="SawZombieRag"
      bMeleeStunImmune=True

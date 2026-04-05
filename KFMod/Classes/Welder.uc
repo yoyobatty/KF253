@@ -233,8 +233,6 @@ defaultproperties
      ItemName="Welder"
      Mesh=SkeletalMesh'KFWeaponModels.Welder'
      AmbientGlow=2
-	 SwingRot=(Pitch=0,Yaw=0)
-     SwingRand=(Min=0.00000,Max=0.00000)
 	 GunLengthDist=0.000000
 	 WallPivotRot=(Pitch=0,Yaw=0,Roll=0)
 	 WallPivotOffset=(x=0,y=0,z=0)

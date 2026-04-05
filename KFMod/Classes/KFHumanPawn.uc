@@ -114,30 +114,19 @@ Simulated function tick(float DeltaTime)
 	if (Physics == PHYS_Falling && bDuckInput && !bAirCrouched)
 	{
 		SetCollisionSize(CollisionRadius, CrouchHeight);
-		MoveSmooth(vect(0,0,1) * HeightDiff);  // keep top of collision fixed, raise bottom
+		// No MoveSmooth — server processes bDuck at a different time,
+		// so client/server disagree on Location.Z. Corrections cause pops.
+		// Collision shrinks for gameplay; camera stays via EyeHeight.
 		if (bCrouchJumped)
-		{
-			// Crouch-then-jump: keep camera at crouch eye level.
-			// Offset EyeHeight by -HeightDiff to cancel the Move so the camera
-			// stays at the same world height; UpdateEyeHeight smooths to target.
 			BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
-			EyeHeight -= HeightDiff;
-		}
 		else
-		{
-			// Mid-air crouch: keep camera at same world position (compensate for Move)
-			BaseEyeHeight = default.BaseEyeHeight - HeightDiff;
-			EyeHeight = BaseEyeHeight;
-		}
+			BaseEyeHeight = default.BaseEyeHeight;
 		bAirCrouched = true;
 	}
 	else if (bAirCrouched && Physics == PHYS_Falling && !bDuckInput)
 	{
-		// Player released crouch mid-air — restore standing collision
-		MoveSmooth(vect(0,0,-1) * HeightDiff);
 		SetCollisionSize(CollisionRadius, default.CollisionHeight);
 		BaseEyeHeight = default.BaseEyeHeight;
-		EyeHeight = BaseEyeHeight;
 		bAirCrouched = false;
 	}
 	else if (Physics == PHYS_Falling && bCrouchJumped && !bDuckInput && !bAirCrouched)
@@ -570,6 +559,30 @@ function bool ShowStalkers()
 	return false;
 }
 
+//
+// Compute offset for drawing an inventory item.
+//
+simulated function vector CalcDrawOffset(inventory Inv)
+{
+	local vector DrawOffset;
+
+	if ( Controller == None )
+		return (Inv.PlayerViewOffset >> Rotation) + BaseEyeHeight * vect(0,0,1);
+
+	DrawOffset = ((0.9/Weapon.DisplayFOV * 100 * ModifiedPlayerViewOffset(Inv)) >> GetViewRotation() );
+	if ( !IsLocallyControlled() )
+		DrawOffset.Z += BaseEyeHeight;
+	else
+	{
+		DrawOffset.Z += EyeHeight;
+        //if( bWeaponBob )
+		//    DrawOffset += WeaponBob(Inv.BobDamping);
+         DrawOffset += CameraShake();
+	}
+	return DrawOffset;
+}
+
+
 simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 {
     local float HealthMod, SprintMod, WeightMod;
@@ -581,7 +594,12 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 
 	if (Controller == none)
 		return;
-	
+
+	// Cancel crouch-landing slide if the player stands up — prevents
+	// the inflated GroundSpeed cap from applying at full standing speed.
+	if (bCrouchLanded && !bIsCrouched && !bWantsToCrouch)
+		bCrouchLanded = false;
+
 	// Calculate encumbrance, but cap it to the maxcarryweight so when we use dev weapon cheats we don't move mega slow
 	EncumbrancePercentage = (FMin(CurrentWeight, MaxCarryWeight)/MaxCarryWeight);
 	// Calculate the weight modifier to speed
@@ -698,6 +716,7 @@ event Landed(vector HitNormal)
         // Always restore standing collision so native crouch tracking
         // (StartCrouch/EndCrouch/bIsCrouched) stays consistent.
         MoveSmooth(vect(0,0,1) * HeightDiff);
+        OldZ += HeightDiff;
         SetCollisionSize(CollisionRadius, default.CollisionHeight);
 
         if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
@@ -711,8 +730,8 @@ event Landed(vector HitNormal)
         }
         else
         {
+            EyeHeight -= HeightDiff;
             BaseEyeHeight = default.BaseEyeHeight;
-            EyeHeight = BaseEyeHeight;
         }
         bAirCrouched = false;
     }
@@ -758,11 +777,13 @@ event EndCrouch(float HeightAdjust)
     CrouchEndTime = Level.TimeSeconds;
     if (bCrouchJumped)
     {
-        // Crouch-jump: suppress camera snap to standing height; Tick will
-        // re-apply air-crouch next frame.
-        EyeHeight -= HeightAdjust;
-        OldZ += HeightAdjust;
+        // Engine uncrouched for the jump — undo its position change and
+        // restore crouch collision. Both client and server fire EndCrouch
+        // deterministically at jump time, so no network disagreement.
+        MoveSmooth(vect(0,0,-1) * HeightAdjust);
+        SetCollisionSize(CollisionRadius, CrouchHeight);
         BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
+        bAirCrouched = true;
     }
     else if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
     {
@@ -778,6 +799,17 @@ event EndCrouch(float HeightAdjust)
     {
         Super.EndCrouch(HeightAdjust);
     }
+}
+
+simulated event UpdateEyeHeight(float DeltaTime)
+{
+    super.UpdateEyeHeight(DeltaTime);
+    // While air-crouched, lock EyeHeight so the native stair-smoothing
+    // formula (which uses OldZ) can't fight our MoveSmooth offset.
+    // Without this, network position corrections get amplified into
+    // a visible camera pop on multiplayer clients.
+    if (bAirCrouched)
+        EyeHeight = BaseEyeHeight;
 }
 
 //Player Jumped

@@ -55,12 +55,13 @@ simulated Function Timer()
 
 		LastHitActor = HitActor;
 
-		if( LastHitActor!=none && Level.NetMode!=NM_Client )
+		if( LastHitActor!=none )
 		{
 			AdjustedLocation = Hitlocation;
 			AdjustedLocation.Z = (Hitlocation.Z - 0.15 * Instigator.collisionheight);
-                        
-			HitActor.TakeDamage(MyDamage, Instigator, HitLocation , vector(PointRot),hitDamageClass);
+
+			if( Level.NetMode!=NM_Client )
+				HitActor.TakeDamage(MyDamage, Instigator, HitLocation , vector(PointRot),hitDamageClass);
 			Spawn(class'KFWelderHitEffect',,, AdjustedLocation, rotator(HitLocation - StartTrace));
 		}
 	}
@@ -105,18 +106,15 @@ function bool AllowFire()
 
 defaultproperties
 {
-	 WeaponRange=90.000000
-     damageConst=10
-     maxAdditionalDamage=0
-     DamagedelayMin=0.100000
-     DamagedelayMax=0.100000
-     hitDamageClass=Class'KFMod.DamTypeWelder'
-     UpSwingRot=(Pitch=0,Yaw=0)
-     UpSwingTime=0.000000
-     DownSwingRot=(Pitch=0,Yaw=0)
-     DownSwingTime=0.000000
-     TransientSoundVolume=100.000000
-     FireRate=0.200000
-     AmmoClass=Class'KFMod.WelderAmmo'
-     AmmoPerFire=20
+	//FireSound=Sound'PatchSounds.WelderFire'
+	WeaponRange=90.000000
+	damageConst=10
+	maxAdditionalDamage=0
+	DamagedelayMin=0.100000
+	DamagedelayMax=0.100000
+	hitDamageClass=Class'KFMod.DamTypeWelder'
+	TransientSoundVolume=100.000000
+	FireRate=0.200000
+	AmmoClass=Class'KFMod.WelderAmmo'
+	AmmoPerFire=20
 }

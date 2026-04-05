@@ -176,8 +176,6 @@ defaultproperties
 	bMeleeWeapon=True
 	SmallViewOffset=(Z=-20.000000)
 	PlayerViewOffset=(Z=-10.000000)
-	SwingRot=(Pitch=-50,Yaw=-20)
-	SwingRand=(Min=0.850000,Max=1.150000)
 	MeleeWeaponRange=75.000000
 	bModeZeroCanDryFire=false
 }
