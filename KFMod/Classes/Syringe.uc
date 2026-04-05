@@ -150,7 +150,7 @@ defaultproperties
      CenteredOffsetY=-5.000000
      CenteredRoll=3000
      InventoryGroup=6
-     GroupOffset=2
+     GroupOffset=1
      PickupClass=Class'KFMod.SyringePickup'
      PlayerViewOffset=(X=1.000000,Y=9.500000,Z=-36.000000)
      PlayerViewPivot=(Pitch=5400)

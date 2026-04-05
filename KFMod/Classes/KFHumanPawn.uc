@@ -125,9 +125,10 @@ Simulated function tick(float DeltaTime)
 	}
 	else if (bAirCrouched && Physics == PHYS_Falling && !bDuckInput)
 	{
-		SetCollisionSize(CollisionRadius, default.CollisionHeight);
+		// Don't expand collision during falling — expanding without a
+		// position adjustment can push through terrain below.  Keep
+		// crouch collision; Landed() restores it safely on the ground.
 		BaseEyeHeight = default.BaseEyeHeight;
-		bAirCrouched = false;
 	}
 	else if (Physics == PHYS_Falling && bCrouchJumped && !bDuckInput && !bAirCrouched)
 	{
@@ -340,7 +341,12 @@ simulated function StopHitCamEffects()
 	if(bUsingHitBlur)
 	{
 		RemoveCameraEffect(CameraEffectFound);
+		// StopViewShaking zeroes Rate/Max/Time but leaves the current
+		// ShakeRot/ShakeOffset intact.  ViewShake only decays them when
+		// Rate != 0, so the residual offset persists forever.  Zero them.
 		PlayerController(Controller).StopViewShaking();
+		PlayerController(Controller).ShakeRot = rot(0,0,0);
+		PlayerController(Controller).ShakeOffset = vect(0,0,0);
 		bUsingHitBlur=false;
 	}
 }
@@ -707,7 +713,8 @@ event Landed(vector HitNormal)
     local bool bWasCrouchLanding;
     local float Speed2D, MaxSlideSpeed, BoostedSpeed;
 
-    bWasCrouchLanding = bAirCrouched;
+    bWasCrouchLanding = bAirCrouched
+        && (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0);
 
     if (bAirCrouched)
     {
@@ -772,6 +779,16 @@ event Landed(vector HitNormal)
     }
 }
 
+event StartCrouch(float HeightAdjust)
+{
+    // Clear landing-bob/recovery state so the recovery path's
+    // FMin(lerp, BaseEyeHeight) clamp can't snap EyeHeight when
+    // BaseEyeHeight drops from standing to crouch in one frame.
+    bJustLanded = false;
+    bLandRecovery = false;
+    Super.StartCrouch(HeightAdjust);
+}
+
 event EndCrouch(float HeightAdjust)
 {
     CrouchEndTime = Level.TimeSeconds;
@@ -780,18 +797,22 @@ event EndCrouch(float HeightAdjust)
         // Engine uncrouched for the jump — undo its position change and
         // restore crouch collision. Both client and server fire EndCrouch
         // deterministically at jump time, so no network disagreement.
-        MoveSmooth(vect(0,0,-1) * HeightAdjust);
+        // Shrink collision BEFORE moving down — standing collision (50)
+        // clips the floor and blocks the MoveSmooth.
         SetCollisionSize(CollisionRadius, CrouchHeight);
+        MoveSmooth(vect(0,0,-1) * HeightAdjust);
         BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
         bAirCrouched = true;
     }
-    else if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
+    else if (Physics == PHYS_Falling && PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
     {
         // Engine forced uncrouch (walked off ledge) but player still holding
         // duck.  Undo the native position/collision change immediately so the
         // pawn stays crouched with no visual pop.
-        MoveSmooth(vect(0,0,-1) * HeightAdjust);
+        // Gated on PHYS_Falling — on the ground the MoveSmooth down can
+        // push the pawn into terrain; let Super handle ground uncrouching.
         SetCollisionSize(CollisionRadius, CrouchHeight);
+        MoveSmooth(vect(0,0,-1) * HeightAdjust);
         BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
         bAirCrouched = true;
     }
@@ -803,13 +824,28 @@ event EndCrouch(float HeightAdjust)
 
 simulated event UpdateEyeHeight(float DeltaTime)
 {
+    local float MaxEyeHeight;
+    local Actor HitActor;
+    local vector HitLocation, HitNormal;
+
     super.UpdateEyeHeight(DeltaTime);
+
     // While air-crouched, lock EyeHeight so the native stair-smoothing
     // formula (which uses OldZ) can't fight our MoveSmooth offset.
-    // Without this, network position corrections get amplified into
-    // a visible camera pop on multiplayer clients.
+    // Clamp against ceiling trace so the camera can't poke through
+    // low ceilings (collision is shorter than standing eye height).
     if (bAirCrouched)
-        EyeHeight = BaseEyeHeight;
+    {
+        HitActor = Trace(HitLocation, HitNormal,
+            Location + (CollisionHeight + MAXSTEPHEIGHT + 14) * vect(0,0,1),
+            Location + CollisionHeight * vect(0,0,1), true);
+        if (HitActor == None)
+            MaxEyeHeight = CollisionHeight + MAXSTEPHEIGHT;
+        else
+            MaxEyeHeight = HitLocation.Z - Location.Z - 14;
+
+        EyeHeight = FClamp(BaseEyeHeight, -0.5 * CollisionHeight, MaxEyeHeight);
+    }
 }
 
 //Player Jumped

@@ -223,7 +223,7 @@ defaultproperties
      CenteredRoll=3000
      CenteredYaw=-1500
      InventoryGroup=6
-     GroupOffset=1
+     GroupOffset=2
      PickupClass=Class'KFMod.WelderPickup'
      PlayerViewOffset=(X=4.000000,Y=5.500000,Z=-6.000000)
      PlayerViewPivot=(Pitch=400)

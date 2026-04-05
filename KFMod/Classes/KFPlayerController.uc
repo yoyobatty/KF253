@@ -286,16 +286,24 @@ function UpdateRotation(float DeltaTime, float maxPitch)
     }
 }
 
+function ShakeView(vector shRotMag, vector shRotRate, float shRotTime,
+                   vector shOffsetMag, vector shOffsetRate, float shOffsetTime)
+{
+	if (bGodMode)
+		return;
+	Super.ShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
+}
+
 function ViewShake(float DeltaTime)
 {
-	if(bGodMode || Pawn == None || Pawn.Health <= 0)
+	if(Pawn == None || Pawn.Health <= 0)
 		return;
 	Super.ViewShake(DeltaTime);
 }
 
 function ViewFlash(float DeltaTime)
 {
-	if(bGodMode || Pawn == None || Pawn.Health <= 0)
+	if(Pawn == None || Pawn.Health <= 0)
 		return;
 	Super.ViewFlash(DeltaTime);
 }
