@@ -58,8 +58,8 @@ defaultproperties
     FireSounds(8)=Sound'KFWeaponSound.L85Fire8'
     FireSounds(9)=Sound'KFWeaponSound.L85Fire9'
     DamageType=Class'KFMod.DamTypeBullpup'
-    DamageMin=26
-    DamageMax=32
+    DamageMin=30
+    DamageMax=35
     Momentum=8500.000000
     bPawnRapidFireAnim=True
     TransientSoundVolume=30.000000
@@ -74,7 +74,7 @@ defaultproperties
     ShakeOffsetMag=(X=3.000000,Y=3.000000,Z=3.000000)
     ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
     ShakeOffsetTime=1.000000
-    BotRefireRate=0.950000 // 95% chance to fire again
+    BotRefireRate=0.960000 // 96% chance to fire again
     FlashEmitterClass=Class'KFMod.MGMuzzFlash'
     aimerror=42.000000
     Spread=0.008500

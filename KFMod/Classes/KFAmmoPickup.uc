@@ -161,14 +161,14 @@ static function string GetLocalString(
 
 defaultproperties
 {
-     bOnlyReplicateHidden=False
-     RespawnTime=60.000000
-     PickupSound=Sound'WoodBreakFX.GunCockNoise1'
-     bDynamicLight=True
-     Physics=PHYS_Falling
-     AmbientGlow=40
-     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
-     TransientSoundVolume=100.000000
-     CollisionRadius=30.000000
-     CollisionHeight=10.000000
+    bOnlyReplicateHidden=False
+    RespawnTime=60.000000
+    PickupSound=Sound'WoodBreakFX.GunCockNoise1'
+    bDynamicLight=True
+    Physics=PHYS_Falling
+    AmbientGlow=40
+    UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
+    TransientSoundVolume=100.000000
+    CollisionRadius=30.000000
+    CollisionHeight=10.000000
 }

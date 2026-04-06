@@ -269,29 +269,29 @@ function AnnouncePickup(Pawn Receiver)
 
 defaultproperties
 {
-     Weight=10.000000
-     cost=2000
-     AmmoCost=20
-     Description="I AM A DEFAULT DESCRIPTION! KILL ME NOW!"
-     ItemName="DULL ITEMNAME!!!! KILL KILL KILL!!!!"
-     AmmoItemName="SHOOT THE DEVS! LAZY SODS DESERVE TO DIE!!!!!"
-     bNoShadows=True
-     StandUp=(Z=0.000000)
-     bWeaponStay=False
-     MaxDesireability=0.780000
-     bOnlyReplicateHidden=False
-     bAmbientGlow=False
-     RespawnTime=100.000000
-     PickupSound=Sound'KFWeaponSound.GunPickupKF'
-     DrawType=DT_StaticMesh
-     Physics=PHYS_Falling
-     DrawScale=0.500000
-     AmbientGlow=40
-     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
-     TransientSoundVolume=100.000000
-     CollisionRadius=30.000000
-     CollisionHeight=15.000000
-     bFixedRotationDir=False
-     RotationRate=(Yaw=0)
-     DesiredRotation=(Yaw=0)
+	Weight=10.000000
+	cost=2000
+	AmmoCost=20
+	Description="I AM A DEFAULT DESCRIPTION! KILL ME NOW!"
+	ItemName="DULL ITEMNAME!!!! KILL KILL KILL!!!!"
+	AmmoItemName="SHOOT THE DEVS! LAZY SODS DESERVE TO DIE!!!!!"
+	bNoShadows=True
+	StandUp=(Z=0.000000)
+	bWeaponStay=False
+	MaxDesireability=0.780000
+	bOnlyReplicateHidden=False
+	//bAmbientGlow=False
+	RespawnTime=100.000000
+	PickupSound=Sound'KFWeaponSound.GunPickupKF'
+	DrawType=DT_StaticMesh
+	Physics=PHYS_Falling
+	DrawScale=0.500000
+	AmbientGlow=40
+	UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
+	TransientSoundVolume=100.000000
+	CollisionRadius=30.000000
+	CollisionHeight=15.000000
+	bFixedRotationDir=False
+	RotationRate=(Yaw=0)
+	DesiredRotation=(Yaw=0)
 }

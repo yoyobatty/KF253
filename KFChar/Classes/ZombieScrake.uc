@@ -1,6 +1,6 @@
 // Chainsaw Zombie Monster for KF Invasion gametype
 // He's not quite as speedy as the other Zombies, But his attacks are TRULY damaging.
-//Charges when you're too close or looking away
+// Charges when you're too close or looking away
 class ZombieScrake extends KFMonster ;
 
 #exec OBJ LOAD FILE=KFCharacters.utx
