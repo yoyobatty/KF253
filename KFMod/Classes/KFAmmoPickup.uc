@@ -167,6 +167,7 @@ defaultproperties
     bDynamicLight=True
     Physics=PHYS_Falling
     AmbientGlow=40
+    bAmbientGlow=True
     UV2Texture=FadeColor'PatchTex.Common.PickupOverlay'
     TransientSoundVolume=100.000000
     CollisionRadius=30.000000
