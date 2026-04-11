@@ -48,33 +48,40 @@ simulated function DoToggle ()
 	{
 		//PlayOwnedSound(sound'Inf_Weapons_Foley.stg44_firemodeswitch01',SLOT_None,2.0,,,,false);
 		bAltFire = !bAltFire;
+		ApplyFireMode(bAltFire);
 		if ( bAltFire )
-		{
 			Player.ReceiveLocalizedMessage(class'KFmod.BoomStickSwitchMessage',0);
-			//FireMode[0].ProjectileClass = class'KFMod.BoomStickSlug';
-			FireMode[0].ProjectileClass = FireMode[1].ProjectileClass;
-			BoomStickFire(FireMode[0]).ProjPerFire = SlugsPerFire;
-     		FireMode[0].Spread = 0.010000;
-			FireMode[0].SpreadStyle = SS_Line;
-		}
-		else 
-		{
+		else
 			Player.ReceiveLocalizedMessage(class'KFmod.BoomStickSwitchMessage',1);
-			FireMode[0].ProjectileClass = FireMode[0].default.ProjectileClass;
-			BoomStickFire(FireMode[0]).ProjPerFire = BoomStickFire(FireMode[0]).default.ProjPerFire;
-			FireMode[0].Spread = FireMode[0].default.Spread;
-			FireMode[0].SpreadStyle = FireMode[0].default.SpreadStyle;
-		}
 	}
 	//log(Owner.GetHumanReadableName()$" changed firemode on " $GetHumanReadableName());
 	Super.DoToggle();
 	ServerChangeFireMode(bAltFire);
 }
 
+simulated function ApplyFireMode(bool bSlugMode)
+{
+    if ( bSlugMode )
+    {
+        FireMode[0].ProjectileClass = FireMode[1].ProjectileClass;
+        BoomStickFire(FireMode[0]).ProjPerFire = SlugsPerFire;
+        FireMode[0].Spread = 0.010000;
+        FireMode[0].SpreadStyle = SS_Line;
+    }
+    else
+    {
+        FireMode[0].ProjectileClass = FireMode[0].default.ProjectileClass;
+        BoomStickFire(FireMode[0]).ProjPerFire = BoomStickFire(FireMode[0]).default.ProjPerFire;
+        FireMode[0].Spread = FireMode[0].default.Spread;
+        FireMode[0].SpreadStyle = FireMode[0].default.SpreadStyle;
+    }
+}
+
 // Set the new fire mode on the server
 function ServerChangeFireMode(bool bNewAltFire)
 {
     bAltFire = bNewAltFire;
+    ApplyFireMode(bAltFire);
 }
 
 exec simulated function SwitchModes()

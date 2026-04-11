@@ -59,7 +59,7 @@ function UsedBy( Pawn user )
         else k = MyFloorNum;
         NextAttemptTime = Level.TimeSeconds+0.5+MyElevator.DelayTime;
         MyElevator.GoToFloor(k,Self,user);
-        log("Elevator used by "@user.PlayerReplicationInfo.PlayerName@" to floor "@k);
+        //log("Elevator used by "@user.PlayerReplicationInfo.PlayerName@" to floor "@k);
         PlaySound(ActivateSound,SLOT_None, 255, false,200,,true);
     }
 }
@@ -74,7 +74,8 @@ function Timer()
 
 	foreach TouchingActors(Class'Pawn',P)
 	{
-		Touch(P);
+        if (AIController(P.Controller) != None )
+		    Touch(P);
 	}
 }
 
@@ -86,10 +87,10 @@ function Touch( Actor Other )
         if( MyElevator != None && MyElevator.bInterpolating )
         {
             if (MessageMoving != "")
-                Pawn(Other).ClientMessage( MessageMoving );
+                Pawn(Other).ClientMessage( MessageMoving , 'CriticalEvent');
         }
         else if( Message != "" )
-            Pawn(Other).ClientMessage( Message );
+            Pawn(Other).ClientMessage( Message , 'CriticalEvent');
 
         if ( AIController(Pawn(Other).Controller) != None )
             UsedBy(Pawn(Other));

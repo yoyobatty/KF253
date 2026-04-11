@@ -59,6 +59,7 @@ var () bool bTorchEnabled; // just a hook for the pawn, and his light.  Dualies 
 
 var int StoppingPower; // How much each fire of the gun slows you down. Always in negative numbers.
 var int UpKick;  // How much upkick each shot has.
+var int SideKick; // How much horizontal (yaw) kick each shot has.
 
 var bool bAimingRifle;
 
@@ -530,9 +531,12 @@ simulated function Timer()
     {
 		for( Mode = 0; Mode < NUM_FIRE_MODES; Mode++ )
 	       FireMode[Mode].InitEffects();
-        PlayIdle();
         ClientState = WS_ReadyToFire;
-        
+
+        // If the server started a reload while we were still in BringUp
+        // (due to network latency), don't stomp the reload anim with idle
+        if (!bIsReloading)
+            PlayIdle();
 
     }
     else if (ClientState == WS_PutDown)
@@ -758,13 +762,13 @@ simulated function bool PutDown()
 					ClientStopFire(Mode);
 			}
 
-            if (  DownDelay <= 0 )
+            if ( DownDelay <= 0 || KFPawn(Instigator).bIsQuickHealing > 0 )
             {
-				if ( ClientState == WS_BringUp )
+				if ( ClientState == WS_BringUp || KFPawn(Instigator).bIsQuickHealing > 0 )
 					TweenAnim(SelectAnim,PutDownTime);
 				else if ( HasAnim(PutDownAnim) )
 				{
-					if( ClientGrenadeState == GN_TempDown )
+					if( ClientGrenadeState == GN_TempDown || KFPawn(Instigator).bIsQuickHealing > 0 )
                     {
                        PlayAnim(PutDownAnim, PutDownAnimRate * (PutDownTime/0.15), 0.0);
                 	}
@@ -843,7 +847,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
     }
 
 	// From Weapon.uc
-    if ( ClientState == WS_Hidden || ClientGrenadeState == GN_BringUp )
+    if ( ClientState == WS_Hidden || ClientGrenadeState == GN_BringUp || KFPawn(Instigator).bIsQuickHealing > 0 )
 	{
 		PlayOwnedSound(SelectSound, SLOT_Interact,,,,, false);
 		ClientPlayForceFeedback(SelectForce);  // jdf
@@ -852,7 +856,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
 		{
 			if ( (Mesh!=None) && HasAnim(SelectAnim) )
 			{
-                if( ClientGrenadeState == GN_BringUp )
+                if( ClientGrenadeState == GN_BringUp || KFPawn(Instigator).bIsQuickHealing > 0 )
 				{
 					PlayAnim(SelectAnim, SelectAnimRate * (BringUpTime/0.150000), 0.0);
 				}
@@ -864,7 +868,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
 		}
 
 		ClientState = WS_BringUp;
-        if( ClientGrenadeState == GN_BringUp )
+        if( ClientGrenadeState == GN_BringUp || KFPawn(Instigator).bIsQuickHealing > 0 )
 		{
 			ClientGrenadeState = GN_None;
 			SetTimer(0.150000, false);
@@ -1712,6 +1716,7 @@ defaultproperties
 	Weight=10.000000
 	StoppingPower=-1000
 	UpKick=500
+	SideKick=100
 	TacShineClass=Class'KFMod.TacLightShineAttachment'
 	bSniping=True
 	bNoAmmoInstances=False

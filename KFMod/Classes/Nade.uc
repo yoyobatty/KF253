@@ -76,10 +76,7 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 	else if(bHealing)
 	{
 		PlaySound(sound'KFWeaponSound.FlameThrowerFire',,80.5*TransientSoundVolume);
-		if ( EffectIsRelevant(Location,false) )
-		{
-			Spawn(Class'KFMod.KFNadeHealingExplosion',,, HitLocation, rotator(vect(0,0,1)));
-		}
+		Spawn(Class'KFMod.KFNadeHealingExplosion',,, HitLocation, rotator(vect(0,0,1)));
 	}
 	else if(bGas)
 	{

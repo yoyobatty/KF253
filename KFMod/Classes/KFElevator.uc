@@ -17,8 +17,13 @@ var KFElevatorTrigger FloorTriggers[ArrayCount(ElevatorFloorTags)],ElevCenterTri
 var LiftExit MyExits[ArrayCount(ElevatorFloorTags)]; // Our desired lift exits for AI hint.
 var byte GoalKeyFrame,NumberOfFloors;
 var bool bElevatorActive;
-var bool bUseElevator;
 var bool bLegacyElevator;
+
+replication
+{
+	reliable if( ROLE==ROLE_AUTHORITY )
+		FloorTriggers,ElevatorFloorTags; //So we can establish our door trigger on the client (Fixes welders playing welding animation on elevator doors in MP)
+}
 
 function PostBeginPlay()
 {
@@ -107,7 +112,6 @@ function PostBeginPlay()
         }
         else
         {
-            bUseElevator = false;
             if( InitialState == 'Elevator' )
                 InitialState = 'TriggerToggle';
             GotoState(InitialState);

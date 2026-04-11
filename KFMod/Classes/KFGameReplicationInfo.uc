@@ -36,6 +36,7 @@ replication
 simulated function PostNetBeginPlay()
 {
 	Level.GRI = self;
+	Level.MaxRagdolls = 100;
 
 	if ( VoiceReplicationInfo == None )
 		foreach DynamicActors(class'VoiceChatReplicationInfo', VoiceReplicationInfo)

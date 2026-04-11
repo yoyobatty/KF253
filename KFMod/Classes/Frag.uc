@@ -10,14 +10,29 @@ var() float TossSpawnTime;
 var bool bTossActive;
 var bool bTossSpawned;
 
+var float   NadeThrowTimeout;   // Fallback countdown so that player couldn't get stuck unable to fire regardless of if the server drops some packets
+var float   NadeThrowTime;      // Last time a nade was thrown
+
 replication
 {
 	reliable if(Role < ROLE_Authority)
-		ServerThrow;
+		ServerThrow, ServerStartThrow;
 }
 
 simulated event StartThrow()
 {
+    if( Role < ROLE_Authority )
+    {
+        if(TossTime>TossSpawnTime)
+    	{
+            KFPawn(Instigator).SetNadeTimeOut(TossSpawnTime + (TossTime-TossSpawnTime));
+    	}
+    	else
+    	{
+            KFPawn(Instigator).SetNadeTimeOut(TossSpawnTime);
+        }
+    }
+	ServerStartThrow();
 	PlayAnim(TossAnim, 1.0, 0.0); // FireAnimRate, TweenTime);
 	bTossActive = true;
 	bTossSpawned = false;
@@ -49,6 +64,49 @@ function ServerThrow()
 {
 	ConsumeAmmo(0, 1);
 	FireMode[0].DoFireEffect();
+}
+
+function ServerStartThrow()
+{
+    if( Role == ROLE_Authority && !Instigator.IsLocallyControlled() )
+    {
+        bTossActive = true;
+    }
+
+    NadeThrowTime = Level.TimeSeconds;
+
+	// Set the timeout to the same length as the timer run throughs on the client
+    if(TossTime>TossSpawnTime)
+	{
+        NadeThrowTimeout = TossSpawnTime + (TossTime-TossSpawnTime);
+	}
+	else
+	{
+        NadeThrowTimeout = TossSpawnTime;
+    }
+
+    if( KFPawn(Instigator) != none )
+    {
+        KFPawn(Instigator).HandleNadeThrowAnim();
+    }
+}
+
+// Have to use Tick here because we need this to run on the server
+function Tick( float DeltaTime )
+{
+    super.Tick(DeltaTime);
+
+    if( bTossActive && Role == ROLE_Authority && !Instigator.IsLocallyControlled())
+    {
+        // if its been too long since a nade was thrown, just timeout and
+        // clear this flag on the pawn. Need this since most of the nade
+        // throwing code doesn't run on the server!!! - Ramm
+        if( (Level.TimeSeconds - NadeThrowTime) > NadeThrowTimeout )
+        {
+            KFPawn(Instigator).bThrowingNade = false;
+            bTossActive = false;
+        }
+    }
 }
 
 function byte BestMode()

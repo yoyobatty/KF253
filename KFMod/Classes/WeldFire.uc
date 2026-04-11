@@ -3,7 +3,7 @@ class WeldFire extends KFMeleeFire;
 
 var Actor LastHitActor;
 
-function PlayFiring()
+simulated function PlayFiring()
 {
 	if ( Weapon.Mesh != None )
 	{
@@ -81,7 +81,7 @@ function KFDoorMover GetDoor()
 	Return KFDoorMover(A);
 }
 
-function bool AllowFire()
+simulated function bool AllowFire()
 {
    local KFDoorMover WeldTarget;
 
@@ -94,7 +94,7 @@ function bool AllowFire()
 	// if(!WeldTarget.bClosed)
 	//  return false;
 
-	if(WeldTarget.bDisallowWeld)
+	if(WeldTarget.bDisallowWeld || KFElevatorTrigger(WeldTarget.MyTrigger)!=None)
 	{
 		if( PlayerController(Instigator.controller)!=None )
 			PlayerController(Instigator.controller).ClientMessage("You cannot weld this door.", 'CriticalEvent');

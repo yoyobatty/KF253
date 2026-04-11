@@ -462,6 +462,7 @@ function bool SameSpeciesAs(Pawn P)
 
 defaultproperties
 {
+     RunAnim=""
      BlockDamageReduction=0.400000
      RotMag=(X=400.000000,Y=400.000000)
      RotRate=(X=400.000000,Y=400.000000,Z=400.000000)

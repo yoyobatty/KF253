@@ -53,6 +53,7 @@ state OnGround
     simulated function BeginState()
     {
         SetTimer(RestTime, false);
+        BlowUp(Location);
     }
 
     simulated function Timer()
@@ -60,13 +61,11 @@ state OnGround
         BlowUp(Location);
     }
 
-    simulated function ProcessTouch(Actor Other, Vector HitLocation)
-    {
-        if (Pawn(Other)!=None)
-        {
-            BlowUp(Location);
-        }
-    }
+	simulated function ProcessTouch(Actor Other, Vector HitLocation)
+	{
+        if ( Other != none )
+			BlowUp(Location);
+	}
 
     function TakeDamage( int Damage, Pawn InstigatedBy, Vector HitLocation, Vector Momentum, class<DamageType> DamageType );
 }

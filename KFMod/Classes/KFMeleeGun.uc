@@ -144,7 +144,7 @@ function float GetAIRating()
 	Rating = AIRating;
 	if(B.Enemy != None)
 	{
-		if( VSize(B.Enemy.Location - Instigator.Location) <= MeleeWeaponRange*2 ) //make it 2, so we're ready to take it out before an enemy is too close
+		if( VSize(B.Enemy.Location - Instigator.Location) <= MeleeWeaponRange*4 ) //make it 4, so we're ready to take it out before an enemy is too close
 			Rating*=1.5;
 		else Rating*=0.5; //Try to use our range weapon first
 		if (Normal(B.Enemy.Location - Instigator.Location) dot vector(B.Enemy.Rotation) > 0.0) //back stabs encourage this weapon

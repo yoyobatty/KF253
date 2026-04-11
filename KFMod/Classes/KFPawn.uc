@@ -74,6 +74,8 @@ var() float LightSearchRadius;        // Max distance to consider lights (defaul
 var             bool            bMovementDisabled;      // The player can't move right now
 var             float           StopDisabledTime;       // When the player can move again;
 
+var         float               NadeThrowTimeout;       // Little hack to timeout the grenade throwing flag on the client in case it gets stuck. At some point we should try and track down what is actually causing it to get stuck, this is just a quick fix - Ramm
+
 replication
 {
 	reliable if(Role == ROLE_Authority)
@@ -993,22 +995,21 @@ function ThrowGrenade()
   local inventory inv;
   local Frag aFrag;
 
-  for(inv=inventory; inv!=none; inv=inv.Inventory)
-  {
-    aFrag=Frag(inv);
-
-    if(aFrag!=none && aFrag.HasAmmo() && !bThrowingNade )
-    {
-     if(KFWeapon(Weapon) == none || Weapon.GetFireMode(0).NextFireTime - Level.TimeSeconds > 0.1 || (KFWeapon(Weapon).bIsReloading && !KFWeapon(Weapon).InterruptReload()))
-      return;
-      
-      //TODO: cache this without setting SecItem yet
-      //SecondaryItem = aFrag;
-	  KFWeapon(Weapon).ClientGrenadeState = GN_TempDown;
-      Weapon.PutDown();
-	  break;
-    }
-  }
+	for(inv=inventory; inv!=none; inv=inv.Inventory)
+	{
+		aFrag=Frag(inv);
+		if(aFrag!=none && aFrag.HasAmmo() && !bThrowingNade )
+		{
+			if(KFWeapon(Weapon) == none || Weapon.GetFireMode(0).NextFireTime - Level.TimeSeconds > 0.1 || (KFWeapon(Weapon).bIsReloading && !KFWeapon(Weapon).InterruptReload()))
+				return;
+			
+			//TODO: cache this without setting SecItem yet
+			//SecondaryItem = aFrag;
+			KFWeapon(Weapon).ClientGrenadeState = GN_TempDown;
+			Weapon.PutDown();
+			break;
+		}
+	}
 }
 
 function WeaponDown()
@@ -1016,18 +1017,21 @@ function WeaponDown()
 	local inventory inv;
 	local Frag aFrag;
 
-  for(inv=inventory; inv!=none; inv=inv.Inventory)
-  {
+	for(inv=inventory; inv!=none; inv=inv.Inventory)
+	{
+		aFrag=Frag(inv);
+		if(aFrag!=none && aFrag.HasAmmo() )
+		{
+			SecondaryItem = aFrag;
+			aFrag.StartThrow();
+			//SetAnimAction('NadeToss');
+		}
+	}
+}
 
-    aFrag=Frag(inv);
-
-    if(aFrag!=none && aFrag.HasAmmo() )
-    {
-      SecondaryItem = aFrag;
-      aFrag.StartThrow();
-      SetAnimAction('NadeToss');
-    }
-  }
+simulated function HandleNadeThrowAnim()
+{
+	SetAnimAction('NadeToss');
 }
 
 simulated function ThrowGrenadeFinished()
@@ -1038,6 +1042,10 @@ simulated function ThrowGrenadeFinished()
   	bThrowingNade = false;
 }
 
+simulated function SetNadeTimeOut(float NewTimeOut)
+{
+    NadeThrowTimeout = NewTimeOut;
+}
 
 //Player Jumped
 function bool DoJump( bool bUpdating )
@@ -1055,7 +1063,7 @@ function bool DoJump( bool bUpdating )
 	Return False;
 }
 
-simulated event Tick(float DeltaTime)
+simulated function Tick(float DeltaTime)
 {
 	//local float ratio;
 	//local PlayerController	PC;
@@ -1103,6 +1111,19 @@ simulated event Tick(float DeltaTime)
 
 	}
 	*/
+    if( Role < ROLE_Authority && bThrowingNade )
+    {
+        if( NadeThrowTimeout > 0 )
+    {
+        NadeThrowTimeout -= DeltaTime;
+        }
+// This is a hack to clear this flag on the client after a bit of time. This fixes a bug where you could get stuck unable to use weapons
+        if( NadeThrowTimeout <= 0 )
+        {
+            NadeThrowTimeout = 0;
+            ThrowGrenadeFinished();
+        }
+    }
 	// IN other words - we're moving, we've got a piece, but we're not firing or reloading, or jumping / falling Faust:Perhaps we need that later: VSize(Acceleration) != 0 &&
     if (level.NetMode != NM_DEDICATEDSERVER)
     {
@@ -1355,14 +1376,33 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 		if( TeamGame(Level.Game)!=None && TeamGame(Level.Game).FriendlyFireScale==0 && instigatedBy!=None && instigatedBy!=Self && instigatedBy.GetTeamNum()==GetTeamNum() )
 			Return;
 
-		LastBurnDamage = Damage;        
-        if (BurnDown <= 0 )
-		{
-			bBurnified = true;
-			BurnDown = 5;
-			BurnInstigator = instigatedBy;
-			SetTimer(1.5,true);
-		}
+        // Do burn damage if the damage was significant enough
+        if( Damage > 2 )
+        {
+            // If we are already burning, and this damage is more than our current burn amount, add more burn time
+            if( BurnDown > 0 && Damage > LastBurnDamage )
+            {
+                BurnDown = 5;
+                BurnInstigator = instigatedBy;
+            }
+
+            LastBurnDamage = Damage;
+
+            if (BurnDown <= 0 )
+            {
+                bBurnified = true;
+                BurnDown = 5;
+                BurnInstigator = instigatedBy;
+                SetTimer(1.5,true);
+            }
+        }
+	}
+	if(class<DamTypeVomit>(DamageType)!=none)
+	{
+		BileCount=7;
+		BileInstigator = instigatedBy;
+		if(NextBileTime< Level.TimeSeconds )
+			NextBileTime = Level.TimeSeconds+BileFrequency;
 	}
 	/* This is annoying tbh
 	if(class<DamTypeFrag>(DamageType)!=none )
@@ -1380,20 +1420,10 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			
 	}
 	*/
-	if(class<DamTypeVomit>(DamageType)!=none)
-	{
-		BileCount=7;
-		BileInstigator = instigatedBy;
-		if(NextBileTime< Level.TimeSeconds )
-			NextBileTime = Level.TimeSeconds+BileFrequency;
-	}
-
 }
 
 function TakeBileDamage()
 {
-    if (bDeleteMe || Health <= 0)
-        return;
 	Super.TakeDamage(2+Rand(3), BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
 	healthtoGive-=5;
 }
@@ -1409,16 +1439,26 @@ function bool AddShieldStrength(int ShieldAmount)
 	return true ;
 }
 
-function TakeFireDamage(int Damage,pawn BInstigator)
+function TakeFireDamage(int Damage, pawn BInstigator)
 {
-    if(!GetVeteran().Static.FlamingNades())
-    	TakeDamage(Damage,BInstigator,Location,vect(0,0,0),class 'Burned');
+    if( Damage > 0 )
+    {
+        TakeDamage(Damage, BInstigator, Location, vect(0,0,0), class'Burned');
 
-    if (BurnDown > 0)
-		BurnDown --; // Decrement the number of FireDamage calls left before our Zombie is extinguished :)
-
-	if(BurnDown==0)
-		bBurnified = false;
+        if (BurnDown > 0)
+        {
+            BurnDown --; // Decrement the number of FireDamage calls left before our Zombie is extinguished :)
+        }
+        if(BurnDown==0)
+        {
+            bBurnified = false;
+        }
+    }
+    else
+    {
+        BurnDown = 0;
+        bBurnified = false;
+    }
 }
 
 // This may help show the hit effects when zombies hit players
@@ -2170,7 +2210,7 @@ simulated exec function QuickHeal()
     local Inventory I;
     local byte C;
 
-    if ( Health>=HealthMax )
+    if ( bIsQuickHealing>0 || Health>=HealthMax )
         return;
     for( I=Inventory; (I!=None && C++<250); I=I.Inventory )
     {

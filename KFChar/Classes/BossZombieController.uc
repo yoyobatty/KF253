@@ -8,6 +8,10 @@ var NavigationPoint MidGoals[2];
 var byte ReachOffset;
 var Actor OldPathsCheck[3];
 
+var float RetreatStartTime;
+var float LastRetreatDist;
+var byte RetreatStuckCount;
+
 function TimedFireWeaponAtEnemy()
 {
 	if ( (Enemy == None) || FireWeaponAt(Enemy) )
@@ -59,6 +63,9 @@ Ignores HearNoise,DamageAttitudeTo,Tick,EnemyChanged,Startle,WaitForMover;
 		HidingSpots = None;
 		Enemy = None;
 		SetTimer(0.1,True);
+		RetreatStartTime = Level.TimeSeconds;
+		LastRetreatDist = 999999;
+		RetreatStuckCount = 0;
 	}
 	event SeePlayer(Pawn SeenPlayer)
 	{
@@ -80,6 +87,24 @@ Begin:
 		HidingSpots = FindRandomDest();
 	if( HidingSpots==None )
 		ZombieBoss(Pawn).BeginHealing();
+	// Stuck/timeout check
+	if( Level.TimeSeconds - RetreatStartTime > 15 )
+	{
+		HidingSpots = None;
+		ZombieBoss(Pawn).BeginHealing();
+	}
+	if( HidingSpots != None )
+	{
+		if( VSize(Pawn.Location - HidingSpots.Location) >= LastRetreatDist - 50 )
+			RetreatStuckCount++;
+		else RetreatStuckCount = 0;
+		LastRetreatDist = VSize(Pawn.Location - HidingSpots.Location);
+		if( RetreatStuckCount >= 6 )
+		{
+			HidingSpots = None;
+			ZombieBoss(Pawn).BeginHealing();
+		}
+	}
 	if( ActorReachable(HidingSpots) )
 	{
 		MoveTarget = HidingSpots;
@@ -104,6 +129,9 @@ Ignores HearNoise,DamageAttitudeTo,Tick,EnemyChanged,Startle,WaitForMover;
 		HidingSpots = None;
 		Enemy = None;
 		SetTimer(0.1,True);
+		RetreatStartTime = Level.TimeSeconds;
+		LastRetreatDist = 999999;
+		RetreatStuckCount = 0;
 	}
 	event SeePlayer(Pawn SeenPlayer)
 	{
@@ -156,6 +184,24 @@ Begin:
 		FindHideSpot();
 	if( HidingSpots==None )
 		ZombieBoss(Pawn).BeginHealing();
+	// Stuck/timeout check
+	if( Level.TimeSeconds - RetreatStartTime > 15 )
+	{
+		HidingSpots = None;
+		ZombieBoss(Pawn).BeginHealing();
+	}
+	if( HidingSpots != None )
+	{
+		if( VSize(Pawn.Location - HidingSpots.Location) >= LastRetreatDist - 50 )
+			RetreatStuckCount++;
+		else RetreatStuckCount = 0;
+		LastRetreatDist = VSize(Pawn.Location - HidingSpots.Location);
+		if( RetreatStuckCount >= 6 )
+		{
+			HidingSpots = None;
+			ZombieBoss(Pawn).BeginHealing();
+		}
+	}
 	if( ActorReachable(HidingSpots) )
 	{
 		MoveTarget = HidingSpots;

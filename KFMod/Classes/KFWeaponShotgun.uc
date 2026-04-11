@@ -48,4 +48,5 @@ function float SuggestAttackStyle()
 defaultproperties
 {
     bHoldToReload=True
+    SideKick=400
 }

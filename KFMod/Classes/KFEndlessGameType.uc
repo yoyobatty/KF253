@@ -494,20 +494,20 @@ State MatchInProgress
         {
             WaveTimeElapsed += 1.0;
 
-            // Holdout wave: force end after 60 seconds
-            if (CurrentWaveType == EWT_Holdout && Level.TimeSeconds >= HoldoutEndTime)
+            // Holdout wave: stop spawning after timer expires, let players kill the rest
+            if (CurrentWaveType == EWT_Holdout && HoldoutEndTime > 0 && Level.TimeSeconds >= HoldoutEndTime)
             {
-                ForceKillAllMonsters();
-                Broadcast(Self, "--- HOLDOUT SURVIVED! ---");
-                DoWaveEnd();
-                return;
+                TotalMaxMonsters = 0;
+                HoldoutEndTime = 0;
+                KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = NumMonsters;
+                Broadcast(Self, "--- HOLDOUT SURVIVED! Kill the remaining" @ NumMonsters @ "specimens! ---");
             }
 
 
             if (!MusicPlaying)
                 StartGameMusic(true);
 
-            if (TotalMaxMonsters <= 0 && CurrentWaveType != EWT_Holdout)
+            if (TotalMaxMonsters <= 0)
             {
                 if (NumMonsters <= 5)
                 {
@@ -614,6 +614,14 @@ State MatchInProgress
         local Controller C;
         local KFTraderDoor TDoor;
         local KFDoorMover KFDM;
+
+        // Stop boss music on maps with no default music
+        if (bWaveBossInProgress)
+        {
+            for (C = Level.ControllerList; C != None; C = C.NextController)
+                if (PlayerController(C) != None)
+                    PlayerController(C).ClientSetMusic("", MTRAN_FastFade);
+        }
         
         bEndlessWaveActive = false;
         bWaveBossInProgress = false;
@@ -763,9 +771,9 @@ function bool AddSquad()
                     }
                     if (!AlreadyBoosted)
                     {
-                        M.OriginalGroundSpeed *= 1.5;
-                        M.SetGroundSpeed(M.GroundSpeed * 1.5);
-                        M.HiddenGroundSpeed *= 1.5;
+                        M.OriginalGroundSpeed *= 1.5 + float(WaveNum) * 0.02; // Scale speed boost with wave number for extra challenge
+                        M.SetGroundSpeed(M.GroundSpeed * (1.5 + float(WaveNum) * 0.02));
+                        M.HiddenGroundSpeed *= 1.5 + float(WaveNum) * 0.02;
                         FastZEDs[FastZEDs.Length] = M;
                     }
                 }

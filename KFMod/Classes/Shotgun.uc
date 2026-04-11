@@ -15,7 +15,7 @@ defaultproperties
      ReloadAnim="Reload"
      ReloadAnimRate=1.450000
      Weight=8.000000
-     UpKick=700
+     UpKick=900
      FireModeClass(0)=Class'KFMod.ShotgunFire'
      FireModeClass(1)=Class'KFMod.NoFire'
      PutDownAnim="PutDown"

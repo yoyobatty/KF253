@@ -177,7 +177,10 @@ function Timer()
 	local PlayerController PCC;//,Owner;
 
 	if (BurnDown > 0)
-		TakeFireDamage(LastBurnDamage + rand(2) + 3 , BurnInstigator);
+	{
+		LastBurnDamage *= 0.5;
+        TakeFireDamage(LastBurnDamage, BurnInstigator);
+	}
 	else
 	{
 		RemoveFlamingEffects();
@@ -254,11 +257,8 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 	if( Controller!=None && Controller.bGodMode )
 		return;
 
-	if( bDeleteMe || Health <= 0 )
-		return;
-
 	// Berserkers resist knockback from monsters
-	if( KFMonster(instigatedBy)!=None && GetVeteran().default.VeterancyName=="Berserker" )
+	if( InstigatedBy != none && ((KFMonster(instigatedBy)!=None && GetVeteran().default.VeterancyName=="Berserker") || KFHumanPawn(instigatedBy)!=None) )
 		momentum = vect(0,0,0);
 
 	Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
@@ -277,16 +277,12 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 
 function TakeBileDamage()
 {
-	local vector BileVect;
-
 	local int RandBileDamage;
     local int actualDamage;
+	local vector BileVect;
     local vector HitMomentum;
 
 	RandBileDamage = 2+Rand(2);
-
-    if (bDeleteMe || Health <= 0)
-        return;
 
     Super(XPawn).TakeDamage(RandBileDamage, BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
     healthtoGive-=5;
@@ -295,9 +291,7 @@ function TakeBileDamage()
     actualDamage = Level.Game.ReduceDamage(RandBileDamage, self, BileInstigator, Location, HitMomentum, class'DamTypeVomit');
 
     if( actualDamage <= 0 )
-    {
         return;
-    }
 
 	//TODO: move this sanity check to DoHitCamEffect?
 	if(Controller == none || PlayerController(Controller) == None)
@@ -354,7 +348,7 @@ simulated function StopHitCamEffects()
 simulated function Died(Controller Killer, class<DamageType> damageType, vector HitLocation)
 {
 	StopHitCamEffects();
-	log("Died: "$self$" Killer: "$Killer$" DamageType: "$damageType$" HitLocation: "$HitLocation);
+	log("Died: "$Controller.GetHumanReadableName()$" Killer: "$Killer.GetHumanReadableName()$" DamageType: "$damageType);
 	Super.Died(Killer, damageType, HitLocation);
 }
 

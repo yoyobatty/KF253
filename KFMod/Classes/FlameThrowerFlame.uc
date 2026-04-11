@@ -20,7 +20,8 @@ state Ticking
         
         if (Level.TimeSeconds - LastFlameSpawnTime > FlameSpawnInterval)
         {
-          SecondaryFlame =  Spawn(class'FlameThrowerFlameB',self);
+          SecondaryFlame = Spawn(class'FlameThrowerFlameB',self);
+          LastFlameSpawnTime = Level.TimeSeconds;
         }
         
 

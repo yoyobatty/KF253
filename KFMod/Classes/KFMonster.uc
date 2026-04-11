@@ -164,13 +164,19 @@ var float LastViewCheckTime;      // internal use, used to see how long its been
 var float OriginalGroundSpeed;// The difficulty adjusted ground speed (need to store this off, because we have to restore this value at certain times)
 var() float HiddenGroundSpeed;      // How fast this Zed should move when it's out of view;
 
+var() Name RunAnim;                 // Animation to use when moving fast. Set to '' to disable speed-based run anim.
+var() float RunAnimSpeedThreshold;  // GroundSpeed above which RunAnim is used instead of walk anim.
+var Name SavedWalkAnim;             // The walk anim chosen at spawn (stored after randomization).
+var bool bUsingRunAnim;             // Currently showing the run animation.
+
 var bool bDestroyNextTick; // Destroy this pawn next tick because destroying it now will cause problems
 var float TimeSetDestroyNextTickTime; // The time we set the bDestroyNextTick flag
 
 var bool    bDestroyAfterRagDollTick;   // Wait until the ragdoll tick has happened and then destroy. Prevents crashes where we try and destroy the actor right after initializing ragdoll
-var bool    bProcessedRagTickDestroy;   // Already called destroy for a bDestroyAfterRagDollTick setting
 
 var() Sound DecapSound;
+
+var float NextVisCheckTime;
 
 replication
 {
@@ -380,8 +386,11 @@ simulated function PostBeginPlay()
     if( Level.NetMode!=NM_DedicatedServer )
 	{
 		AdditionalWalkAnims[AdditionalWalkAnims.length] = default.MovementAnims[0];
-		MovementAnims[0] = AdditionalWalkAnims[Rand(AdditionalWalkAnims.length)]; 
+		MovementAnims[0] = AdditionalWalkAnims[Rand(AdditionalWalkAnims.length)];
+		SavedWalkAnim = MovementAnims[0];
 	}
+	else
+		SavedWalkAnim = MovementAnims[0];
 }
 
 // Scales the health this Zed has by number of players
@@ -418,6 +427,27 @@ function float NumPlayersHealthModifer()
 simulated function SetGroundSpeed(float NewGroundSpeed)
 {
     GroundSpeed = NewGroundSpeed;
+    UpdateRunAnim();
+}
+
+simulated function UpdateRunAnim()
+{
+    if ( RunAnim == '' )
+        return;
+
+    if ( GroundSpeed > RunAnimSpeedThreshold && !bUsingRunAnim )
+    {
+        if ( HasAnim(RunAnim) )
+        {
+            MovementAnims[0] = RunAnim;
+            bUsingRunAnim = true;
+        }
+    }
+    else if ( GroundSpeed <= RunAnimSpeedThreshold && bUsingRunAnim )
+    {
+        MovementAnims[0] = SavedWalkAnim;
+        bUsingRunAnim = false;
+    }
 }
 
 // Setters for extra collision cylinders
@@ -454,8 +484,18 @@ simulated function Tick(float DeltaTime)
 	local float Dist;
 	local bool bSeen;
 
-	if (Level.NetMode != NM_Client && CanSpeedAdjust())
+	// If we've flagged this character to be destroyed next tick, handle that
+    if( bDestroyNextTick && TimeSetDestroyNextTickTime < Level.TimeSeconds )
+    {
+        Destroy();
+    }
+
+	// Throttled visibility check - only trace every 0.3-0.5s instead of every frame
+	if (Level.NetMode != NM_Client && CanSpeedAdjust() && Level.TimeSeconds >= NextVisCheckTime)
 	{
+		// Stagger next check to spread load across monsters
+		NextVisCheckTime = Level.TimeSeconds + 0.1;
+
 		bSeen = false;
 
 		for (C = Level.ControllerList; C != None; C = C.NextController)
@@ -505,17 +545,23 @@ simulated function Tick(float DeltaTime)
 
 	if( Level.NetMode!=NM_DedicatedServer )
 	{
-		TickFX(DeltaTime);
-
-		if( bBurnified && !bBurnApplied )
+		// Skip all client visual updates for monsters not rendered recently
+		if( Level.TimeSeconds - LastRenderTime < 1.0 )
 		{
-			if ( !bGibbed )
+			TickFX(DeltaTime);
+
+			if( bBurnified && !bBurnApplied )
 			{
-				StartBurnFX();
+				if ( !bGibbed )
+				{
+					StartBurnFX();
+				}
 			}
+			else if( !bBurnified && bBurnApplied )
+				StopBurnFX();
 		}
-		else if( !bBurnified && bBurnApplied )
-			StopBurnFX();
+		else if( bBurnApplied )
+			StopBurnFX(); // Clean up burn FX when going off-screen
 
 		if( bAshen && Level.NetMode==NM_Client )
 		{
@@ -538,17 +584,6 @@ simulated function Tick(float DeltaTime)
 		NextBileTime+=BileFrequency;
 		TakeBileDamage();
 	}
-    if( Physics == PHYS_KarmaRagdoll && bDestroyAfterRagDollTick &&
-        !bProcessedRagTickDestroy )
-    {
-        bProcessedRagTickDestroy = true;
-        Destroy();
-    }
-    // If we've flagged this character to be destroyed next tick, handle that
-    else if( bDestroyNextTick && TimeSetDestroyNextTickTime < Level.TimeSeconds )
-    {
-        Destroy();
-    }
 }
 
 function TakeBileDamage()
@@ -592,7 +627,7 @@ function bool FlipOver()
 	}
 
 	bShotAnim = true;
-	SetAnimAction('KnockDown');
+	SetAnimAction('StunState');
 	Acceleration = vect(0, 0, 0);
 	Velocity.X = 0;
 	Velocity.Y = 0;
@@ -660,6 +695,26 @@ simulated function DoDamageFX( Name boneName, int Damage, class<DamageType> Dama
 	local float DismemberProbability;
 	local int RandBone;
 	local bool bExtraGib;
+
+	// Route decapitation effects through HitFX replication (KF1 pattern)
+	// so dedicated server clients see brain gibs and gore.
+	if (bDecapitated && !bPlayBrainSplash)
+	{
+		HitFX[HitFxTicker].damtype = DamageType;
+		HitFX[HitFxTicker].bone = HeadBone;
+		HitFX[HitFxTicker].rotDir = r;
+
+		if (DamageType.default.bNeverSevers || class'GameInfo'.static.UseLowGore())
+			HitFX[HitFxTicker].bSever = false;
+		else
+			HitFX[HitFxTicker].bSever = true;
+
+		HitFxTicker = HitFxTicker + 1;
+		if (HitFxTicker > ArrayCount(HitFX) - 1)
+			HitFxTicker = 0;
+
+		bPlayBrainSplash = true;
+	}
 
 	if ( (FRand() > 0.3f || Damage > 30 || Health <= 0) )
 	{
@@ -907,6 +962,10 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 	{
 		//SetPhysics(PHYS_None);
 		SetCollision(false, false, false);
+		if( !bDestroyNextTick )
+		{
+            Disable('Tick');
+		}
 
 		if ( !IsAnimating(0) )
 			LandThump();
@@ -1071,7 +1130,7 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 
 					if( Physics == PHYS_KarmaRagdoll )
 					{
-						bDestroyAfterRagDollTick = true;
+						bDestroyNextTick = true;
 					}
 					else
 					{
@@ -1334,7 +1393,7 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
 
     if( (GibClass == None) || class'GameInfo'.static.UseLowGore() )
         return;
-	
+
 	Instigator = self;
     Giblet = Spawn( GibClass,,, Location, Rotation );
 
@@ -1344,6 +1403,8 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
 	Giblet.SpawnTrail();
 
 	Giblet.SetDrawScale(Giblet.DrawScale * (CollisionRadius*CollisionHeight)/1100); // 1100 = 25 * 44
+	if( GibClass == MonsterHeadGiblet )
+		Giblet.SetDrawScale(Giblet.DrawScale * 0.5);
     GibPerterbation *= 32768.0;
     Rotation.Pitch += ( FRand() * 2.0 * GibPerterbation ) - GibPerterbation;
     Rotation.Yaw += ( FRand() * 2.0 * GibPerterbation ) - GibPerterbation;
@@ -1711,7 +1772,10 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// Zeds and fire dont mix.
 	if( class<Burned>(damageType)!=none || class<DamTypeFlamethrower>(damageType)!=none)
 	{
-		LastBurnDamage = Damage;
+        if( BurnDown<=0 || Damage > LastBurnDamage )
+        {
+			LastBurnDamage = Damage;
+		}
 		Damage *= 1.5;
 		if( BurnDown<=0 )
 		{
@@ -2238,13 +2302,45 @@ simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLo
 		if( pc != None && pc.ViewTarget == self )
 			PlayersRagdoll = true;
 
-		// In low physics detail, if we were not just controlling this pawn,
+				// In low physics detail, if we were not just controlling this pawn,
 		// and it has not been rendered in 3 seconds, just destroy it.
-		if( Level.PhysicsDetailLevel!=PDL_High && !PlayersRagdoll && (Level.TimeSeconds-LastRenderTime)>3 )
+
+		if( Level.NetMode == NM_ListenServer )
 		{
-			Destroy();
+			// For a listen server, use LastSeenOrRelevantTime instead of render time so
+			// monsters don't disappear for other players that the host can't see - Ramm
+			if( Level.PhysicsDetailLevel != PDL_High && !PlayersRagdoll && (Level.TimeSeconds-Controller.LastSeenTime)>3 ||
+				bPlayGoreSplash )
+			{
+    			// Wait a tick on a listen server so the obliteration can replicate before the pawn is destroyed
+                if( Level.NetMode == NM_ListenServer )
+    			{
+                    bDestroyNextTick = true;
+                    TimeSetDestroyNextTickTime = Level.TimeSeconds;
+                }
+                else
+                {
+                    Destroy();
+    			}
+				return;
+			}
+		}
+		else if( Level.PhysicsDetailLevel!=PDL_High && !PlayersRagdoll && (Level.TimeSeconds-LastRenderTime)>3 ||
+			bPlayGoreSplash)
+		{
+			// Wait a tick on a listen server so the obliteration can replicate before the pawn is destroyed
+            if( Level.NetMode == NM_ListenServer )
+			{
+                bDestroyNextTick = true;
+                TimeSetDestroyNextTickTime = Level.TimeSeconds;
+            }
+            else
+            {
+                Destroy();
+			}
 			return;
 		}
+
 
 		// Try and obtain a rag-doll setup. Use optional 'override' one out of player record first, then use the species one.
 		if( RagdollOverride != "")
@@ -2484,7 +2580,8 @@ event KImpact(actor other, vector pos, vector impactVel, vector impactNorm)
 	HitDir = Normal(HitDir);
 
 	WallActor = Trace(WallHit, WallNormal, Location + 50 * Velocity, Location, false);
-	if ( WallActor != None && Level.TimeSeconds > LastStreakTime + BloodStreakInterval)
+	if ( WallActor != None && Level.TimeSeconds > LastStreakTime + BloodStreakInterval
+		&& Level.TimeSeconds - LastRenderTime < 1.0 )
 	{
 		Streak= spawn(class 'KFMod.KFBloodStreakDecal',,,WallHit + 20 * (WallNormal + VRand()), rotator(-WallNormal));
 		if (Streak != none)
@@ -2614,7 +2711,7 @@ defaultproperties
      MinTimeBetweenPainAnims=0.500000
      playedHit=True
      FeedThreshold=0.100000
-     CorpseLifeSpan=120.000000
+     CorpseLifeSpan=60.000000
      ZombieDamType(0)=Class'KFMod.ZombieMeleeDamage'
      ZombieDamType(1)=Class'KFMod.ZombieMeleeDamage'
      ZombieDamType(2)=Class'KFMod.ZombieMeleeDamage'
@@ -2682,6 +2779,8 @@ defaultproperties
      WalkingPct=1.000000
      CrouchedPct=1.000000
 	 HiddenGroundSpeed=275.000000
+	 RunAnim="ZombieRun"
+	 RunAnimSpeedThreshold=170.000000
      MaxFallSpeed=2500.000000
      //HeadRadius=7.000000
 	 HeadScale=1.100000

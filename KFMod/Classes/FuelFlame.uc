@@ -51,7 +51,7 @@ defaultproperties
          ColorScale(2)=(RelativeTime=0.750000,Color=(B=96,G=160,R=255))
          ColorScale(3)=(RelativeTime=1.000000)
          ColorMultiplierRange=(Z=(Min=0.670000,Max=2.000000))
-         MaxParticles=15
+         MaxParticles=12
          StartLocationShape=PTLS_Sphere
          SphereRadiusRange=(Max=5.000000)
          SpinsPerSecondRange=(X=(Max=0.070000))

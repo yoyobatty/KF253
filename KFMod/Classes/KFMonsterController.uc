@@ -133,13 +133,14 @@ function bool FindFreshBody()
 		if( K.DeathMarkers[i]==None )
 			Continue;
 		Dist = VSize(K.DeathMarkers[i].Location-Pawn.Location);
-		if( Dist<800 && ActorReachable(K.DeathMarkers[i]) && (Best==None || Dist<BDist) )
+		if( Dist<800 && (Best==None || Dist<BDist) )
 		{
 			Best = K.DeathMarkers[i];
 			BDist = Dist;
 		}
 	}
-	if( Best==None )
+	// Only do expensive reachability check on the best candidate
+	if( Best==None || !ActorReachable(Best) )
 		Return False;
 	TargetCorpse = Best;
 	GoToState('CorpseFeeding');
@@ -163,25 +164,19 @@ function bool FindNewEnemy()
 			C = KFHumanPawn(PC.Pawn);
 			if( C==None || C.Health<=0 )
 				Continue;
+			NewDist = VSize(C.Location - Pawn.Location);
 			if ( BestEnemy == None )
 			{
 				BestEnemy = C;
-				BestDist = VSize(BestEnemy.Location - Pawn.Location);
+				BestDist = NewDist;
 				bSeeBest = CanSee(C);
 			}
-			else
+			else if ( NewDist < BestDist )
 			{
-				NewDist = VSize(C.Location - Pawn.Location);
-				if ( !bSeeBest || (NewDist < BestDist) )
-				{
-					bSeeNew = CanSee(C);
-					if ( NewDist < BestDist)
-					{
-						BestEnemy = C;
-						BestDist = NewDist;
-						bSeeBest = bSeeNew;
-					}
-				}
+				bSeeNew = CanSee(C);
+				BestEnemy = C;
+				BestDist = NewDist;
+				bSeeBest = bSeeNew;
 			}
 		}
 	}
@@ -191,28 +186,19 @@ function bool FindNewEnemy()
 		{
 			if ( PC.bIsPlayer && (PC.Pawn!=None) && PC.Pawn.Health>0 )
 			{
+				NewDist = VSize(PC.Pawn.Location - Pawn.Location);
 				if ( BestEnemy == None )
 				{
 					BestEnemy = PC.Pawn;
-					if(BestEnemy != none)
-					{
-						BestDist = VSize(BestEnemy.Location - Pawn.Location);
-						bSeeBest = CanSee(BestEnemy);
-					}
+					BestDist = NewDist;
+					bSeeBest = CanSee(BestEnemy);
 				}
-				else
+				else if ( NewDist < BestDist )
 				{
-					NewDist = VSize(PC.Pawn.Location - Pawn.Location);
-					if ( !bSeeBest || (NewDist < BestDist) )
-					{
-						bSeeNew = CanSee(PC.Pawn);
-						if ( NewDist < BestDist)
-						{
-							BestEnemy = PC.Pawn;
-							BestDist = NewDist;
-							bSeeBest = bSeeNew;
-						}
-					}
+					bSeeNew = CanSee(PC.Pawn);
+					BestEnemy = PC.Pawn;
+					BestDist = NewDist;
+					bSeeBest = bSeeNew;
 				}
 			}
 		}

@@ -78,6 +78,8 @@ event ModeDoFire()
 simulated function ModeTick(float DeltaTime)
 {
     local PlayerController PC;
+    local float SpringForce;
+    local float Damping;
 
     Super.ModeTick(DeltaTime);
 
@@ -85,16 +87,18 @@ simulated function ModeTick(float DeltaTime)
     if (PC == None)
         return;
 
-    // HL2-style view punch return (spring-damper)
-    // Calculate spring force toward zero
-    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * ViewPunchSpring * DeltaTime;
-    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * ViewPunchSpring * DeltaTime;
-    // Apply damping
-    ViewPunchVelocity.Pitch -= ViewPunchVelocity.Pitch * ViewPunchDamping * DeltaTime;
-    ViewPunchVelocity.Yaw   -= ViewPunchVelocity.Yaw   * ViewPunchDamping * DeltaTime;
-    // Integrate velocity
+    // HL2-style view punch decay (integrate, damp, spring)
+    // 1. Integrate position from velocity
     ViewPunchOffset.Pitch += ViewPunchVelocity.Pitch * DeltaTime;
     ViewPunchOffset.Yaw   += ViewPunchVelocity.Yaw   * DeltaTime;
+    // 2. Damp velocity (multiplicative, clamped to prevent reversal)
+    Damping = FMax(1.0 - ViewPunchDamping * DeltaTime, 0.0);
+    ViewPunchVelocity.Pitch *= Damping;
+    ViewPunchVelocity.Yaw   *= Damping;
+    // 3. Spring pulls back toward zero (clamped for framerate stability)
+    SpringForce = FMin(ViewPunchSpring * DeltaTime, 2.0);
+    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * SpringForce;
+    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * SpringForce;
 
 	PC.SetRotation(PC.Rotation - LastPunchOffset + ViewPunchOffset);
     LastPunchOffset = ViewPunchOffset;
@@ -119,15 +123,37 @@ function HandleRecoil()
     if (PC == None)// || PC.bBehindView)
         return;
 
-    // HL2: Each shot instantly punches the view by a small, random amount
+	ViewPunchReset(5000.f);
+    // HL2-style impulse: velocity * 20 for spring response, plus small immediate
+    // offset for punchiness (HL2 gets this free via additive render overlay,
+    // but we modify rotation directly so need a small kick to feel immediate)
     PunchPitch = Clamp(0.5*KFWeapon(Weapon).UpKick * (0.5 + FRand()*0.5), 80, 5000); 
-    PunchYaw   = (FRand() - 0.5) * 100; // -100 to +100
+    PunchYaw   = (FRand() - 0.5) * KFWeapon(Weapon).SideKick; 
 
-    // Add punch to offset and velocity (velocity for snappier response)
     ViewPunchOffset.Pitch += PunchPitch;
     ViewPunchOffset.Yaw   += PunchYaw;
-    ViewPunchVelocity.Pitch += PunchPitch * 10.0;
-    ViewPunchVelocity.Yaw   += PunchYaw * 10.0;
+    ViewPunchVelocity.Pitch += PunchPitch * 20.0;
+    ViewPunchVelocity.Yaw   += PunchYaw * 20.0;
+}
+
+function ViewPunchReset( float tolerance )
+{
+	local float check;
+    local float PitchVal, YawVal;
+
+	if ( tolerance != 0 )
+	{
+		tolerance *= tolerance;	// square
+        // Compute squared "size" of punch using pitch + yaw components
+        PitchVal = ViewPunchOffset.Pitch  + ViewPunchVelocity.Pitch;
+        YawVal   = ViewPunchOffset.Yaw    + ViewPunchVelocity.Yaw;
+
+     	check = PitchVal * PitchVal + YawVal * YawVal;
+		if ( check > tolerance )
+			return;
+	}
+	ViewPunchOffset = rot(0,0,0);
+	ViewPunchVelocity = rot(0,0,0);
 }
 
 
@@ -239,6 +265,6 @@ defaultproperties
 	ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
 	ProjSpawnOffset=(X=21,Y=5,Z=-6)
 	Spread=3000.000000
-	ViewPunchDamping=6.000000
-	ViewPunchSpring=75.000000
+	ViewPunchDamping=9.000000
+	ViewPunchSpring=65.000000
 }

@@ -19,16 +19,22 @@ var () bool bAlwaysShowMessage; // Show a text message to nearby players even wh
 var () string LockedMessage,UnLockedMessage,WeldedShutMessage;
 var () sound LockedSound,UnLockedSound ;  // The SFX for trying to open a locked door, and unlocking it.
 
-// Booby Trap variables
-var bool bBoobyTrapped;              // Whether this door is currently booby trapped
-var Pawn BoobyTrapOwner;             // The player who set the trap
-var float BoobyTrapDamage;           // Damage dealt by the booby trap explosion
-var float BoobyTrapRadius;           // Radius of the booby trap explosion
-var class<DamageType> BoobyTrapDamageType; // Damage type for the trap
-var string BoobyTrapSetMessage;      // Message shown when trap is set
-var string BoobyTrapAlreadySetMessage; // Message shown when trap already exists
-var string BoobyTrapNeedGrenadeMessage; 
-var KFBoobyTrapDecoration BoobyTrapMesh;          
+// Hehehe
+var bool bBoobyTrapped;
+var Pawn BoobyTrapOwner;
+var float BoobyTrapDamage, BoobyTrapRadius;
+var class<DamageType> BoobyTrapDamageType;
+var string BoobyTrapSetMessage, BoobyTrapAlreadySetMessage, BoobyTrapNeedGrenadeMessage;
+var KFBoobyTrapDecoration BoobyTrapMesh;
+var private bool bClientBoobyTrapped; // Client-side tracking for PostNetReceive
+
+var() float BotTriggerRadius; // Hack for bots
+
+replication
+{
+	reliable if( ROLE==ROLE_Authority )
+		bBoobyTrapped;
+}
 
 function AddDoor( KFDoorMover Other )
 {
@@ -44,13 +50,34 @@ function bool SelfTriggered()
 	return true;
 }
 
+simulated function PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	SetTimer(2.0, true);
+}
+
+function Timer()
+{
+	local Pawn P;
+	local float ScanRadius;
+
+	if (BotTriggerRadius > 0)
+		ScanRadius = BotTriggerRadius;
+	else
+		ScanRadius = CollisionRadius;
+	foreach CollidingActors(Class'Pawn', P, ScanRadius)
+	{
+		if (AIController(P.Controller) != None)
+			Touch(P);
+	}
+}
+
 // Check if a pawn has grenades and consume one
 function bool ConsumeGrenade(Pawn User)
 {
     local Inventory Inv;
     local Weapon W;
 
-    // Look for a frag grenade (or grenade-type weapon) in inventory
     for (Inv = User.Inventory; Inv != None; Inv = Inv.Inventory)
     {
         W = Weapon(Inv);
@@ -59,13 +86,6 @@ function bool ConsumeGrenade(Pawn User)
             if (W.AmmoAmount(0) > 0)
             {
                 W.ConsumeAmmo(0, 1);
-                // If no ammo left, remove the weapon
-                if (W.AmmoAmount(0) <= 0)
-                {
-                    if (W == User.Weapon)
-                        User.Controller.ClientSwitchToBestWeapon();
-                    W.Destroy();
-                }
                 return true;
             }
         }
@@ -73,7 +93,6 @@ function bool ConsumeGrenade(Pawn User)
     return false;
 }
 
-// Called by player to set a booby trap (bind to alt-use or call from UsedBy with crouch check)
 function SetBoobyTrap(Pawn User)
 {
     local int i;
@@ -113,11 +132,12 @@ function SetBoobyTrap(Pawn User)
     // Set the trap
     bBoobyTrapped = true;
     BoobyTrapOwner = User;
+    NetUpdateTime = Level.TimeSeconds - 1;
 
     if (PlayerController(User.Controller) != None)
         PlayerController(User.Controller).ClientMessage(BoobyTrapSetMessage, 'CriticalEvent');
 
-    // Spawn a small visual indicator near the door (blinking light)
+    // Spawn a small visual indicator near the door
     SpawnTrapVisual();
 }
 
@@ -154,6 +174,24 @@ function SpawnTrapVisual()
     BoobyTrapMesh = Spawn(class'KFBoobyTrapDecoration', self,, HitLocation, GrenadeRot);
 }
 
+simulated event PostNetReceive()
+{
+	if( !bBoobyTrapped && bClientBoobyTrapped )
+	{
+		bClientBoobyTrapped = false;
+		if( BoobyTrapMesh!=None )
+		{
+			BoobyTrapMesh.Destroy();
+			BoobyTrapMesh = None;
+		}
+		Spawn(class'KFNadeExplosion',,, Location);
+	}
+	else if( bBoobyTrapped && !bClientBoobyTrapped )
+	{
+		bClientBoobyTrapped = true;
+	}
+}
+
 // Detonate the booby trap
 function DetonateBoobyTrap(Pawn TriggeredBy)
 {
@@ -163,11 +201,10 @@ function DetonateBoobyTrap(Pawn TriggeredBy)
         return;
 
     bBoobyTrapped = false;
+    NetUpdateTime = Level.TimeSeconds - 1;
 
-    // Spawn explosion visual effect
-    Spawn(class'KFNadeExplosion',,, Location);
-
-    // Also blast the doors open / damage them
+    if( Level.NetMode!=NM_DedicatedServer )
+        Spawn(class'KFNadeExplosion',,, Location);
     for (i = 0; i < DoorOwners.Length; i++)
     {
         if (!DoorOwners[i].bHidden)
@@ -176,10 +213,10 @@ function DetonateBoobyTrap(Pawn TriggeredBy)
         }
     }
 
-    // Deal damage in radius - credit the trap owner as the instigator
+    //Booooom
     if (BoobyTrapOwner != None && BoobyTrapOwner.Controller != None)
     {
-        HurtRadius(BoobyTrapDamage, BoobyTrapRadius, BoobyTrapDamageType, 800, Location);
+        HurtRadius(BoobyTrapDamage, BoobyTrapRadius, BoobyTrapDamageType, 800, Location );
     }
 
     if (BoobyTrapMesh != None)
@@ -288,7 +325,7 @@ function Touch( Actor Other )
 
 	For( i=0; i<DoorOwners.Length; i++ )
 	{
-		if( KFMonster(Other)!=none || KFInvasionBot(Pawn(Other).Controller) != none )
+		if( AIController(Pawn(Other).Controller) != None )
 		{
 			if( !DoorOwners[i].bKeyLocked && !DoorOwners[i].bSealed && !DoorOwners[i].bHidden && DoorOwners[i].KeyNum==0 )
 				DoorOwners[i].GotoState( , 'Open' );
@@ -410,6 +447,7 @@ function DamageWeld(float WeldDamage,pawn instigatedBy, Vector hitlocation,Vecto
 defaultproperties
 {
 	ReFireDelay=2
+	BotTriggerRadius=150.000000
 	MaxWeldStrength=400.000000
 	CombatSealReduction=0.500000
 	LockedMessage="This door is locked. Looks like it needs a key.."
@@ -423,4 +461,7 @@ defaultproperties
 	BoobyTrapSetMessage="You rigged the door with a grenade. Stand clear!"
 	BoobyTrapAlreadySetMessage="This door is already booby trapped."
 	BoobyTrapNeedGrenadeMessage="You need a grenade to booby trap this door."
+	RemoteRole=ROLE_SimulatedProxy
+	bAlwaysRelevant=True
+	bNetNotify=True
 }

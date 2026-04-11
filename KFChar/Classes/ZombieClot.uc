@@ -106,7 +106,7 @@ simulated function Tick(float DeltaTime)
 {
     super.Tick(DeltaTime);
 
-	if( bShotAnim && Role == ROLE_Authority )
+	if( bShotAnim && Role == ROLE_Authority && Controller != None )
 	{
 		if( Controller.MoveTarget!=None )
 		{
@@ -123,7 +123,7 @@ simulated function Tick(float DeltaTime)
     }
 
     // if we move out of melee range, stop doing the grapple animation
-    if( bGrappling && Controller.MoveTarget != none )
+    if( bGrappling && Controller != None && Controller.MoveTarget != none )
     {
         if( VSize(Controller.MoveTarget.Location - Location) > MeleeRange + CollisionRadius + Controller.MoveTarget.CollisionRadius )
         {

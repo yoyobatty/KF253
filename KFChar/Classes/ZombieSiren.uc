@@ -182,6 +182,7 @@ function PlayDyingSound()
 
 defaultproperties
 {
+	RunAnim=""
 	ScreamRadius=700
 	ScreamDamageType=Class'KFMod.SirenScreamDamage'
 	ScreamForce=-50000

@@ -89,9 +89,9 @@ simulated function PhysicsVolumeChange( PhysicsVolume NewVolume )
 
 defaultproperties
 {
-	BurnInterval=0.250000
+	BurnInterval=0.500000
     BurnTime=5.000000
-    FlameDamage=6
+    FlameDamage=12
 	DamageRadius=60.000000
     DrawScale=0.400000
     LifeSpan=0.000000

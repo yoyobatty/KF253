@@ -9,7 +9,7 @@ function DoFireEffect()
 }
 
 
-Function Timer()
+simulated function Timer()
 {
 	local PlayerReplicationInfo OtherPRI;
 	local int MedicReward;
@@ -75,7 +75,7 @@ function KFHumanPawn GetHealee()
 	return BestKFHP;
 }
 
-function bool AllowFire()
+simulated function bool AllowFire()
 {
    	local KFHumanPawn Healtarget;
 

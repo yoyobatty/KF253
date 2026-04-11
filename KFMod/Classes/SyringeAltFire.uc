@@ -8,26 +8,59 @@ function DoFireEffect()
 {
 	SetTimer(InjectDelay, False);
 }
+
 Function Timer()
 {
 	local int HealSum;
 	
-	HealSum = Syringe(Weapon).HealBoostAmount * KFPawn(Instigator).GetVeteran().Static.GetHealPotency();
+	HealSum = Syringe(Weapon).HealBoostAmount;
 
-        Weapon.ConsumeAmmo(ThisModeNum, AmmoPerFire);
+	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+	{
+		HealSum *= KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetHealPotency();
+	}
+    Weapon.ConsumeAmmo(ThisModeNum, AmmoPerFire);
 	Instigator.GiveHealth(HealSum, 100);
 }
-function bool AllowFire()
+
+simulated function bool AllowFire()
 {
 	if (Instigator.Health >= Instigator.HealthMax)
-	 return false;
+	 	return false;
 
-        return Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire;
+    return Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire;
 }
+
 event ModeDoFire()
 {
         Load = 0;
         Super.ModeDoFire(); // We don't consume the ammo just yet.
+}
+
+simulated function PlayFiring()
+{
+	if ( Weapon.Mesh != None )
+	{
+		if ( FireCount > 0 )
+		{
+			if ( Weapon.HasAnim(FireLoopAnim) )
+			{
+				Weapon.PlayAnim(FireLoopAnim, FireLoopAnimRate, 0.0);
+			}
+			else
+			{
+				Weapon.PlayAnim(FireAnim, FireAnimRate, 0.0);
+			}
+		}
+		else
+		{
+			Weapon.PlayAnim(FireAnim, FireAnimRate, 0.0);
+		}
+	}
+    Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,Default.FireAnimRate/FireAnimRate,false);
+    ClientPlayForceFeedback(FireForce);  // jdf
+
+    FireCount++;
 }
 
 defaultproperties

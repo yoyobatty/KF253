@@ -124,7 +124,10 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
         return;
 
     // Don't allow hits on people on the same team
-    if( KFHumanPawn(Other) != none && Instigator != none && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
+    if( KFHumanPawn(Other) != none && Instigator != none
+        && KFHumanPawn(Other).PlayerReplicationInfo != none && KFHumanPawn(Other).PlayerReplicationInfo.Team != none
+        && Instigator.PlayerReplicationInfo != none && Instigator.PlayerReplicationInfo.Team != none
+        && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
         return;
 
     // Resolve ExtendedZCollision to its owner pawn
@@ -140,7 +143,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
     else
         Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
 
-    if(KFPawn(Instigator).GetVeteran().default.VeterancyName == "Support Specialist")
+    if(KFPawn(Instigator) != none && KFPawn(Instigator).GetVeteran().default.VeterancyName == "Support Specialist")
         PenDamageReduction = PenDamageReductionPerked;
     else PenDamageReduction = default.PenDamageReduction;
     Damage *= PenDamageReduction;

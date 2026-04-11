@@ -204,7 +204,7 @@ defaultproperties
      ReloadAnimRate=1.000000
      IdleAimAnim="'"
      Weight=6.000000
-	 UpKick=800.000000
+	 UpKick=900.000000
      FireModeClass(0)=Class'KFMod.WinchesterFire'
      FireModeClass(1)=Class'KFMod.WinchesterAltFire'
      PutDownAnim="PutDown"

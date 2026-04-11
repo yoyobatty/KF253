@@ -52,7 +52,7 @@ var private bool bInitialCollideActors, bInitialBlockActors;
 replication
 {
 	reliable if( ROLE==ROLE_AUTHORITY )
-		WeldStrength,MaxWeld,bDoorIsDead,WeldIconLocation;
+		WeldStrength,MaxWeld,bDoorIsDead,WeldIconLocation,MyTrigger;
 }
 
 function PostBeginPlay()
@@ -188,16 +188,17 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 			GoBang(instigatedBy,hitlocation,momentum,damageType);
 	}
 
-	if ( bClosed && damageType == class 'DamTypeWelder'  && !bDisallowWeld)
+	if ( bClosed && damageType == class 'DamTypeWelder'  && !bDisallowWeld && KFElevatorTrigger(MyTrigger)==None)
 	{
 		bSealed = true;
 		MyTrigger.AddWeld(damage,bZedHittingDoor,instigatedBy);
 	}
 	else if(bSealed)
 	{
-		if( damageType==class'DamTypeUnWeld' )
+		if( damageType==class'DamTypeUnWeld' && KFElevatorTrigger(MyTrigger)==None )
 			MyTrigger.UnWeld(damage,bZedHittingDoor,instigatedBy);
-		else MyTrigger.DamageWeld(damage,instigatedBy,hitlocation,momentum,damageType);
+		else if( damageType!=class'DamTypeUnWeld' )
+			MyTrigger.DamageWeld(damage,instigatedBy,hitlocation,momentum,damageType);
 	}
 }
 function Bump( Actor Other )

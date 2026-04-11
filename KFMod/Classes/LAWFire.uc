@@ -48,6 +48,9 @@ function ApplyConeDamage(vector BlastOrigin, vector ConeDir, float ConeRange, fl
      local float DotValue;
      local float Scale;
 
+     if (Weapon == None)
+          return;
+
      foreach Weapon.VisibleCollidingActors(class 'Actor', Victim, ConeRange, BlastOrigin)
      {
           if( Victim == None || Victim == self || Victim == Weapon || Victim.Role != ROLE_Authority )

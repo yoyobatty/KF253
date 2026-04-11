@@ -260,7 +260,8 @@ defaultproperties
      ClipCount=1
      ReloadRate=0.010000
      Weight=9.000000
-     UpKick=150
+     UpKick=400
+	 SideKick=0
      FireModeClass(0)=Class'KFMod.CrossbowFire'
      FireModeClass(1)=Class'KFMod.KFZoom'
      PutDownAnim="PutDown"

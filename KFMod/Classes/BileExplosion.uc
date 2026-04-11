@@ -3,8 +3,8 @@ class BileExplosion extends FleshHitEmitter;
 defaultproperties
 {
      Begin Object Class=SpriteEmitter Name=BileExplosionEmitter
-         UseCollision=True
-         UseCollisionPlanes=True
+         UseCollision=False
+         UseCollisionPlanes=False
          FadeOut=True
          RespawnDeadParticles=False
          SpawnOnlyInDirectionOfNormal=True
@@ -22,7 +22,7 @@ defaultproperties
          ColorScale(0)=(Color=(R=255,A=255))
          ColorScale(1)=(RelativeTime=1.000000,Color=(R=255,A=255))
          ColorMultiplierRange=(Z=(Min=0.670000,Max=2.000000))
-         MaxParticles=65
+         MaxParticles=30
          StartLocationShape=PTLS_Sphere
          SphereRadiusRange=(Max=1.000000)
          StartMassRange=(Min=11.000000,Max=11.000000)

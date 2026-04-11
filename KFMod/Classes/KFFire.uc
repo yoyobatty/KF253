@@ -16,17 +16,16 @@ var()           float           RandomPitchAdjustAmt;       // How much to rando
 
 var() int MaxFireBurst; // Maximum number of shots in a burst, 0 for unlimited
 
-//var int UpKick;
-
+// View punch stuff
 var rotator ViewPunchOffset;      // Current punch offset being applied
 var rotator ViewPunchVelocity;    // Velocity at which the punch returns to zero
 var rotator LastPunchOffset;	  // Last offset applied to the view (for smooth return)
 var() float   ViewPunchDamping;     // Damping factor for smooth return
 var() float   ViewPunchSpring;      // Spring force for return
-var() float RecoilMovePenaltySlow;       
-var() float RecoilMovePenaltyFast;        
-var() float BotRecoilMovePenaltySlow;     
-var() float BotRecoilMovePenaltyFast;     
+
+// Accuracy update based on pawn velocity
+var() float RecoilMovePenaltySlow, RecoilMovePenaltyFast;            
+var() float BotRecoilMovePenaltySlow, BotRecoilMovePenaltyFast;     
 
 function float GetFireSpeed()
 {
@@ -217,20 +216,26 @@ event ModeDoFire()
 simulated function ModeTick(float DeltaTime)
 {
     local PlayerController PC;
+    local float SpringForce;
+    local float Damping;
 
     Super.ModeTick(DeltaTime);
 	PC = PlayerController(Instigator.Controller);
     if (PC == None)
         return;
 
-    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * ViewPunchSpring * DeltaTime;
-    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * ViewPunchSpring * DeltaTime;
-
-    ViewPunchVelocity.Pitch -= ViewPunchVelocity.Pitch * ViewPunchDamping * DeltaTime;
-    ViewPunchVelocity.Yaw   -= ViewPunchVelocity.Yaw   * ViewPunchDamping * DeltaTime;
-
+    // HL2-style view punch decay (integrate, damp, spring)
+    // 1. Integrate position from velocity
     ViewPunchOffset.Pitch += ViewPunchVelocity.Pitch * DeltaTime;
     ViewPunchOffset.Yaw   += ViewPunchVelocity.Yaw   * DeltaTime;
+    // 2. Damp velocity (multiplicative, clamped to prevent reversal)
+    Damping = FMax(1.0 - ViewPunchDamping * DeltaTime, 0.0);
+    ViewPunchVelocity.Pitch *= Damping;
+    ViewPunchVelocity.Yaw   *= Damping;
+    // 3. Spring pulls back toward zero (clamped for framerate stability)
+    SpringForce = FMin(ViewPunchSpring * DeltaTime, 2.0);
+    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * SpringForce;
+    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * SpringForce;
 
 	PC.SetRotation(PC.Rotation - LastPunchOffset + ViewPunchOffset);
     LastPunchOffset = ViewPunchOffset;
@@ -259,16 +264,16 @@ function HandleRecoil()
     DurationFactor = 1.0 + DurationFactor;
 
     PunchPitch = Clamp(0.5*KFWeapon(Weapon).UpKick * (0.5 + FRand()*0.5), 80, 5000); 
-    PunchYaw   = (FRand() - 0.5) * 100; 
+    PunchYaw   = (FRand() - 0.5) * KFWeapon(Weapon).SideKick; 
 
 	PunchPitch *= DurationFactor;
     PunchYaw   *= DurationFactor;
 
-    // Add punch to offset and velocity 
+    // HL2-style impulse with small immediate offset for punchiness
     ViewPunchOffset.Pitch += PunchPitch;
     ViewPunchOffset.Yaw   += PunchYaw;
-    ViewPunchVelocity.Pitch += PunchPitch * 10.0;
-    ViewPunchVelocity.Yaw   += PunchYaw * 10.0;
+    ViewPunchVelocity.Pitch += PunchPitch * 20.0;
+    ViewPunchVelocity.Yaw   += PunchYaw * 20.0;
 }
 
 function ViewPunchReset( float tolerance )
@@ -357,8 +362,8 @@ defaultproperties
 	EmptyFireAnimRate=1.000000
 	bRandomPitchFireSound=True
 	RandomPitchAdjustAmt=0.050000
-	ViewPunchDamping=6.000000
-	ViewPunchSpring=75.000000
+	ViewPunchDamping=9.000000
+	ViewPunchSpring=65.000000
 	MaxFireBurst=0
     RecoilMovePenaltySlow=0.100000
     RecoilMovePenaltyFast=0.250000

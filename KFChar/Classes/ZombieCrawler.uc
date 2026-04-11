@@ -102,6 +102,7 @@ defaultproperties
      KFHitBack="ZombieSpring"
      KFHitLeft="ZombieSpring"
      KFHitRight="ZombieSpring"
+     RunAnim=""
      bStunImmune=True
      bCannibal=True
      damageRand=4
