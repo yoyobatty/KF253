@@ -94,6 +94,13 @@ var config bool bEnemyHealthBars;
 
 var ZombieVolume LastZVol;
 
+// Per-volume spawn cooldown: prevents the same volume being chosen repeatedly.
+// SpawnCooldownPenalty is subtracted immediately after a spawn and decays linearly
+// to zero over SpawnCooldownTime seconds.
+var() float SpawnCooldownPenalty;  // Default: 8,000,000 (overwhelms the 10M base score)
+var() float SpawnCooldownTime;     // Default: 30s — full eligibility restored after this long
+var() float SpawnSizeMultiplier;   // Score bonus per unit of CollisionRadius (larger volumes score higher)
+
 var array<PlayerDeathMark> DeathMarkers; // For zombie eating.
 
 var array<KFPlayerStats> ActiveStats;
@@ -1494,7 +1501,12 @@ event PostLogin( PlayerController NewPlayer )
 		GameEvent("TeamChange",""$NewPlayer.PlayerReplicationInfo.Team.TeamIndex,NewPlayer.PlayerReplicationInfo);
 
 	if( KFPlayerController(NewPlayer)!=None )
-		KFPlayerController(NewPlayer).ShowLobbyMenu();
+	{
+		if( NewPlayer.PlayerReplicationInfo.bOnlySpectator )
+			NewPlayer.GotoState('Spectating');
+		else
+			KFPlayerController(NewPlayer).ShowLobbyMenu();
+	}
 	else NewPlayer.GotoState('PlayerWaiting');
 
 	if( KFPlayerController(NewPlayer)!=None )
@@ -1669,8 +1681,8 @@ function TryToSpawnInAnotherVolume(optional bool bBossSpawning)
 
 function ZombieVolume FindSpawningVolume()
 {
-	local ZombieVolume z,BestZ;
-	local float BestScore,tScore;
+	local ZombieVolume z, BestZ;
+	local float BestScore, tScore;
 	BestScore = -1;
 
 	ForEach AllActors(class'ZombieVolume',z)
@@ -1678,10 +1690,8 @@ function ZombieVolume FindSpawningVolume()
 		tScore = RateZombieVolume(z);
 		if(tScore > BestScore)
 		{
-			BestScore=tScore;
+			BestScore = tScore;
 			BestZ = z;
-			//log(BestZ$" best zombievolume");
-			//log(BestScore$" bestscore zombievolume");
 		}
 	}
 	return BestZ;
@@ -1690,8 +1700,9 @@ function ZombieVolume FindSpawningVolume()
 function float RateZombieVolume(ZombieVolume z)
 {
 	local Controller OtherPlayer;
-	local float Score;
+	local float Score, PlayerScore;
 	local float dist;
+	local int PlayerCount;
 
 	if ( z.PhysicsVolume.bWaterVolume )
 		return -10000000;
@@ -1703,7 +1714,17 @@ function float RateZombieVolume(ZombieVolume z)
 
 	Score = 10000000;
 
+	// Anti-repeat cooldown: penalize volumes used recently.
+	// Penalty starts at SpawnCooldownPenalty and decays linearly to 0 over SpawnCooldownTime.
+	// At t=0: score ≈ 10M + bonuses - SpawnCooldownPenalty → strongly deprioritized
+	// At t=SpawnCooldownTime: no penalty, full eligibility restored.
+	if (z.LastSpawnedTime > 0.0 && SpawnCooldownTime > 0.0)
+		Score -= SpawnCooldownPenalty * FMax(0.0, 1.0 - (Level.TimeSeconds - z.LastSpawnedTime) / SpawnCooldownTime);
+
 	Score += 5000 * FRand(); //randomize
+
+	// Prefer physically larger volumes — more space means more reliable squad placement.
+	Score += z.CollisionRadius * SpawnSizeMultiplier;
 
 	if(LastSpawnLocation == z.Location)
 	{
@@ -1714,29 +1735,40 @@ function float RateZombieVolume(ZombieVolume z)
 	// Make points far from the last one better choices
 	Score += Min(VSize(LastSpawnLocation-z.Location),1500);
 
+	// Accumulate per-player scoring, then average to keep the score bounded
+	// regardless of player count. Skip monster AI controllers.
+	PlayerScore = 0;
+	PlayerCount = 0;
 	for ( OtherPlayer=Level.ControllerList; OtherPlayer!=None; OtherPlayer=OtherPlayer.NextController)
 	{
-		if (OtherPlayer.pawn != none)
+		if ( MonsterController(OtherPlayer) != None || OtherPlayer.Pawn == None )
+			continue;
+
+		dist = VSize(z.Location - OtherPlayer.Pawn.Location);
+
+		// Prefer different angle from player than last spawn (capped contribution)
+		PlayerScore += FMin(2000 * abs(((LastSpawnLocation - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation)) - ((z.Location - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation))), 10000);
+
+		// if fog doesn't hide spawn && lineofsight possible
+		if( (!OtherPlayer.Region.Zone.bDistanceFog || (dist < OtherPlayer.Region.Zone.DistanceFogEnd)) && FastTrace(z.Location,OtherPlayer.Pawn.Location) )
 		{
-			dist = VSize(z.Location - OtherPlayer.Pawn.Location);
-			Score += 2000*abs(((LastSpawnLocation - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation)) - ((z.Location - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation)));
-
-			// if fog doesn't hide spawn && lineofsight possible
-			if( (!OtherPlayer.Region.Zone.bDistanceFog || (dist < OtherPlayer.Region.Zone.DistanceFogEnd)) && FastTrace(z.Location,OtherPlayer.Pawn.Location) )
-			{
-				//log(z$" dist less than distancefogend");
-				return -100;
-			}
-			else if(dist < 400)
-			{
-				//log(z$" dist less than 400");
-				return -50;
-			}
-
- 			if(VSize(z.Location-OtherPlayer.Pawn.Location) < 8000)
-				Score += (8000-VSize(z.Location-OtherPlayer.Pawn.Location))*2;
+			//log(z$" dist less than distancefogend");
+			return -100;
 		}
+		else if(dist < 400)
+		{
+			//log(z$" dist less than 400");
+			return -50;
+		}
+
+		if(dist < 8000)
+			PlayerScore += (8000 - dist) * 2;
+
+		PlayerCount++;
 	}
+
+	if (PlayerCount > 0)
+		Score += PlayerScore / PlayerCount;
 	// if we get here, return at least a 5
 	//log(z$" returned score" $Score);
 	return FMax(Score,5);
@@ -2162,6 +2194,9 @@ static function string GetLoadingHint( PlayerController PC, string MapName, Colo
 
 defaultproperties
 {
+     SpawnCooldownPenalty=8000000.0
+     SpawnCooldownTime=30.0
+     SpawnSizeMultiplier=20.0
      MonsterClasses(0)=(MClassName="KFChar.ZombieClot",Mid="A")
      MonsterClasses(1)=(MClassName="KFChar.ZombieCrawler",Mid="B")
      MonsterClasses(2)=(MClassName="KFChar.ZombieGoreFast",Mid="C")

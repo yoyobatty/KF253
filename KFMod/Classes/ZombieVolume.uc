@@ -4,9 +4,11 @@
 //=============================================================================
 class ZombieVolume extends Volume;
 
-var() float CanRespawnTime; // Seconds to cache CanSpawnInHere results
+var() float CanRespawnTime;  // Seconds to cache CanSpawnInHere results
 
 var float LastCheckTime;
+var float LastSpawnedTime;   // Level.TimeSeconds when this volume last produced a real spawn
+var int   SpawnCount;        // Total real spawns this volume has produced
 var bool bSpawnPossible;
 
 function PostBeginPlay()
@@ -163,6 +165,8 @@ function bool SpawnInHere(array< class<Actor> > zombies, int index, optional int
             // Successful real spawn: volume is occupied, lock it out
             bSpawnPossible = false;
             LastCheckTime = Level.TimeSeconds;
+            LastSpawnedTime = Level.TimeSeconds;
+            SpawnCount++;
         }
         // Failed real spawn: don't update LastCheckTime so CanSpawnInHere
         // will re-evaluate on the next query instead of staying locked out

@@ -129,6 +129,24 @@ function PostBeginPlay()
 	AssignPersonality();
 }
 
+simulated function rotator GetViewRotation()
+{
+    local rotator ViewRot;
+    local vector AimDir;
+
+    ViewRot = Rotation;
+
+    if (Pawn != None && Pawn(Focus) != None)
+    {
+        AimDir = Focus.Location - Pawn.Location;
+
+        if (AimDir != vect(0,0,0))
+            ViewRot.Pitch = rotator(AimDir).Pitch;
+    }
+
+    return ViewRot;
+}
+
 event MayDodgeToMoveTarget()
 {
 }

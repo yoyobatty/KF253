@@ -37,6 +37,7 @@ var() SpriteWidget GrenadeIcon;
 var() NumericWidget DigitsGrenade;
 
 var transient Frag PlayerGrenade;
+var transient Pawn LastGrenadePawn; // Track which pawn PlayerGrenade belongs to
 
 var() SpriteWidget HealthArmourBorderLeft;
 
@@ -675,8 +676,12 @@ simulated function UpdateHud()
 	if (DigitsNumLeftInClip.Value < 0)
 		DigitsNumLeftInClip.Value = 0;
 
-	if(PlayerGrenade==none)
+	if(PlayerGrenade==none || LastGrenadePawn != PawnOwner)
+	{
+		PlayerGrenade = None;
 		FindPlayerGrenade();
+		LastGrenadePawn = PawnOwner;
+	}
 
 	if(PlayerGrenade!=none)
 	{
@@ -834,9 +839,9 @@ simulated function DrawHudPassA (Canvas C)
 		}
 	}
 
-	if( KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo)!=None )
+	if( KFPlayerReplicationInfo(PawnOwnerPRI)!=None )
 	{
-		VE = KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).ClientVeteranSkill;
+		VE = KFPlayerReplicationInfo(PawnOwnerPRI).ClientVeteranSkill;
 		if( VE!=None )
 		{
 			C.DrawColor.R = 255;
