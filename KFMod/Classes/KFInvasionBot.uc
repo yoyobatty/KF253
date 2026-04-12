@@ -19,10 +19,11 @@ var float NextTargetCheck,NextMedicFireTime,NextNadeTimer,WeldAssistTimer;
 
 var byte HealState,OldMovesCount;
 var float RetreatTime,LastEnemyEncounter,LastChatTime,LastCalloutTime;
-var float LastFailedTacticalTime; // Cooldown: when TacticalMove last failed due to blocked geometry
-var float LastFallbackMoveTime; // Prevent Fallback2 instant-completion loops
+var float LastFailedTacticalTime;
+var float LastFallbackMoveTime;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
+var array<float> TempBlockedPathTimes;
 
 // Internal to state
 var NavigationPoint ShoppingPath;
@@ -51,65 +52,6 @@ var int ShoppingAttempts, RoamingAttempts;
 var float ShopDist, BestShopDist;
 
 var KFNadeHealingExplosion NearbyHealCloud;
-
-// ── Debug Logging System ──
-// 0 = off, 1 = state transitions + major decisions, 2 = detailed reasoning
-var() config int BotDebugLevel;
-var name LastStateName; // tracks previous state for transition logging
-
-// Core log helper: [time] BotName (State) | Category | Message
-final function BotLog(coerce string Msg, optional name Category, optional int MinLevel)
-{
-	if ( MinLevel == 0 )
-		MinLevel = 1;
-	if ( BotDebugLevel < MinLevel )
-		return;
-	if ( Category == '' )
-		Category = 'AI';
-	log("["$Left(string(Level.TimeSeconds),7)$"]"
-		@ GetHumanReadableName()
-		@ "("$GetStateName()$") |"
-		@ Category
-		@ "|"
-		@ Msg);
-}
-
-// Call at top of any function that may change state — detects & logs transitions
-final function CheckStateTransition()
-{
-	local name CurState;
-	CurState = GetStateName();
-	if ( LastStateName != CurState )
-	{
-		if ( BotDebugLevel >= 1 && LastStateName != '' )
-			log("["$Left(string(Level.TimeSeconds),7)$"]"
-				@ GetHumanReadableName()
-				@ "STATE:"
-				@ LastStateName $" -> "$ CurState
-				@ "| Enemy="$GetActorID(Enemy)
-				@ "Weapon="$GetWeaponID()
-				@ "HP="$GetHealthStr());
-		LastStateName = CurState;
-	}
-}
-
-// Short descriptor helpers (avoid None access crashes in logs)
-final function string GetActorID(Actor A)
-{
-	if ( A == None ) return "None";
-	if ( Pawn(A) != None ) return Pawn(A).GetHumanReadableName()$"(HP:"$Pawn(A).Health$")";
-	return string(A.Name);
-}
-final function string GetWeaponID()
-{
-	if ( Pawn == None || Pawn.Weapon == None ) return "None";
-	return Pawn.Weapon.GetHumanReadableName();
-}
-final function string GetHealthStr()
-{
-	if ( Pawn == None ) return "Dead";
-	return string(Pawn.Health)$"/"$string(Pawn.HealthMax)$" Armor:"$string(int(Pawn.ShieldStrength));
-}
 
 function AssignPersonality()
 {
@@ -192,7 +134,6 @@ function TimedFireWeaponAtEnemy()
 	SetTimer(0.1f, True);
 }
 
-// added CanAttack() check to calm trigger-happy bots
 function bool FireWeaponAt(Actor A)
 {
 	if ( A == None )
@@ -239,7 +180,6 @@ final function TossCash( int Amount, vector TossDir )
 
 function EnemyAquired()
 {
-	BotLog("EnemyAquired: "$GetActorID(Enemy), 'THREAT');
 	WhatToDoNext(2);
 }
 
@@ -581,7 +521,6 @@ function bool EnemyReallyScary()
 		ScaryThreshold = 20.f;
 	else ScaryThreshold = 10.f;
 
-	BotLog("EnemyReallyScary: DangerScore="$DangerScore@"Threshold="$ScaryThreshold@"Result="$(DangerScore >= ScaryThreshold), 'THREAT', 2);
 	return (DangerScore >= ScaryThreshold);
 
     //return false;
@@ -590,7 +529,6 @@ function bool EnemyReallyScary()
 function EnemyChanged(bool bNewEnemyVisible)
 {
     Super.EnemyChanged(bNewEnemyVisible);
-    BotLog("EnemyChanged -> "$GetActorID(Enemy)@"Visible="$bNewEnemyVisible, 'THREAT');
     LastEnemyEncounter = Level.TimeSeconds;
 }
 
@@ -600,8 +538,6 @@ function ExecuteWhatToDoNext()
 {
 	local float WeaponRating;
 
-	CheckStateTransition();
-	BotLog("--- ExecuteWhatToDoNext --- Enemy="$GetActorID(Enemy)@"Weapon="$GetWeaponID()@"HP="$GetHealthStr(), 'DECIDE');
 	SwitchToBestWeapon();
 	bHasFired = false;
 	GoalString = "WhatToDoNext at "$Level.TimeSeconds;
@@ -623,10 +559,7 @@ function ExecuteWhatToDoNext()
 			return;
 		}
 		if( Pawn.Health<=80 && TryToHealSelf() )
-		{
-			BotLog("DECIDE: HealSelf (HP<80)", 'DECIDE');
 			return;
-		}
 
 		BlockedPath = None;
 		bFrustrated = false;
@@ -666,20 +599,13 @@ function ExecuteWhatToDoNext()
 	bIgnoreEnemyChange = false;
 
 	if( Enemy==none && ((ShouldGoShopping() && GoShopping()) || ShouldBegForCash()) )
-	{
-		BotLog("DECIDE: Shopping or Begging", 'DECIDE');
 		Return;
-	}
 	if( LastHealTime<Level.TimeSeconds && FindInjuredAlly() && (!EnemyReallyScary() && StartleActor==None) && GoHealing() )
-	{
-		BotLog("DECIDE: HealAlly "$GetActorID(InjuredAlly), 'DECIDE');
 		return;
-	}
 	else
 	{
 		if ( AssignSquadResponsibility() )
 		{
-			BotLog("DECIDE: SquadResponsibility -> "$GetStateName(), 'DECIDE');
 			if ( Pawn == None )
 				return;
 			SwitchToBestWeapon();
@@ -689,13 +615,11 @@ function ExecuteWhatToDoNext()
 			return;
 		if(ThrowAwayBadWeaponForBetterPickup())
 		{
-			BotLog("DECIDE: ThrowAwayBadWeapon for pickup", 'DECIDE');
 			GoalString = "FightEnemy - Picking up better weapon";
 			return;
 		}
 		if ( Enemy != None )
 		{
-			BotLog("DECIDE: ChooseAttackMode vs "$GetActorID(Enemy)@"Dist="$int(VSize(Pawn.Location-Enemy.Location)), 'DECIDE');
 			ChooseAttackMode();
 		}
 		else
@@ -703,7 +627,6 @@ function ExecuteWhatToDoNext()
 			WeaponRating = Pawn.Weapon.CurrentRating/2000;
 			if ( FindInventoryGoal(WeaponRating) )
 			{
-				BotLog("DECIDE: FallBack to inventory "$RouteGoal, 'DECIDE');
 				if ( InventorySpot(RouteGoal) == None )
 					GoalString = "fallback - inventory goal is not pickup but "$RouteGoal;
 				else GoalString = "Fallback to better pickup "$InventorySpot(RouteGoal).markedItem$" hidden "$InventorySpot(RouteGoal).markedItem.bHidden;
@@ -711,7 +634,6 @@ function ExecuteWhatToDoNext()
 			}
 			else
 			{
-				BotLog("DECIDE: WanderOrCamp (no enemy, no inventory)", 'DECIDE');
 				// No enemy and no ammo to grab. Guess all there is left to do is to chill out
 				GoalString = "WhatToDoNext Wander or Camp at "$Level.TimeSeconds;
 				WanderOrCamp(true);
@@ -933,11 +855,6 @@ final function bool ThrowAwayBadWeapon(KFWeapon WeapToThrow)
   	return false;
 }
 
-// Compare a nearby KFWeaponPickup against ALL droppable weapons in our inventory.
-// If the pickup is clearly better than at least one inventory weapon and we can
-// carry it after dropping that weapon, toss the chosen worse weapon so the bot
-// can pick up the better one.
-// Returns true if a weapon was tossed, false otherwise.
 final function bool ThrowAwayBadWeaponForBetterPickup()
 {
     local KFHumanPawn      HP;
@@ -1117,7 +1034,7 @@ final function Actor GetRandomDest()
 {
 	local int i;
 	local Actor Result;
-	
+
 	// Setup special path finding.
 	for( i=0; i<TempBlockedPaths.Length; ++i )
 		TempBlockedPaths[i].bBlocked = true;
@@ -1148,6 +1065,7 @@ final function Actor GetRandomDest()
 function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 {
 	local int i;
+	local bool bDirectReach;
 
 	if ( !bCheckedReach && ActorReachable(A) )
 	{
@@ -1645,6 +1563,7 @@ function SetCombatTimer()
 function PawnDied(Pawn P)
 {
 	TempBlockedPaths.Length = 0; // Reset blocked paths list.
+	TempBlockedPathTimes.Length = 0;
 	DoorPaths.Length = 0;
 
     // Clear stale actor/pawn references
@@ -1748,8 +1667,6 @@ ignores WaitForMover;
 
 	function BeginState()
 	{
-		CheckStateTransition();
-		BotLog("ENTER Healing | Target="$GetActorID(InjuredAlly), 'STATE');
 		SetBotSprinting(true);
 		Pawn.bWantsToCrouch = false;
 	}
@@ -1869,8 +1786,13 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 			// debugf;
 			TempBlockedPaths.Insert(0,1);
 			TempBlockedPaths[0] = PreviousNavPath;
+			TempBlockedPathTimes.Insert(0,1);
+			TempBlockedPathTimes[0] = Level.TimeSeconds;
 			if( TempBlockedPaths.Length>4 )
+			{
 				TempBlockedPaths.Length = 4;
+				TempBlockedPathTimes.Length = 4;
+			}
 			PreviousNavPath = None;
 		}
 	}
@@ -1926,11 +1848,8 @@ function ChooseAttackMode()
     if ( (Squad == None) || (Enemy == None) || (Pawn == None) )
         log("HERE 1 Squad "$Squad$" Enemy "$Enemy$" pawn "$Pawn);
 
-	BotLog("ChooseAttackMode vs "$GetActorID(Enemy)@"HP="$GetHealthStr()@"Dist="$int(VSize(Pawn.Location-Enemy.Location)), 'COMBAT');
-
 	if ( (Pawn.Health / Pawn.HealthMax) <= 0.25 || VSize(Pawn.Location - Enemy.Location) < 50.f && Pawn.Weapon != none && !Pawn.Weapon.bMeleeWeapon)
 	{
-		BotLog("  -> RETREAT (low HP or too close)", 'COMBAT');
 		DoRetreat();
 		return;
 	}
@@ -1961,8 +1880,6 @@ function bool FindSuperPickup(float MaxDist)
 	return false;
 }
 
-// Returns the center of the headshot sphere for the given target,
-// matching Pawn.IsHeadShot / DrawHeadShotSphere bone-based formula.
 final function vector GetHeadAimLocation(Actor Tgt)
 {
 	local Pawn P;
@@ -2095,14 +2012,12 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
             {
                 FireSpot = GetHeadAimLocation(Target);
                 bClean = FastTrace(FireSpot, ProjStart);
-                BotLog("AdjustAim: try head (stopped)"@FireSpot@"TargetLoc="$Target.Location@"Clean="$bClean@"Tgt="$Target, 'AIM', 2);
             }
         }
         else if (FiredAmmunition.bInstantHit && FRand() < 0.35)
         {
             FireSpot = GetHeadAimLocation(Target);
             bClean = FastTrace(FireSpot, ProjStart);
-            BotLog("AdjustAim: try head (moving)"@FireSpot@"TargetLoc="$Target.Location@"Clean="$bClean@"Tgt="$Target, 'AIM', 2);
         }
     }
 
@@ -2129,7 +2044,6 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 		// try head
 		FireSpot = GetHeadAimLocation(Target);
  		bClean = FastTrace(FireSpot, ProjStart);
-		BotLog("AdjustAim: try head (fallback)"@FireSpot@"TargetLoc="$Target.Location@"Clean="$bClean@"Tgt="$Target, 'AIM', 2);
 	}
 	if ( !bClean && (Target == Enemy) && bEnemyInfoValid )
 	{
@@ -2315,8 +2229,6 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	if ( (Squad == None) || (Enemy == None) || (Pawn == None) )
 		log("HERE 3 Squad "$Squad$" Enemy "$Enemy$" pawn "$Pawn);
 
-	BotLog("FightEnemy vs "$GetActorID(Enemy)@"EnemyStr="$EnemyStrength@"bCanCharge="$bCanCharge@"Weapon="$GetWeaponID(), 'COMBAT');
-
 	if( NextTargetCheck<Level.TimeSeconds )
 	{
 		FindBetterTarget();	
@@ -2337,7 +2249,6 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 
 	if( EnemyReallyScary() )
 	{
-		BotLog("  -> RETREAT (EnemyReallyScary!)", 'COMBAT');
 		GoalString = "Retreat from scary during fight";
 		SendMessage(None, 'OTHER', GetMessageIndex('NEEDBACKUP'), 12, 'TEAM');
 		DoRetreat();
@@ -2366,11 +2277,9 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 		else if (Pawn.Location.Z < Enemy.Location.Z - Pawn.CollisionHeight) // below enemy
 			Aggression += CombatStyle;
 	}
-	BotLog("  Aggression="$Aggression@"EnemyDist="$int(enemyDist)@"CombatStyle="$AdjustedCombatStyle@"Visible="$EnemyVisible(), 'COMBAT', 2);
 
 	if ( !EnemyVisible() )
 	{
-		BotLog("  Enemy NOT visible, deciding hunt/stakeout", 'COMBAT', 2);
 		if ( Squad.MustKeepEnemy(Enemy) )
 		{
 			GoalString = "Hunt priority enemy";
@@ -2408,14 +2317,12 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 
 	if( Pawn.Weapon.bMeleeWeapon || (bCanCharge && bOldForcedCharge) )
 	{
-		BotLog("  -> CHARGE (melee or forced)", 'COMBAT');
 		GoalString = "Charge";
 		DoCharge();
 		return;
 	}
 	if ( Pawn.RecommendLongRangedAttack() )
 	{
-		BotLog("  -> LONG RANGED", 'COMBAT');
 		GoalString = "Long Ranged Attack";
 		DoRangedAttackOn(Enemy);
 		return;
@@ -2452,13 +2359,11 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	}
 	if ( Level.TimeSeconds - LastFailedTacticalTime < 1.0 )
 	{
-		BotLog("  -> RANGED ATTACK (tactical cooldown)", 'COMBAT');
 		GoalString = "Ranged Attack (tactical cooldown)";
 		DoRangedAttackOn(Enemy);
 		return;
 	}
 	GoalString = "Do tactical move";
-	BotLog("  -> TACTICAL MOVE", 'COMBAT');
 	DoTacticalMove();
 }
 
@@ -2526,77 +2431,7 @@ state MoveToGoalNoEnemy
         SetBotSprinting(false);
     }
 }
-/* 
-state RangedAttack
-{
-	function BeginState()
-	{
-		StopStartTime = Level.TimeSeconds;
-		bHasFired = false;
-		// Only stop if enemies are far enough away
-		if ( VSize(Enemy.Location - Pawn.Location) > 1000.f )
-		{
-			if ( (Pawn.Physics != PHYS_Flying) || (Pawn.MinFlySpeed == 0) )
-				Pawn.Acceleration = vect(0,0,0);
-		}
-		if ( (Pawn.Weapon != None) && Pawn.Weapon.FocusOnLeader(false) )
-			Target = Focus;
-		else if ( Target == None )
-			Target = Enemy;
-		if ( Target == None )
-			log(GetHumanReadableName()$" no target in ranged attack");
-	}
-	final function PickMoveDest()
-	{
-		local bool bScary;
-		
-		bScary = EnemyReallyScary();
-		if ( (Pawn.Weapon != None) && Pawn.Weapon.bMeleeWeapon && !bScary )
-		{
-			//log("RangedAttack: Melee weapon, picking next move");
-			MoveTarget = Target;
-			return;
-		}
-		if( bScary )
-			PickNextRetMove();
-        //Destination = Pawn.Location+VRand()*200.f;
-		Destination = Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*200.f+Pawn.Location; // Try to keep distance from enemy
-	}
-Begin:
-	bHasFired = false;
-	if ( (Pawn.Weapon != None) && Pawn.Weapon.bMeleeWeapon )
-		SwitchToBestWeapon();
-	GoalString = GoalString@"Ranged attack";
-	Focus = Target;
-	Sleep(0.0);
-	if ( Target == None )
-		WhatToDoNext(335);
 
-	Pawn.bWantsToCrouch = false;
-	if ( NeedToTurn(Target.Location) )
-	{
-		Focus = Target;
-		FinishRotation();
-	}
-	bHasFired = true;
-	if ( Target == Enemy )
-		TimedFireWeaponAtEnemy();
-	else
-		FireWeaponAt(Target);
-	Sleep(0.1);
-	if ( (Target == None) || ((Target != Enemy) && (GameObjective(Target) == None) && (Enemy != None) && EnemyVisible()) )
-		WhatToDoNext(35);
-	Focus = Target;
-	PickMoveDest();
-	if( MoveTarget!=None )
-		MoveToward(MoveTarget,Target);
-	else MoveTo(Destination,Target);
-	
-	WhatToDoNext(36);
-	if ( bSoaking )
-		SoakStop("STUCK IN RANGEDATTACK!");
-}
-*/
 state NadeTarget
 {
 	ignores	EnemyChanged,NotifyBump;
@@ -2619,8 +2454,6 @@ state NadeTarget
 			KFPawn(Pawn).bThrowingNade = false;
 	}
 Begin:
-	CheckStateTransition();
-	BotLog("ENTER NadeTarget | Enemy="$GetActorID(Enemy), 'STATE');
 	Target = NearbyAllyNeedsHealing();
 	if (Target != None)
 	{
@@ -2799,6 +2632,8 @@ MoveFound:
 	}
 	for( i=0; i<TempBlockedPaths.Length; ++i )
 		TempBlockedPaths[i].bBlocked = false;
+	if( MoveTarget != None && NavigationPoint(MoveTarget) != None && TotalWeight > 0 && BestDist > 0 )
+		MoveTarget = None;
 	if( MoveTarget!=None )
 	{
 		if(Trace(HL,HN,Pawn.Location,MoveTarget.Location,false)==Enemy) //If the move is directly towards the enemy, try to pick a different one
@@ -2861,8 +2696,6 @@ Ignores EnemyNotVisible,NotifyBump,EnemyAquired,WaitForMover;
 
 	function BeginState()
 	{
-		CheckStateTransition();
-		BotLog("ENTER Retreating | Enemy="$GetActorID(Enemy), 'STATE');
 		SetBotSprinting(true);
 		Pawn.bWantsToCrouch = false;
 		SetTimer(0.1,true);
@@ -2879,7 +2712,6 @@ Ignores EnemyNotVisible,NotifyBump,EnemyAquired,WaitForMover;
 Begin:
 	SwitchToBestWeapon();
 	RetreatTime = Level.TimeSeconds+5.f+FRand()*5.f;
-	BotLog("Retreating Begin | RetreatTime="$RetreatTime@"Enemy="$GetActorID(Enemy), 'STATE');
 	CurrentMov = None;
 	OldMovesCount = 0;
 	while( RetreatTime>Level.TimeSeconds )
@@ -3035,8 +2867,6 @@ ignores SeePlayer, HearNoise;
 	}
 
 Begin:
-	CheckStateTransition();
-	BotLog("ENTER Charging | Enemy="$GetActorID(Enemy)@"Dist="$int(VSize(Pawn.Location-Enemy.Location)), 'STATE');
 	if (Pawn.Physics == PHYS_Falling)
 	{
 		Focus = Enemy;
@@ -3052,7 +2882,6 @@ Moving:
 		FireWeaponAt(Enemy);
 	LastFallbackMoveTime = Level.TimeSeconds;
 	MoveToward(MoveTarget,FaceActor(1),,ShouldStrafeTo(MoveTarget));
-	// Prevent instant-completion loop when already at melee range
 	if (Level.TimeSeconds - LastFallbackMoveTime < 0.15)
 		Sleep(0.15);
 	WhatToDoNext(17);
@@ -3066,9 +2895,9 @@ state Fallback2 extends Fallback
 	function BeginState()
 	{
 		Super.BeginState();
-		CheckStateTransition();
-		BotLog("ENTER Fallback2 | Enemy="$GetActorID(Enemy)@"Goal="$GoalString, 'STATE');
 		SetBotSprinting(true);
+		CurrentMov = None;
+		OldMovesCount = 0;
 	}
 	function bool FireWeaponAt(Actor A)
 	{
@@ -3101,7 +2930,6 @@ Moving:
         MoveToward(MoveTarget, Enemy, GetDesiredOffset(), ShouldStrafeTo(MoveTarget));
         Timer(); // keep firing as we advance
     }
-    // Prevent instant-completion loop when MoveToward finishes immediately
     if (Level.TimeSeconds - LastFallbackMoveTime < 0.15)
         Sleep(0.15);
     WhatToDoNext(14);
@@ -3113,15 +2941,9 @@ Moving:
 function SetAttractionState()
 {
 	if ( Enemy != None )
-	{
-		BotLog("SetAttractionState -> FallBack2 (enemy="$GetActorID(Enemy)$")", 'STATE');
 		GotoState('FallBack2');
-	}
 	else
-	{
-		BotLog("SetAttractionState -> Roaming (no enemy)", 'STATE');
 		GotoState('Roaming');
-	}
 }
 
 state RestFormation
@@ -3274,8 +3096,6 @@ state GoHealSelf
 
 	function BeginState()
 	{
-		CheckStateTransition();
-		BotLog("ENTER GoHealSelf | HP="$GetHealthStr()@"Enemy="$GetActorID(Enemy), 'STATE');
 		StopFiring();
 		HealState = 0;
 		SetTimer(0.25f,true);
@@ -3303,15 +3123,8 @@ state GoHealSelf
 	}
 	exec function SwitchToBestWeapon();
 Begin:
-	PickNextRetMove();
-	if( MoveTarget==None )
-	{
-		if( Enemy != None )
-			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*200.f+Pawn.Location);
-		else
-			MoveTo(VRand()*400.f+Pawn.Location);
-	}
-	else MoveToward(MoveTarget,Enemy,,ShouldStrafeTo(MoveTarget));
+	if( Enemy!=None )
+		MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*200.f+Pawn.Location);
 	Pawn.Acceleration = vect(0,0,0);
 }
 
@@ -3406,7 +3219,6 @@ event SeePlayer(Pawn SeenPlayer)
 {
 	if ( ((ChooseAttackCounter < 2) || (ChooseAttackTime != Level.TimeSeconds)) && Squad.SetEnemy(self,SeenPlayer) )
 	{
-		BotLog("SeePlayer -> new enemy "$GetActorID(SeenPlayer), 'THREAT');
 		WhatToDoNext(3);
 	}
 	if ( Enemy == SeenPlayer )
@@ -3440,7 +3252,6 @@ final function FindBetterTarget()
 	}
 	if( BP!=None && BP!=Enemy )
 	{
-		BotLog("FindBetterTarget: switching "$GetActorID(Enemy)$" -> "$GetActorID(BP)@"Cost="$Best, 'COMBAT', 2);
 		Enemy = BP;
 		Target = BP;
 	}
@@ -3572,8 +3383,6 @@ state WeldAssist
 {
 	function BeginState()
 	{
-		CheckStateTransition();
-		BotLog("ENTER WeldAssist | Door="$TargetDoor@"Mode="$AssistWeldMode, 'STATE');
 		WeldAssistTimer = Level.TimeSeconds+6.f;
 		SetTimer(0,false);
 		StopFiring();
@@ -3651,8 +3460,6 @@ ignores SeePlayer, HearNoise;
 	function BeginState()
 	{
 		Super.BeginState();
-		CheckStateTransition();
-		BotLog("ENTER TacticalMove | Enemy="$GetActorID(Enemy)@"Aggression="$Aggression, 'STATE');
 		SetBotSprinting(true);
 	}
 	function EndState()
@@ -3844,12 +3651,9 @@ state Shopping extends MoveToGoalNoEnemy
 	function EndState()
 	{
 		Super.EndState();
-		BotLog("EXIT Shopping", 'STATE');
 		bTriedRecoverLastDrop = false;
 	}
 Begin:
-	CheckStateTransition();
-	BotLog("ENTER Shopping | ShopPath="$ShoppingPath@"Cash="$int(PlayerReplicationInfo.Score), 'STATE');
 	WaitForLanding();
 	AssignPersonality(); // Gain new personality on new wave.
 	SwitchToBestWeapon();
@@ -3876,7 +3680,6 @@ KeepMoving:
         }
         if (ShoppingAttempts > 10)
         {
-            BotLog("Shopping STUCK (10 attempts, no progress) -> teleport", 'NAV');
             ShoppingAttempts = 0;
             LastShopTime = Level.TimeSeconds + 1.0;
             Pawn.SetLocation(RouteCache[1].Location);
@@ -3948,8 +3751,6 @@ state Roaming
     function BeginState()
     {
         Super.BeginState();
-        CheckStateTransition();
-        BotLog("ENTER Roaming | RouteGoal="$RouteGoal@"MoveTarget="$MoveTarget, 'STATE');
         SetBotSprinting(true);
     }
     // Must be here too — won't inherit from KFInvasionBot.MoveToGoalNoEnemy
@@ -3999,7 +3800,6 @@ state Roaming
 Begin:
 	SwitchToBestWeapon();
 	WaitForLanding();
-	// Prevent tight loop when already at RouteGoal (MoveToward would complete in 0 ticks)
 	if ( RouteGoal != None && Pawn.ReachedDestination(RouteGoal) )
 	{
 		RouteGoal = None;
@@ -4027,7 +3827,6 @@ Begin:
 		RoamingAttempts++;
         if(RoamingAttempts >= 30)
         {
-			BotLog("Roaming STUCK (30 attempts) -> teleport or abandon", 'NAV');
 			RoamingAttempts = 0;
 			if (InventorySpot(RouteGoal) != None)
 			{
@@ -4052,7 +3851,6 @@ Begin:
 	else
 	{
 		// RouteGoal unreachable (e.g. behind sealed door). Pick a fresh random destination.
-		BotLog("Roaming UNREACHABLE "$RouteGoal$" - rerouting", 'NAV');
 		RouteGoal = None;
 		FindRoamDest(); // On success → SetAttractionState → GotoState('Roaming') restarts Begin
 		// Only reach here if FindRoamDest also failed
@@ -4065,7 +3863,6 @@ DoneRoaming:
 		SoakStop("STUCK IN ROAMING!");
 }
 
-// Returns the best nearby heal cloud to drift toward, or None.
 final function KFNadeHealingExplosion FindNearbyHealCloud()
 {
     local KFNadeHealingExplosion Cloud, Best;
@@ -4176,27 +3973,6 @@ function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 	Canvas.DrawText("Perk: "@KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.default.VeterancyName);
 	YPos += YL;
 	Canvas.SetPos(4,YPos);
-
-	if ( BotDebugLevel >= 1 )
-	{
-		Canvas.SetDrawColor(0,255,128);
-		Canvas.DrawText("State: "$GetStateName()$" | Goal: "$GoalString);
-		YPos += YL;
-		Canvas.SetPos(4,YPos);
-		Canvas.DrawText("Enemy: "$GetActorID(Enemy)$" | Weapon: "$GetWeaponID()$" | HP: "$GetHealthStr());
-		YPos += YL;
-		Canvas.SetPos(4,YPos);
-		if ( Enemy != None )
-		{
-			Canvas.DrawText("EnemyDist: "$int(VSize(Pawn.Location-Enemy.Location))$" | Aggression: "$Aggression$" | LastSeen: "$Left(string(Level.TimeSeconds-LastSeenTime),5)$"s ago");
-			YPos += YL;
-			Canvas.SetPos(4,YPos);
-		}
-		Canvas.DrawText("MoveTarget: "$MoveTarget$" | RouteGoal: "$RouteGoal$" | Focus: "$Focus);
-		YPos += YL;
-		Canvas.SetPos(4,YPos);
-		Canvas.SetDrawColor(255,255,255);
-	}
 }
 
 defaultproperties
@@ -4211,5 +3987,4 @@ defaultproperties
 	bAdrenalineEnabled=False
 	PawnClass=Class'KFMod.KFHumanPawn'
 	SmoothTurnSpeed=1.000000
-	BotDebugLevel=0
 }

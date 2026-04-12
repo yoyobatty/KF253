@@ -612,7 +612,6 @@ State MatchInProgress
     function DoWaveEnd()
     {
         local Controller C;
-        local KFTraderDoor TDoor;
         local KFDoorMover KFDM;
 
         // Stop boss music on maps with no default music
@@ -703,6 +702,10 @@ function SetupEndlessDoors()
     foreach DynamicActors(class'KFUseTrigger', T)
     {
         if (T.DoorOwners.Length == 0)
+            continue;
+
+        // Skip elevator doors
+        if (KFElevatorTrigger(T) != None)
             continue;
 
         // Skip doors that are already key-locked or hidden
