@@ -19,7 +19,6 @@ var float NextTargetCheck,NextMedicFireTime,NextNadeTimer,WeldAssistTimer;
 
 var byte HealState,OldMovesCount;
 var float RetreatTime,LastEnemyEncounter,LastChatTime,LastCalloutTime;
-var float LastFailedTacticalTime;
 var float LastFallbackMoveTime;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
@@ -630,29 +629,15 @@ function ExecuteWhatToDoNext()
 			return;
 		if(ThrowAwayBadWeaponForBetterPickup())
 		{
-			GoalString = "FightEnemy - Picking up better weapon";
+			GoalString = "ExecuteWhatToDoNext - Picking up better weapon";
 			return;
 		}
 		if ( Enemy != None )
-		{
 			ChooseAttackMode();
-		}
 		else
 		{
-			WeaponRating = Pawn.Weapon.CurrentRating/2000;
-			if ( FindInventoryGoal(WeaponRating) )
-			{
-				if ( InventorySpot(RouteGoal) == None )
-					GoalString = "fallback - inventory goal is not pickup but "$RouteGoal;
-				else GoalString = "Fallback to better pickup "$InventorySpot(RouteGoal).markedItem$" hidden "$InventorySpot(RouteGoal).markedItem.bHidden;
-				GotoState('FallBack');
-			}
-			else
-			{
-				// No enemy and no ammo to grab. Guess all there is left to do is to chill out
-				GoalString = "WhatToDoNext Wander or Camp at "$Level.TimeSeconds;
-				WanderOrCamp(true);
-			}
+			GoalString = "WhatToDoNext Wander or Camp at "$Level.TimeSeconds;
+			WanderOrCamp(true);
 		}
 	}
 }
@@ -1857,20 +1842,11 @@ function ChooseAttackMode()
     if ( (Squad == None) || (Enemy == None) || (Pawn == None) )
         log("HERE 1 Squad "$Squad$" Enemy "$Enemy$" pawn "$Pawn);
 
-	if ( (Pawn.Health / Pawn.HealthMax) <= 0.25 || VSize(Pawn.Location - Enemy.Location) < 50.f && Pawn.Weapon != none && !Pawn.Weapon.bMeleeWeapon)
-	{
-		DoRetreat();
-		return;
-	}
-
-	if(ThrowAwayBadWeaponForBetterPickup()) // While fighting, throw away bad weapon for better pickup
-		GoalString = "ChooseAttackMode - Throwing away bad weapon for pickup";
-
 	// Try to fallback to a better weapon pickup, but only when it's safe to do so:
 	// not when enemies are visible and close, and not when surrounded.
 	if ( (Pawn.Weapon.CurrentRating < 0.5) && (Pawn.Weapon.default.AIRating < 0.5)
-		&& !ManyEnemiesAround(2, Pawn.Location)
-		&& (!EnemyVisible() || VSize(Pawn.Location - Enemy.Location) > 600.f) )
+		&& !ManyEnemiesAround(3, Pawn.Location)
+		&& (!EnemyVisible() || VSize(Pawn.Location - Enemy.Location) > 500.f) )
 	{
 		if ( FindInventoryGoal(0) )
 		{
@@ -1879,7 +1855,6 @@ function ChooseAttackMode()
 			return;
 		}
 	}
-
     GoalString = "ChooseAttackMode FightEnemy";
     FightEnemy(true, RelativeStrength(Enemy));
 }
@@ -2345,13 +2320,6 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	{
 		GoalString = "Retreat";
 		DoRetreat();
-		//GotoState('FallBack');
-	}
-	if ( Level.TimeSeconds - LastFailedTacticalTime < 1.0 )
-	{
-		GoalString = "Ranged Attack (tactical cooldown)";
-		DoRangedAttackOn(Enemy);
-		return;
 	}
 	GoalString = "Do tactical move";
 	DoTacticalMove();
@@ -2717,11 +2685,11 @@ Moving:
 		PickNextRetMove();
 		if( MoveTarget==None )
 		{
-			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location,FaceActor(1));
+			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location,Enemy);
 			break;
 		}
 		else
-			MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+			MoveToward(MoveTarget,Enemy,GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
 		if( Level.TimeSeconds - LastFallbackMoveTime < 0.15 )
 			Sleep(0.15);
 	}
@@ -3593,7 +3561,6 @@ DoStrafeMove:
 	}
 	if ( bForcedDirection && (Level.TimeSeconds - StartTacticalTime < 0.2) )
 	{
-		LastFailedTacticalTime = Level.TimeSeconds;
 		GoalString = "RangedAttack from failed tactical";
 		DoRangedAttackOn(Enemy);
 	}
