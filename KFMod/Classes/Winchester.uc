@@ -152,45 +152,6 @@ function ServerSetAiming(bool IsAiming)
 	else WinchesterFire(FireMode[0]).NormalSpeed();
 }
 
-function float GetAIRating()
-{
-	local Bot B;
-	local float ZDiff, dist, Result;
-
-	B = Bot(Instigator.Controller);
-	if ( B == None )
-		return AIRating;
-	if ( B.IsShootingObjective() )
-		return AIRating - 0.15;
-	if ( B.Enemy == None )
-	{
-		if ( (B.Target != None) && VSize(B.Target.Location - B.Pawn.Location) > 8000 )
-			return 0.95;
-		return AIRating;
-	}
-
-	if ( B.Stopped() )
-		result = AIRating + 0.1;
-	else
-		result = AIRating - 0.1;
-	if ( Vehicle(B.Enemy) != None )
-		result -= 0.2;
-	ZDiff = Instigator.Location.Z - B.Enemy.Location.Z;
-	if ( ZDiff < -200 )
-		result += 0.1;
-	dist = VSize(B.Enemy.Location - Instigator.Location);
-	if ( dist > 2000 )
-	{
-		if ( !B.EnemyVisible() )
-			result = result - 0.15;
-		return ( FMin(2.0,result + (dist - 2000) * 0.0002) );
-	}
-	if ( !B.EnemyVisible() )
-		return AIRating - 0.1;
-
-	return result;
-}
-
 function bool RecommendRangedAttack()
 {
 	return true;

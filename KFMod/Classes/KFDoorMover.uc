@@ -188,7 +188,7 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 			GoBang(instigatedBy,hitlocation,momentum,damageType);
 	}
 
-	if ( bClosed && damageType == class 'DamTypeWelder'  && !bDisallowWeld && KFElevatorTrigger(MyTrigger)==None)
+	if ( bClosed && damageType == class 'DamTypeWelder' && !bDisallowWeld && KFElevatorTrigger(MyTrigger)==None)
 	{
 		bSealed = true;
 		MyTrigger.AddWeld(damage,bZedHittingDoor,instigatedBy);
@@ -204,6 +204,9 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 function Bump( Actor Other )
 {
 	Super.Bump(Other);
+	// Stop breaking elevator doors damnit
+	if( KFElevatorTrigger(MyTrigger) != None )
+		return;
 	if( (bSealed || bClosed) && KFMonster(Other)!=None ) // Notify zombie to break this door.
 		KFMonsterController(KFMonster(Other).Controller).BreakUpDoor(Self);
 	else if( (bSealed || bClosed) && ExtendedZCollision(Other)!=None && Other.Base != none && KFMonster(Other.Base) != none )

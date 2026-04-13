@@ -262,8 +262,12 @@ function bool TellBotToFollow(Bot B, Controller C)
 		return true;
 	else
 	{
-		B.GoalString = "Can't reach leader";
-		return false;
+		B.GoalString = "Roaming toward leader";
+		if (B.FindRoamDest())
+			return true;
+		B.RouteGoal = None;
+		B.GotoState('Roaming');
+		return true;
 	}
 }
 
@@ -279,6 +283,11 @@ function bool CloseToLeader(Pawn P)
 
     // for certain games, have bots wait for leader for a while
     if ( (P.Base != None) && (SquadLeader.Pawn.Base != None) && (SquadLeader.Pawn.Base != P.Base) )
+        return false;
+
+    if ( Mover(P.Base) != None && Mover(SquadLeader.Pawn.Base) == None )
+        return false;
+    if ( Mover(SquadLeader.Pawn.Base) != None && Mover(P.Base) == None )
         return false;
 
     dist = VSize(P.Location - SquadLeader.Pawn.Location);

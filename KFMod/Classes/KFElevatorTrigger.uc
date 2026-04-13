@@ -79,6 +79,21 @@ function Timer()
 	}
 }
 
+// Check if any player-controlled pawn is riding this elevator
+function bool IsPlayerRiding()
+{
+    local Controller C;
+
+    if (MyElevator == None)
+        return false;
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+    {
+        if (PlayerController(C) != None && C.Pawn != None && C.Pawn.Base == MyElevator)
+            return true;
+    }
+    return false;
+}
+
 function Touch( Actor Other )
 {
     if ( Pawn(Other) != None )
@@ -93,7 +108,12 @@ function Touch( Actor Other )
             Pawn(Other).ClientMessage( Message , 'CriticalEvent');
 
         if ( AIController(Pawn(Other).Controller) != None )
+        {
+            // Don't let AI recall the elevator when a player is riding it
+            if (IsPlayerRiding())
+                return;
             UsedBy(Pawn(Other));
+        }
     }
 }
 

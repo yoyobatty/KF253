@@ -23,7 +23,6 @@ var float LastFailedTacticalTime;
 var float LastFallbackMoveTime;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
-var array<float> TempBlockedPathTimes;
 
 // Internal to state
 var NavigationPoint ShoppingPath;
@@ -50,6 +49,7 @@ var() float SmoothTurnSpeed;
 
 var int ShoppingAttempts, RoamingAttempts;
 var float ShopDist, BestShopDist;
+var bool bWasWaveInProgress;
 
 var KFNadeHealingExplosion NearbyHealCloud;
 
@@ -215,7 +215,16 @@ function bool ShouldGoShopping()
 {
 	// Can't shop if the shop ain't open
 	if( KFGameType(Level.Game).bWaveInProgress )
+	{
+		bWasWaveInProgress = true;
 		return false;
+	}
+	// Wave just ended - reset shop cooldown so bots can shop immediately
+	if (bWasWaveInProgress)
+	{
+		bWasWaveInProgress = false;
+		LastShopTime = Level.TimeSeconds;
+	}
 	// Can't shop if we don't have enough cash
     if( PlayerReplicationInfo.Score < 50 )
         return false;
@@ -373,7 +382,7 @@ final function int FillAllAmmo( Class<Ammunition> AClass, float PriceScale )
         return 0;
 	}
 
-    //Price = class<KFWeaponPickup>(KW.PickupClass).default.AmmoCost * KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetAmmoCostScaling(KFPlayerReplicationInfo(PlayerReplicationInfo), KW.PickupClass) * Mute.BotAmmoCostScale * PriceScale; // Clip price.
+    Price = int(class<KFWeaponPickup>(KW.PickupClass).default.AmmoCost * class'KFPawn'.static.GetCostScaling(Level.Game.GameDifficulty)); // Clip price.
 
     UsedMagCapacity = KW.default.ClipCount;
 
@@ -537,6 +546,12 @@ function EnemyChanged(bool bNewEnemyVisible)
 function ExecuteWhatToDoNext()
 {
 	local float WeaponRating;
+
+	if (PendingMover != None && Pawn.Base == PendingMover && !PendingMover.bInterpolating)
+	{
+		PendingMover = None;
+		bPreparingMove = false;
+	}
 
 	SwitchToBestWeapon();
 	bHasFired = false;
@@ -1065,7 +1080,6 @@ final function Actor GetRandomDest()
 function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 {
 	local int i;
-	local bool bDirectReach;
 
 	if ( !bCheckedReach && ActorReachable(A) )
 	{
@@ -1167,7 +1181,9 @@ function bool FindRoamDest()
 		//log(self$" Find Anchor failed!");
 		return false;
 	}
-	NumRandomJumps = 0;
+	// Only reset jump counter if we actually have a usable anchor
+	if ( Pawn.Anchor != None )
+		NumRandomJumps = 0;
 	GoalString = "Find roam dest "$Level.TimeSeconds;
 
 	// find random NavigationPoint to roam to
@@ -1272,7 +1288,9 @@ function DoTrading()
 		return;
 	//log(PlayerReplicationInfo.PlayerName$" Starting Trading. Cash available: " $PlayerReplicationInfo.Score);
     ShoppingAttempts = 0;
-	LastShopTime = Level.TimeSeconds+60+60*FRand();
+	if (KFEndlessGameType(Level.Game) != None)
+		LastShopTime = Level.TimeSeconds + 120 + 120*FRand();
+	else LastShopTime = Level.TimeSeconds + 60 + 60*FRand();
 	OldCash = PlayerReplicationInfo.Score + 1;
 
 	while ( (PlayerReplicationInfo.Score > 20) && PlayerReplicationInfo.Score!=OldCash && LCount++<10 )
@@ -1361,14 +1379,12 @@ final function class<Pickup> GetBestPurchase()
 			//log(PlayerReplicationInfo.PlayerName@"Considering purchase of: "$ShoppingList[i]$" with desire: "$Des);
 			BestBuy = ShoppingList[i];
 			BestDes = Des;
-
 		}
+		//Have to do this again so it fills up even guns we just have in our inventory
 		AmmoWeapClass = class<KFWeaponPickup>(ShoppingList[i]);
 		WeapAmmo = FindWeaponInInv(AmmoWeapClass);
-		if(WeapAmmo!=none) // already own gun, buy ammo
-		{
+		if(WeapAmmo!=none)
 			FillAllAmmo(WeapAmmo.GetAmmoClass(0),1.f);
-		}
 	}
 	return BestBuy;
 }
@@ -1538,7 +1554,7 @@ function bool ShouldRecoverDroppedWeapon()
 {
     PickupTarget = FindBestDroppedPickupNear();
     // Only try once per shopping session and only if wave is not ending soon, unless really close and approx on the same floor as us
-    if (bTriedRecoverLastDrop || (KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 25 && (PickupTarget != None && ((VSize(Pawn.Location - PickupTarget.Location) > 800) || (Pawn.Location.Z - PickupTarget.Location.Z) > 500))))
+    if (bTriedRecoverLastDrop || (KFEndlessGameType(Level.Game) == None && KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20 && (PickupTarget != None && ((VSize(Pawn.Location - PickupTarget.Location) > 800) || (Pawn.Location.Z - PickupTarget.Location.Z) > 500))))
         return false;
 
     return (PickupTarget != None);
@@ -1563,7 +1579,6 @@ function SetCombatTimer()
 function PawnDied(Pawn P)
 {
 	TempBlockedPaths.Length = 0; // Reset blocked paths list.
-	TempBlockedPathTimes.Length = 0;
 	DoorPaths.Length = 0;
 
     // Clear stale actor/pawn references
@@ -1578,7 +1593,6 @@ function PawnDied(Pawn P)
 
     // Reset timers so bot shops/heals immediately after respawn
     LastShopTime = 0;
-    LastShopCash = 0;
     LastHealTime = 0;
     LastEnemyEncounter = 0;
     bTriedRecoverLastDrop = false;
@@ -1786,13 +1800,8 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 			// debugf;
 			TempBlockedPaths.Insert(0,1);
 			TempBlockedPaths[0] = PreviousNavPath;
-			TempBlockedPathTimes.Insert(0,1);
-			TempBlockedPathTimes[0] = Level.TimeSeconds;
 			if( TempBlockedPaths.Length>4 )
-			{
 				TempBlockedPaths.Length = 4;
-				TempBlockedPathTimes.Length = 4;
-			}
 			PreviousNavPath = None;
 		}
 	}
@@ -2005,22 +2014,10 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 	}
     if (!bClean)
     {
-        if (Stopped())
-        {
-            if ((Pawn.Weapon != None && Pawn.Weapon.bSniping && FRand() < 0.9)
-                || (FiredAmmunition.bInstantHit && FRand() < 0.7))
-            {
-                FireSpot = GetHeadAimLocation(Target);
-                bClean = FastTrace(FireSpot, ProjStart);
-            }
-        }
-        else if (FiredAmmunition.bInstantHit && FRand() < 0.35)
-        {
-            FireSpot = GetHeadAimLocation(Target);
-            bClean = FastTrace(FireSpot, ProjStart);
-        }
+		// try head
+		FireSpot = GetHeadAimLocation(Target);
+		bClean = FastTrace(FireSpot, ProjStart);
     }
-
 	if ( !bClean )
 	{
 		//try middle
@@ -2037,13 +2034,6 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 			FireSpot += 2 * Target.CollisionHeight * HitNormal;
 		}
 		bClean = true;
-	}
-
-	if( !bClean )
-	{
-		// try head
-		FireSpot = GetHeadAimLocation(Target);
- 		bClean = FastTrace(FireSpot, ProjStart);
 	}
 	if ( !bClean && (Target == Enemy) && bEnemyInfoValid )
 	{
@@ -2354,8 +2344,8 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	if( Pawn.Health<=25 && VSize(Pawn.Location - Enemy.Location)<120.f )
 	{
 		GoalString = "Retreat";
-		//DoRetreat();
-		GotoState('FallBack');
+		DoRetreat();
+		//GotoState('FallBack');
 	}
 	if ( Level.TimeSeconds - LastFailedTacticalTime < 1.0 )
 	{
@@ -2723,14 +2713,17 @@ Moving:
 			MoveTo(VRand()*300.f+Pawn.Location,None);
 			break;
 		}
+		LastFallbackMoveTime = Level.TimeSeconds;
 		PickNextRetMove();
 		if( MoveTarget==None )
 		{
-			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location);
+			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location,FaceActor(1));
 			break;
 		}
 		else
-			MoveToward(MoveTarget,Enemy,GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+			MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+		if( Level.TimeSeconds - LastFallbackMoveTime < 0.15 )
+			Sleep(0.15);
 	}
 	WhatToDoNext(44);
 	if ( bSoaking )
@@ -2913,21 +2906,20 @@ Begin:
 
 Moving:
     LastFallbackMoveTime = Level.TimeSeconds;
-    if ( Enemy != None && ( EnemyReallyScary() || ManyEnemiesAround(3, Pawn.Location) ) )
+    if ( Enemy != None && ( EnemyReallyScary() || ManyEnemiesAround(5, Pawn.Location) ) )
     {
         Timer();
         PickNextRetMove();
         if ( MoveTarget == None )
-            MoveTo(Normal(Pawn.Location - Enemy.Location) * 400.f + VRand() * 200.f + Pawn.Location);
+            MoveTo(Normal(Pawn.Location - Enemy.Location) * 400.f + VRand() * 200.f + Pawn.Location,FaceActor(1));
         else
-            MoveToward(MoveTarget, Enemy,, ShouldStrafeTo(MoveTarget)); 
+            MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget)); 
     }
     else
     {
         if ( Pawn.bCanPickupInventory && (InventorySpot(MoveTarget) != None) )
             MoveTarget = InventorySpot(MoveTarget).GetMoveTargetFor(self,0);
-
-        MoveToward(MoveTarget, Enemy, GetDesiredOffset(), ShouldStrafeTo(MoveTarget));
+        MoveToward(MoveTarget,FaceActor(1),GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
         Timer(); // keep firing as we advance
     }
     if (Level.TimeSeconds - LastFallbackMoveTime < 0.15)
@@ -2944,11 +2936,6 @@ function SetAttractionState()
 		GotoState('FallBack2');
 	else
 		GotoState('Roaming');
-}
-
-state RestFormation
-{
-	event MonitoredPawnAlert();
 }
 
 function Startle(Actor Feared);
@@ -3031,7 +3018,7 @@ function bool WeaponFireAgain(float RefireRate, bool bFinishedFire)
 
 		if ( !Pawn.IsFiring() )
 		{
-			if ( (Pawn.Weapon != None && Pawn.Weapon.bMeleeWeapon) || (!NeedToTurn(Target.Location) && LineOfSightTo(Target)) )
+			if ( (Pawn.Weapon != None && Pawn.Weapon.bMeleeWeapon) || !NeedToTurn(Target.Location) )
 			{
 				Focus = Target;
 				bCanFire = true;
@@ -3719,15 +3706,15 @@ Begin:
 	SwitchToBestWeapon();
 
 KeepMoving:
-    // If pickup disappeared or not enough time, just shop
-    if (PickupTarget == None || PickupTarget.bHidden || KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20)
+    // If pickup disappeared or not enough time (skip time check in endless - commit to recovery), just shop
+    if (PickupTarget == None || PickupTarget.bHidden || (KFEndlessGameType(Level.Game) == None && KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20))
 	{	
 		bTriedRecoverLastDrop = true;
         WhatToDoNext(37);
 	}
     if (ActorReachable(PickupTarget))
         MoveToward(PickupTarget, MoveTarget,, true);
-    else if (FindBestPathToward(PickupTarget, true, true))
+    else if (FindBestPathToward(PickupTarget, true, false))
     {
         MoveToward(MoveTarget, MoveTarget,, false);
 		Goto('KeepMoving');
@@ -3803,8 +3790,8 @@ Begin:
 	if ( RouteGoal != None && Pawn.ReachedDestination(RouteGoal) )
 	{
 		RouteGoal = None;
-		FindRoamDest(); // picks fresh random dest → SetAttractionState → restarts Begin on success
-		Sleep(0.5);     // only reached if FindRoamDest failed
+		FindRoamDest();
+		Sleep(0.5);     
 		Goto('DoneRoaming');
 	}
 	if ( Pawn.bCanPickupInventory && (InventorySpot(MoveTarget) != None) && (Squad.PriorityObjective(self) == 0) && (Vehicle(Pawn) == None) )
@@ -3850,10 +3837,20 @@ Begin:
 	}
 	else
 	{
-		// RouteGoal unreachable (e.g. behind sealed door). Pick a fresh random destination.
+		// RouteGoal unreachable, pick a fresh random destination.
 		RouteGoal = None;
-		FindRoamDest(); // On success → SetAttractionState → GotoState('Roaming') restarts Begin
-		// Only reach here if FindRoamDest also failed
+		RoamingAttempts++;
+		if (RoamingAttempts >= 20)
+		{
+			RoamingAttempts = 0;
+			if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
+			{
+				if (Pawn.SetLocation(FindNavNear(Squad.SquadLeader.Pawn).Location))
+					log(self$" Roaming failed (no path), teleporting near squad leader");
+			}
+			WhatToDoNext(157);
+		}
+		FindRoamDest();
 		Sleep(0.5 + FRand());
 	}
 DoneRoaming:
@@ -3897,73 +3894,23 @@ final function KFNadeHealingExplosion FindNearbyHealCloud()
 
 function MoverFinished()
 {
-	if ( PendingMover.MyMarker == None || ProceedWithMove() )
+	if (PendingMover == None)
+		return;
+
+	// For lift movers that have stopped: unconditionally clear.
+	if (LiftCenter(PendingMover.MyMarker) != None && !PendingMover.bInterpolating)
 	{
-		//SendChatMsg("Elevator finished, proceeding.");
+		PendingMover = None;
+		bPreparingMove = false;
+		return;
+	}
+
+	// Default handling for non-lift movers (doors etc.)
+	if (PendingMover.MyMarker == None || PendingMover.MyMarker.ProceedWithMove(Pawn))
+	{
 		PendingMover = None;
 		bPreparingMove = false;
 	}
-}
-
-function bool ProceedWithMove()
-{
-    local LiftExit Start, DestExit;
-    local Mover Lift;
-    local float dist2D;
-    local vector dir;
-
-    if ( Pawn == None || Pawn.Controller == None )
-        return false;
-
-    Lift = PendingMover;
-    if ( Lift == None )
-        return true; // no mover to worry about
-
-    // Already standing on the lift?
-    if ( Pawn.Base == Lift )
-        return true;
-
-    // Anchor is a LiftExit we reached, and lift is at the right keyframe
-    Start = LiftExit(Pawn.Anchor);
-    if ( (Start != None) && (Start.KeyFrame != 255) && Pawn.ReachedDestination(Start) )
-    {
-        if ( Lift.KeyNum == Start.KeyFrame )
-            return true;
-    }
-
-    // MoveTarget is a LiftExit, we’re near the lift: ask exit if it’s reachable
-    DestExit = LiftExit(Pawn.Controller.MoveTarget);
-    if ( DestExit != None )
-    {
-        dir = Lift.Location - Pawn.Location;
-        dir.Z = 0;
-        dist2D = VSize(dir);
-        if ( dist2D < 400.0 )
-            return (Lift.Location.Z < Pawn.Location.Z + Pawn.CollisionHeight);
-    }
-
-    // Fallback: close enough to the mover in 2D & Z
-    dir = Lift.Location - Pawn.Location;
-    dir.Z = 0;
-    dist2D = VSize(dir);
-    if ( (dist2D < 400.0)
-         && (Lift.Location.Z - Lift.CollisionHeight
-             < Pawn.Location.Z - Pawn.CollisionHeight + MAXSTEPHEIGHT)
-         && (Lift.Location.Z - Lift.CollisionHeight
-             > Pawn.Location.Z - Pawn.CollisionHeight - 1200.0) )
-    {
-        return true;
-    }
-
-    // If lift is closed, treat move as allowed
-    if ( Lift.bClosed )
-    {
-        if ( LiftCenter(Lift.MyMarker) != None )
-            Pawn.SetMoveTarget(LiftCenter(Lift.MyMarker).SpecialHandling(Pawn));
-        return true;
-    }
-
-    return false;
 }
 
 function DisplayDebug(Canvas Canvas, out float YL, out float YPos)

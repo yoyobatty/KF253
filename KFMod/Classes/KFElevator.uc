@@ -19,6 +19,10 @@ var byte GoalKeyFrame,NumberOfFloors;
 var bool bElevatorActive;
 var bool bLegacyElevator;
 
+// Staggered AI exit: prevents all bots from rushing the exit at once, well that's the theory atleast
+var bool bUseStaggeredNotify;
+var array<Controller> PendingLiftNotify;
+
 replication
 {
 	reliable if( ROLE==ROLE_AUTHORITY )
@@ -135,11 +139,52 @@ function FinishedOpening()
 	AmbientSound = DummySound;
 }
 
-// Notify AI that mover finished movement
 function FinishNotify()
 {
-	Super.FinishNotify();
+	if (!bUseStaggeredNotify)
+		Super.FinishNotify();
 	bClosed = True;
+}
+
+function CollectWaitingControllers()
+{
+	local Controller C;
+
+	PendingLiftNotify.Length = 0;
+	for (C = Level.ControllerList; C != None; C = C.NextController)
+	{
+		if (C.Pawn != None && C.PendingMover == self && AIController(C) != None)
+			PendingLiftNotify[PendingLiftNotify.Length] = C;
+	}
+}
+
+function NotifyNextController()
+{
+	local Controller C;
+
+	while (PendingLiftNotify.Length > 0)
+	{
+		C = PendingLiftNotify[0];
+		PendingLiftNotify.Remove(0, 1);
+		if (C != None && C.Pawn != None && C.PendingMover == self)
+		{
+			C.MoverFinished();
+			return;
+		}
+	}
+}
+
+function FlushPendingNotify()
+{
+	local Controller C;
+
+	while (PendingLiftNotify.Length > 0)
+	{
+		C = PendingLiftNotify[0];
+		PendingLiftNotify.Remove(0, 1);
+		if (C != None && C.Pawn != None && C.PendingMover == self)
+			C.MoverFinished();
+	}
 }
 
 
@@ -276,6 +321,7 @@ Begin:
 	ToggleDoors(KeyNum,True);
 	Stop;
 Open:
+	FlushPendingNotify();
 	ToggleDoors(KeyNum,False);
 	bClosed = false;
 	TriggerEvent(OpeningEvent, Self, Instigator);
@@ -284,13 +330,27 @@ Open:
 		bDelaying = true;
 		Sleep(DelayTime);
 	}
+	bUseStaggeredNotify = true;
 	DoOpen();
 	FinishInterpolation();
 	FinishedOpening();
-	bElevatorActive = false;
+	CollectWaitingControllers();
+	bUseStaggeredNotify = false;
 	if ( SavedTrigger != None )
 		SavedTrigger.EndEvent();
 	ToggleDoors(GoalKeyFrame,True);
+	// Stagger AI exit: release bots one at a time so they don't jam the exit
+NotifyNext:
+	if (PendingLiftNotify.Length > 0)
+	{
+		NotifyNextController();
+		if (PendingLiftNotify.Length > 0)
+		{
+			Sleep(0.3 + FRand() * 0.2);
+			goto 'NotifyNext';
+		}
+	}
+	bElevatorActive = false;
 	Stop;
 Close:
 	DoClose();

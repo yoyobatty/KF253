@@ -84,7 +84,6 @@ simulated function CloakStalker()
 		Skins[0] = Shader 'KFCharacters.StalkerHairShader';
 		Skins[1] = Shader'KFCharacters.CloakShader';
 
-  
 		// Invisible - no shadow
 		if(PlayerShadow != none)
 			PlayerShadow.bShadowActive = false;
@@ -109,9 +108,8 @@ simulated function UnCloakStalker()
 		bUnlit = false;
 		if( Level.NetMode==NM_DedicatedServer )
 			Return;
-		Skins[1] = Shader'KFCharacters.StalkerHairShader';
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
-
+		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 
 		if (PlayerShadow != none)
 			PlayerShadow.bShadowActive = true;
@@ -128,8 +126,8 @@ function RemoveHead()
 
 	if (!bAshen)
 	{
-		Skins[1] = Shader'KFCharacters.StalkerHairShader';
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
+		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 	}
 }
 
@@ -141,8 +139,8 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 
 	if (!bAshen)
 	{
-		Skins[1] = Shader'KFCharacters.StalkerHairShader';
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
+		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 	}
 }
 
@@ -230,7 +228,7 @@ defaultproperties
      IdleRestAnim="StalkerIdle"
      AmbientSound=Sound'KFPlayerSound.Zombiesbreath'
      Mesh=SkeletalMesh'KFCharacterModels.InfectedWhiteFemale'
-     Skins(0)=Shader'KFCharacters.StalkerHairShader'
-     Skins(1)=Shader'KFCharacters.CloakShader'
+     Skins(0)=Shader'KFCharacters.Zombie4Shader'
+     Skins(1)=FinalBlend'KFCharacters.StalkerHairFB'
      RotationRate=(Yaw=45000,Roll=0)
 }

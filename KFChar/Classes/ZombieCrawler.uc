@@ -53,11 +53,12 @@ simulated function ZombieSpringAnim()
 event Landed(vector HitNormal)
 {
 	bPouncing=false;
-	super.Landed(HitNormal);
+	Super.Landed(HitNormal);
 }
 
 event Bump(actor Other)
 {
+     Super.Bump(Other);
 	// TODO: is there a better way
 	if(bPouncing && KFHumanPawn(Other)!=none )
 	{

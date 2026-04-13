@@ -75,6 +75,25 @@ function PostBeginPlay()
 	ItsSet=false;
 }
 
+function MoverFinished()
+{
+	if (PendingMover == None)
+		return;
+
+	if (LiftCenter(PendingMover.MyMarker) != None && !PendingMover.bInterpolating)
+	{
+		PendingMover = None;
+		bPreparingMove = false;
+		return;
+	}
+
+	if (PendingMover.MyMarker == None || PendingMover.MyMarker.ProceedWithMove(Pawn))
+	{
+		PendingMover = None;
+		bPreparingMove = false;
+	}
+}
+
 event SeePlayer(Pawn SeenPlayer)
 {
 	if ( ((ChooseAttackCounter < 2) || (ChooseAttackTime != Level.TimeSeconds)) && SetEnemy(SeenPlayer) )
@@ -1075,6 +1094,12 @@ state KnockDown
 
 function ExecuteWhatToDoNext()
 {
+	if (PendingMover != None && Pawn != None && Pawn.Base == PendingMover && !PendingMover.bInterpolating)
+	{
+		PendingMover = None;
+		bPreparingMove = false;
+	}
+
 	bHasFired = false;
 	GoalString = "WhatToDoNext at "$Level.TimeSeconds;
 	if ( Pawn == None )
@@ -1303,76 +1328,6 @@ function Trigger( actor Other, pawn EventInstigator )
 {
 	if( SetEnemy(EventInstigator,True) )
 		WhatToDoNext(54);
-}
-
-function MoverFinished()
-{
-	if ( ProceedWithMove() )
-	{
-		//SendChatMsg("Elevator finished, proceeding.");
-		PendingMover = None;
-		bPreparingMove = false;
-	}
-}
-
-function bool ProceedWithMove()
-{
-    local LiftExit Start, DestExit;
-    local Mover Lift;
-    local float dist2D;
-    local vector dir;
-
-    if ( Pawn == None || Pawn.Controller == None )
-        return false;
-
-    Lift = PendingMover;
-    if ( Lift == None )
-        return true; // no mover to worry about
-
-    // Already standing on the lift?
-    if ( Pawn.Base == Lift )
-        return true;
-
-    // Anchor is a LiftExit we reached, and lift is at the right keyframe
-    Start = LiftExit(Pawn.Anchor);
-    if ( (Start != None) && (Start.KeyFrame != 255) && Pawn.ReachedDestination(Start) )
-    {
-        if ( Lift.KeyNum == Start.KeyFrame )
-            return true;
-    }
-
-    // MoveTarget is a LiftExit, we’re near the lift: ask exit if it’s reachable
-    DestExit = LiftExit(Pawn.Controller.MoveTarget);
-    if ( DestExit != None )
-    {
-        dir = Lift.Location - Pawn.Location;
-        dir.Z = 0;
-        dist2D = VSize(dir);
-        if ( dist2D < 400.0 )
-            return (Lift.Location.Z < Pawn.Location.Z + Pawn.CollisionHeight);
-    }
-
-    // Fallback: close enough to the mover in 2D & Z
-    dir = Lift.Location - Pawn.Location;
-    dir.Z = 0;
-    dist2D = VSize(dir);
-    if ( (dist2D < 400.0)
-         && (Lift.Location.Z - Lift.CollisionHeight
-             < Pawn.Location.Z - Pawn.CollisionHeight + MAXSTEPHEIGHT)
-         && (Lift.Location.Z - Lift.CollisionHeight
-             > Pawn.Location.Z - Pawn.CollisionHeight - 1200.0) )
-    {
-        return true;
-    }
-
-    // If lift is closed, treat move as allowed (doors should be open by now)
-    if ( Lift.bClosed )
-	{
-		Pawn.SetMoveTarget(LiftCenter(Lift.MyMarker).SpecialHandling(Pawn));
-        return true;
-	}
-
-    return false;
 }
 
 defaultproperties

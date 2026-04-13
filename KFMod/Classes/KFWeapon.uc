@@ -1619,14 +1619,9 @@ function bool CanAttack(Actor Other)
                 projStart, true);
     }
 
-    if ( (HitActor == None) || (HitActor == Other) )
+    if ( (HitActor == None) || (HitActor == Other) || Pawn(HitActor) != None )
         return true;
-    if ( Pawn(HitActor) == None )
-        return !HitActor.BlocksShotAt(Other); 
-    if ( (Pawn(HitActor).Controller == None) || !Instigator.Controller.SameTeamAs(Pawn(HitActor).Controller) )
-        return true;
-
-    return false;
+    return !HitActor.BlocksShotAt(Other);
 }
 
 simulated function GetAmmoCount(out float MaxAmmoPrimary, out float CurAmmoPrimary)
