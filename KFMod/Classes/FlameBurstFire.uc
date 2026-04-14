@@ -11,18 +11,24 @@ simulated function bool AllowFire()
 {
 	if(KFWeapon(Weapon).bIsReloading)
 		return false;
+	if(KFPawn(Instigator).SecondaryItem!=none)
+		return false;
+	if(KFPawn(Instigator).bThrowingNade)
+		return false;
 	if(KFWeapon(Weapon).ClipLeft < 1)
 	{
 		if(Level.TimeSeconds - LastClickTime > FireRate)
 		{
+            LastClickTime = Level.TimeSeconds;
 			Weapon.PlayOwnedSound(NoAmmoSound, SLOT_Interact, TransientSoundVolume,,,, false);
-			LastClickTime = Level.TimeSeconds;
 			if(Weapon.HasAnim(EmptyAnim))
 				weapon.PlayAnim(EmptyAnim, EmptyAnimRate, 0.0);
 		}
+		if( AIController(Instigator.Controller)!=None )
+			KFWeapon(Weapon).ReloadMeNow();
 		return false;
 	}
-	LastClickTime = Level.TimeSeconds;
+	
 	return Super.AllowFire();
 }
 

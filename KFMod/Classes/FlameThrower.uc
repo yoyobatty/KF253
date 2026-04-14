@@ -5,6 +5,7 @@ class FlameThrower extends KFWeapon;
 
 // Cool Nozzle Illumination (WARNING -  Artist at play) :P
 
+
 simulated function WeaponTick(float dt)
 {
 	Super.WeaponTick(dt);
@@ -25,17 +26,6 @@ function float SuggestAttackStyle()
 	return -1.0;
 }
 
-/* 
-function float GetAIRating()
-{
-	if (KFPawn(Instigator).GetVeteran().default.VeterancyName == "Firebug")
-	{
-    MinimumFireRange = 0; //fuck you bot for thinking you wanna shoot far away
-	}	
-  MinimumFireRange = default.MinimumFireRange;
-	return AIRating;
-}
-*/
 defaultproperties
 {
 	ClipCount=100

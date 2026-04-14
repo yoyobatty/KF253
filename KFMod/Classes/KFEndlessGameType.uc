@@ -708,8 +708,8 @@ function SetupEndlessDoors()
         if (KFElevatorTrigger(T) != None)
             continue;
 
-        // Skip doors that are already key-locked or hidden
-        if (T.DoorOwners[0].bKeyLocked || T.DoorOwners[0].bHidden)
+        // Skip doors that are already key-locked, hidden or too far to trigger
+        if (T.DoorOwners[0].bKeyLocked || T.DoorOwners[0].bHidden || T.DoorOwners[0].bTriggerTooFar || T.DoorOwners[0].MyTrigger==None)
             continue;
 
         Roll = Rand(100);

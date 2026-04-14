@@ -1040,7 +1040,7 @@ final function Actor GetRandomDest()
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1077,7 +1077,7 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1105,7 +1105,7 @@ function bool FindBestPathTo( vector Dest )
 		TempBlockedPaths[i].bBlocked = true;
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
-		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar) && !DoorPaths[i].Door.bDoorIsDead )
+		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
 			DoorPaths[i].Path.CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
 		else DoorPaths.Remove(i--,1); // Remove opened paths.
 	}
@@ -1790,7 +1790,7 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 			PreviousNavPath = None;
 		}
 	}
-	if( CurrentPath!=None && KFDoorMover(Wall)!=None && KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld )
+	if( CurrentPath!=None && KFDoorMover(Wall)!=None && ((KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld) || KFDoorMover(Wall).bTriggerTooFar || KFDoorMover(Wall).MyTrigger == None) )
 	{
 		AddSealPath(CurrentPath,KFDoorMover(Wall));
 		MoveTarget = Pawn.Anchor;
@@ -2374,8 +2374,9 @@ state MoveToGoalNoEnemy
 			UnWeldFromRoom(KFDoorMover(Wall));
 			if(FRand() < 0.5)
 				SendChatMsg("That door is sealed! Let me try to open it.");
+			return true;
 		}
-		return Super.NotifyHitWall(HitNormal,Wall);
+		return Global.NotifyHitWall(HitNormal,Wall);
 	}
     function float RateWeapon(Weapon W)
     {
@@ -3713,9 +3714,11 @@ state Roaming
         if( KFDoorMover(Wall)!=None && KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld )
         {
             UnWeldFromRoom(KFDoorMover(Wall));
-            SendChatMsg("That door is sealed! Let me try to open it.");
+			if(FRand() < 0.5)
+            	SendChatMsg("That door is sealed! Let me try to open it.");
+			return true; //prevents adding global notifyhitwall which blocks the path
         }
-        return Super.NotifyHitWall(HitNormal,Wall);
+        return Global.NotifyHitWall(HitNormal,Wall);
     }
 	function float RateWeapon(Weapon W) // Run faster pls
 	{

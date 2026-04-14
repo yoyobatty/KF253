@@ -132,10 +132,8 @@ function bool PlayersCanSeeMe()
     {
         if (C.bIsPlayer && C.Pawn != None)
         {
-            if (VSize(C.Pawn.Location - Location) < 600 && (C.Pawn.Location.Z - Location.Z) < 200) 
-                return true;  // Close enough, ignore LOS, gives bots/players a chance to get the item if they are near it on similar z levels
             if (VSize(C.Pawn.Location - Location) < 2000 && FastTrace(C.Pawn.Location))
-                return true;  // Further away, require LOS
+                return true;  
         }
     }
     return false;

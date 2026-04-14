@@ -266,7 +266,7 @@ function Tick( float Delta )
 	{
 		PathUdpTimer = Level.TimeSeconds+0.5;
 		DoorPathNode.ExtraCost = InitExtraCost;
-		if( bTriggerTooFar && bClosed && !bHidden )
+		if( (MyTrigger==None || bTriggerTooFar) && bClosed && !bHidden )
 			DoorPathNode.ExtraCost = 9999999;
 		else if( bSealed && MyTrigger != none)
 		{
