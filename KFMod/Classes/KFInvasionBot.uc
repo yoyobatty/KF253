@@ -49,6 +49,7 @@ var() float SmoothTurnSpeed;
 var int ShoppingAttempts, RoamingAttempts;
 var float ShopDist, BestShopDist;
 var bool bWasWaveInProgress;
+var float NextPickupSearchTime;
 
 var KFNadeHealingExplosion NearbyHealCloud;
 
@@ -2030,6 +2031,15 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 		}
 	}
 
+	// Splash self-protection: if FireSpot would self-splash, push it away from bot
+	if ( Pawn.Weapon != None && Pawn.Weapon.SplashDamage()
+		&& VSize(FireSpot - Pawn.Location) < Pawn.Weapon.GetDamageRadius() )
+	{
+		FireSpot = Pawn.Location + Normal(FireSpot - Pawn.Location) * (Pawn.Weapon.GetDamageRadius() + 50);
+		if ( !FastTrace(FireSpot, ProjStart) )
+			bCanFire = false;
+	}
+
 	// adjust for toss distance
 	if ( FiredAmmunition.bTossed )
 		FireDir = AdjustToss(projspeed,ProjStart,FireSpot-(vect(0,0,1)*TossedZ),true);
@@ -2993,14 +3003,7 @@ function bool WeaponFireAgain(float RefireRate, bool bFinishedFire)
 				bCanFire = true;
 				bStoppedFiring = false;
 				if (Pawn.Weapon != None)
-				{
 					bFireSuccess = Pawn.Weapon.BotFire(bFinishedFire);
-// #if DEBUG_MODE
-					// DEBUGF(PlayerReplicationInfo.PlayerName@bFireSuccess);
-					// if( !bFireSuccess )
-						// DEBUGF("Ready:"@Pawn.Weapon.ReadyToFire(0)@(Pawn.Weapon.ClientState==WS_ReadyToFire)@Pawn.Weapon.GetFireMode(0).AllowFire());
-// #endif
-				}
 				else
 				{
 					Pawn.ChooseFireAt(Target);
@@ -3019,14 +3022,7 @@ function bool WeaponFireAgain(float RefireRate, bool bFinishedFire)
 			{
 				bStoppedFiring = false;
 				if (Pawn.Weapon != None)
-				{
 					bFireSuccess = Pawn.Weapon.BotFire(bFinishedFire);
-// #if DEBUG_MODE
-					// DEBUGF(PlayerReplicationInfo.PlayerName@bFireSuccess@"1");
-					// if( !bFireSuccess )
-						// DEBUGF("Ready:"@Pawn.Weapon.ReadyToFire(0)@(Pawn.Weapon.ClientState==WS_ReadyToFire)@Pawn.Weapon.GetFireMode(0).AllowFire());
-// #endif
-				}
 				else
 				{
 					Pawn.ChooseFireAt(Target);
@@ -3215,20 +3211,18 @@ final function FindBetterTarget()
 
 function bool NeedWeapon()
 {
-	local inventory Inv;
+	local Inventory Inv;
 
-	if ( Pawn.Weapon.AIRating > 0.5 )
-		return ( !Pawn.Weapon.HasAmmo() );
-
-	// see if have some other good weapon, currently not in use
 	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
-		if ( (Weapon(Inv) != None) && (Weapon(Inv).AIRating > 0.5) && Weapon(Inv).HasAmmo() )
-			return false;
-
-	if(KFHumanPawn(Pawn)!=None && KFHumanPawn(Pawn).CanCarry(0)) //Do we have some space to pick up a weapon?
-		return true;
-
-	return true;
+	{
+		if ( Weapon(Inv) != None && Weapon(Inv).AIRating > 0.5 )
+		{
+			if ( Weapon(Inv).HasAmmo() )
+				return false; // Have a good weapon with ammo — we're fine
+			return true; // Have a good weapon but no ammo — need to find some
+		}
+	}
+	return (KFHumanPawn(Pawn) != None && KFHumanPawn(Pawn).CanCarry(0));
 }
 
 // Check if should help player weld a door.

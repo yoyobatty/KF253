@@ -88,7 +88,7 @@ Begin:
 	if( HidingSpots==None )
 		ZombieBoss(Pawn).BeginHealing();
 	// Stuck/timeout check
-	if( Level.TimeSeconds - RetreatStartTime > 15 )
+	if( Level.TimeSeconds - RetreatStartTime > 20 )
 	{
 		HidingSpots = None;
 		ZombieBoss(Pawn).BeginHealing();
@@ -99,7 +99,7 @@ Begin:
 			RetreatStuckCount++;
 		else RetreatStuckCount = 0;
 		LastRetreatDist = VSize(Pawn.Location - HidingSpots.Location);
-		if( RetreatStuckCount >= 6 )
+		if( RetreatStuckCount >= 30 )
 		{
 			HidingSpots = None;
 			ZombieBoss(Pawn).BeginHealing();
@@ -185,7 +185,7 @@ Begin:
 	if( HidingSpots==None )
 		ZombieBoss(Pawn).BeginHealing();
 	// Stuck/timeout check
-	if( Level.TimeSeconds - RetreatStartTime > 15 )
+	if( Level.TimeSeconds - RetreatStartTime > 20 )
 	{
 		HidingSpots = None;
 		ZombieBoss(Pawn).BeginHealing();
@@ -196,7 +196,7 @@ Begin:
 			RetreatStuckCount++;
 		else RetreatStuckCount = 0;
 		LastRetreatDist = VSize(Pawn.Location - HidingSpots.Location);
-		if( RetreatStuckCount >= 6 )
+		if( RetreatStuckCount >= 30 )
 		{
 			HidingSpots = None;
 			ZombieBoss(Pawn).BeginHealing();

@@ -44,6 +44,7 @@ function bool AssignSquadResponsibility(Bot B)
 		// suggest inventory hunt
 		if ( B.FindInventoryGoal(0) )
 		{
+			B.GoalString = "Hunting for inventory, no objectives or enemies";
 			B.SetAttractionState();
 			return true;
 		}
@@ -65,12 +66,13 @@ function bool CheckSquadObjectives(Bot B)
 		return true;
 
 	//Get a weapon if no scary enemies, no enemies around and I need a weapon
-	if ( !KFInvasionBot(B).EnemyReallyScary() && !KFInvasionBot(B).ManyEnemiesAround(5, B.Pawn.Location) && B.NeedWeapon() && B.FindInventoryGoal(0) )
+	if ( KFInvasionBot(B) != None && KFInvasionBot(B).NextPickupSearchTime < Level.TimeSeconds
+		&& !KFInvasionBot(B).EnemyReallyScary() && !KFInvasionBot(B).ManyEnemiesAround(5, B.Pawn.Location)
+		&& B.NeedWeapon() && B.FindInventoryGoal(0) )
 	{
 		B.GoalString = "Need weapon or ammo";
+		KFInvasionBot(B).NextPickupSearchTime = Level.TimeSeconds + 8.0;
 		B.SetAttractionState();
-		//Set me as the squad leader so others follow me to get weapons too
-		//SquadLeader = B;
 		return true;
 	}		
 
@@ -195,7 +197,7 @@ function bool TellBotToFollow(Bot B, Controller C)
 	local GameObjective O, Best;
 	local float NewDist, BestDist;
 
-	if ( (C == None) || C.bDeleteMe )
+	if ( (C == None) || (C.Pawn == None) )
 	{
 		PickNewLeader();
 		C = SquadLeader;
@@ -243,8 +245,12 @@ function bool TellBotToFollow(Bot B, Controller C)
 				return true;
 			}
 
-			if ( B.FindInventoryGoal(0.0004) )
+			if ( KFInvasionBot(B) != None && KFInvasionBot(B).NextPickupSearchTime < Level.TimeSeconds
+				&& !KFInvasionBot(B).EnemyReallyScary() && !KFInvasionBot(B).ManyEnemiesAround(5, B.Pawn.Location)
+				&& B.FindInventoryGoal(0.0004) )
 			{
+				B.GoalString = "Going for inventory near leader";
+				KFInvasionBot(B).NextPickupSearchTime = Level.TimeSeconds + 12.0;
 				B.SetAttractionState();
 				return true;
 			}

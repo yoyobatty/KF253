@@ -693,7 +693,6 @@ State MatchInProgress
     }
 }
 
-// Randomize door states at match start: some open, some welded shut
 function SetupEndlessDoors()
 {
     local KFUseTrigger T;

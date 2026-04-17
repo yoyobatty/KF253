@@ -1540,6 +1540,11 @@ simulated function int MaxAmmo(int mode)
 		return AmmoClass[mode].Default.MaxAmmo*GetAmmoMulti();
 	return 0;
 }
+// Don't consider secondary fire modes, it fucks up the bots
+simulated function bool HasAmmo()
+{
+	return (Ammo[0] != None && FireMode[0] != None && Ammo[0].AmmoAmount >= FireMode[0].AmmoPerFire);
+}
 simulated function bool AmmoMaxed(int mode)
 {
 	if ( AmmoClass[mode] == None )
