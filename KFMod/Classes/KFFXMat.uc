@@ -18,9 +18,9 @@ static function ConstantColor Tone(out array<Object> Made, LevelInfo L, int V, i
 	return K;
 }
 
-// Two things put together. What: 0 one times the other (Gain 2 or 4: that many times over), 1 the second less the
-// first, 2 the second as it is. For 1 and 2 the result is as solid as the first.
-static function Combiner Mix(out array<Object> Made, LevelInfo L, Material A, Material B, int What, optional int Gain)
+// Two things put together. What: 0 one times the other, 1 the second less the first, 2 the second as it is.
+// For 1 and 2 the result is as solid as the first.
+static function Combiner Mix(out array<Object> Made, LevelInfo L, Material A, Material B, int What)
 {
 	local Combiner M;
 
@@ -29,8 +29,8 @@ static function Combiner Mix(out array<Object> Made, LevelInfo L, Material A, Ma
 	M.Material2 = B;
 	M.Mask = None;
 	M.InvertMask = false;
-	M.Modulate2X = (Gain == 2);
-	M.Modulate4X = (Gain == 4);
+	M.Modulate2X = false;
+	M.Modulate4X = false;
 	M.CombineOperation = CO_Multiply;
 	M.AlphaOperation = AO_Use_Mask;
 	if (What == 1)
@@ -66,8 +66,7 @@ static function Combiner Fade(out array<Object> Made, LevelInfo L, Material A, M
 }
 
 // A material as it is drawn. How: 0 over what is there by how solid it is, 1 added to what is there by how solid
-// it is, 2 not at all (a picture drawn so is only made ready), 3 what is there times it and doubled, 4 what is
-// there less this share of itself, 5 in place of what is there.
+// it is, 2 not at all (a picture drawn so is only made ready).
 static function FinalBlend Paint(out array<Object> Made, LevelInfo L, Material M, int How)
 {
 	local FinalBlend B;
@@ -78,12 +77,6 @@ static function FinalBlend Paint(out array<Object> Made, LevelInfo L, Material M
 		B.FrameBufferBlending = FB_Brighten;
 	else if (How == 2)
 		B.FrameBufferBlending = FB_Invisible;
-	else if (How == 3)
-		B.FrameBufferBlending = FB_Modulate;
-	else if (How == 4)
-		B.FrameBufferBlending = FB_Darken;
-	else if (How == 5)
-		B.FrameBufferBlending = FB_Overwrite;
 	else
 		B.FrameBufferBlending = FB_AlphaBlend;
 	B.ZWrite = false;
@@ -121,8 +114,6 @@ static function FreeAll(out array<Object> Made, LevelInfo L)
 			Combiner(Made[i]).Material1 = None;
 			Combiner(Made[i]).Material2 = None;
 			Combiner(Made[i]).Mask = None;
-			Combiner(Made[i]).Modulate2X = false;
-			Combiner(Made[i]).Modulate4X = false;
 			Combiner(Made[i]).CombineOperation = CO_Multiply;
 			Combiner(Made[i]).AlphaOperation = AO_Use_Mask;
 		}

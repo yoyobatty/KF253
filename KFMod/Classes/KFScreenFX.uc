@@ -1,7 +1,6 @@
 //=============================================================================
-// KFScreenFX - bloom, the hit blur and the eye getting used to the light, all
-// made from the frame itself (KFFrameTap). One for the player at this machine,
-// in each level.
+// KFScreenFX - bloom and the hit blur, both made from the frame itself
+// (KFFrameTap). One for the player at this machine, in each level.
 //
 // Bloom: what is bright in the frame (the frame less a grey, doubled) is
 // blurred three times over, each at half the size of the one before, and the
@@ -12,20 +11,6 @@
 // player was hit, so the view goes out of focus and comes back. The steps
 // are in the screen's own shape and a set share of its size, so the blur is
 // as strong across as down and the same on a small screen as on a large one.
-//
-// The eye: in a dark place the view slowly brightens, in a bright one it
-// dims, and a strong cast of one colour fades toward plain. A script cannot
-// read a picture, so it is all done in pictures. The frame is brought down to
-// 64 pixels across, that to 8, that to 4: the middle of the last is the
-// average of the middle half of the view, as a camera meters. There are two
-// of the 4-pixel pictures, and twenty times a second one is drawn from the
-// other with the new measure laid over it at a small share: that is what the
-// eye is used to. The whole view is then multiplied by a grey less that,
-// doubled. Red, green and blue are measured each for itself. With the eye on,
-// what counts as bright enough to glow goes by what the eye is used to: less
-// in the dark (a dim lamp glows in a cellar), more in the light. The glow and
-// the hit blur are multiplied with the view, so coming out of the dark, when
-// the view is too bright for a moment, the glow flares with it.
 //
 // Camera overlays lay both on, after the level is drawn and before the weapon
 // and the HUD. The pictures are made when the first overlay asks for them, so
@@ -40,7 +25,7 @@
 class KFScreenFX extends Actor
 	config(User);
 
-var() globalconfig bool		bBloom, bHitBlur, bEyeAdapt;
+var() globalconfig bool		bBloom, bHitBlur;
 var() globalconfig float	BloomGain;			// how strong the glow is
 var() globalconfig int		BloomCut;			// what is darker than this, of 255, does not glow
 var() float					BlurPerDamage;		// blur from each point of damage (1 is all of it)
@@ -49,12 +34,6 @@ var() float					BlurSmallHit;		// ...unless it took less health than this: then 
 var() float					BlurShrink;			// how many of the screen's pixels, each way, one pixel of the first soft picture stands for
 var() float					BlurHold;			// seconds a hit's blur stays before it starts to clear
 var() float					BlurFadeTime;		// seconds for a full blur to clear
-var() float					AdaptQuick;			// seconds the eye takes to get most of the way used to a change of light
-var() float					AdaptEvery;			// seconds between its measurings
-var() float					AdaptRest;			// the view is multiplied by twice this, less what the eye is used to
-var() float					AdaptPull;			// what the eye is used to: the view's average, this many times over
-var() float					AdaptFloor;			// the least the view is ever dimmed to
-var() bool					bBloomFixed;		// what glows goes by BloomCut alone, eye or no eye
 
 var KFFrameTap				Tap;
 var PlayerController		PC;
@@ -71,18 +50,6 @@ var CameraOverlay			GlowReady, GlowLay;
 var array<Object>			BloomMade;
 var bool					bBloomMade;
 
-// The eye
-var ScriptedTexture			Meter, Small, Used[2], Pane, CutPic;
-var array<Material>			MeterLayer, SmallLayer;
-var Material				MeterSeen, SmallSeen, UsedSeen[2], CutSeen, Old[2], NewOver, PaneBase, PaneLess, CutBase, CutMore, BrightEye;
-var Combiner				PaneMix, CutMix;
-var ConstantColor			NewShare, RestTone, LessTone, CutFloor, CutShare, EyeWeight;
-var CameraOverlay			EyeReady, EyeLay;
-var array<Object>			EyeMade;
-var bool					bEyeMade, bEyeFresh;
-var int						Cur;				// which of the two the eye is used to now
-var float					EyeLast;
-
 // Hit blur
 var ScriptedTexture			Soft[3];
 var Material				FrameLayer[16], SoftLayer1[9], SoftLayer2[9], SoftSeen[3];
@@ -95,20 +62,18 @@ var int						SoftForX, SoftForY;	// the screen size and the shrink the soft pict
 var float					SoftForShrink;
 
 // From the settings menu: kept, and taken up by the game in progress
-static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, bool bNewEyeAdapt)
+static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur)
 {
 	local KFScreenFX FX;
 
 	default.bBloom = bNewBloom;
 	default.bHitBlur = bNewHitBlur;
-	default.bEyeAdapt = bNewEyeAdapt;
 	StaticSaveConfig();
 	FX = class'KFFrameTap'.static.GetFX(P);
 	if (FX != None)
 	{
 		FX.bBloom = bNewBloom;
 		FX.bHitBlur = bNewHitBlur;
-		FX.bEyeAdapt = bNewEyeAdapt;
 		if (!bNewHitBlur)
 			FX.BlurLevel = 0;
 	}
@@ -143,7 +108,7 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 		BlurLevel = FMax(0.0, BlurLevel - DT / BlurFadeTime);
 
 	// (until the frame's picture has been found once the blur stays on, effect or no effect: see KFFrameTap)
-	if (!bBloom && !bEyeAdapt && BlurLevel <= 0.0 && Tap.Frame != None)
+	if (!bBloom && BlurLevel <= 0.0 && Tap.Frame != None)
 	{
 		Hang(Want);
 		Tap.Unfit(PC);
@@ -160,15 +125,6 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 				class'KFFXMat'.static.Tone(MendMade, Level, 255, 255), Tap.Frame, 2), 0));
 		Want[Want.Length] = Mend;
 	}
-	if (bEyeAdapt)
-	{
-		if (!bEyeMade)
-			BuildEye();
-		LookEye();
-		Want[Want.Length] = EyeReady;
-	}
-	else if (bEyeMade)
-		DropEye();
 	if (BlurLevel > 0.0)
 	{
 		if (bSoftMade && (SoftForX != C.SizeX || SoftForY != C.SizeY || SoftForShrink != BlurShrink))
@@ -199,9 +155,6 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 		Blur3.Revision++;
 		Glow.Revision++;
 	}
-	// (last: the glow and the blur are multiplied with the view)
-	if (bEyeAdapt)
-		Want[Want.Length] = EyeLay;
 	Hang(Want);
 }
 
@@ -282,135 +235,6 @@ simulated function BuildBloom()
 	bBloomMade = true;
 }
 
-// The eye's pictures and what is made of them
-simulated function BuildEye()
-{
-	local Combiner M;
-	local int i;
-
-	Meter = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 64, 64);
-	Small = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 8, 8);
-	Used[0] = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 4, 4);
-	Used[1] = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 4, 4);
-	Pane = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 4, 4);
-	CutPic = class'KFFXMat'.static.Sheet(EyeMade, Level, self, 4, 4);
-	MeterLayer.Length = 16;
-	SmallLayer.Length = 16;
-	for (i = 0; i < 16; i++)
-	{
-		MeterLayer[i] = Ghost(EyeMade, Tap.Frame, 255 / (i + 1));
-		SmallLayer[i] = Ghost(EyeMade, Meter, 255 / (i + 1));
-	}
-	MeterSeen = class'KFFXMat'.static.Paint(EyeMade, Level, Meter, 2);
-	SmallSeen = class'KFFXMat'.static.Paint(EyeMade, Level, Small, 2);
-	CutSeen = class'KFFXMat'.static.Paint(EyeMade, Level, CutPic, 2);
-	for (i = 0; i < 2; i++)
-	{
-		UsedSeen[i] = class'KFFXMat'.static.Paint(EyeMade, Level, Used[i], 2);
-		Old[i] = class'KFFXMat'.static.Paint(EyeMade, Level, Used[i], 5);
-	}
-	// the new measure, some times over, laid on the old as solid as NewShare says
-	NewShare = class'KFFXMat'.static.Tone(EyeMade, Level, 0, 255);
-	M = class'KFFXMat'.static.Mix(EyeMade, Level, NewShare, Small, 0, 4);
-	M.AlphaOperation = AO_Use_Alpha_From_Material1;
-	NewOver = class'KFFXMat'.static.Paint(EyeMade, Level, M, 0);
-	// what the view is multiplied by: the rest grey, which then loses its share of what the eye is used to
-	RestTone = class'KFFXMat'.static.Tone(EyeMade, Level, 0, 255);
-	PaneBase = class'KFFXMat'.static.Paint(EyeMade, Level,
-		class'KFFXMat'.static.Mix(EyeMade, Level, RestTone, Texture'Engine.WhiteTexture', 0), 5);
-	LessTone = class'KFFXMat'.static.Tone(EyeMade, Level, 0, 255);
-	PaneMix = class'KFFXMat'.static.Mix(EyeMade, Level, LessTone, Used[0], 0);
-	PaneLess = class'KFFXMat'.static.Paint(EyeMade, Level, PaneMix, 4);
-	// what bloom takes from the frame by the eye: a grey, and what the eye is used to added to it
-	CutFloor = class'KFFXMat'.static.Tone(EyeMade, Level, 0, 255);
-	CutBase = class'KFFXMat'.static.Paint(EyeMade, Level,
-		class'KFFXMat'.static.Mix(EyeMade, Level, CutFloor, Texture'Engine.WhiteTexture', 0), 5);
-	CutShare = class'KFFXMat'.static.Tone(EyeMade, Level, 0, 255);
-	CutMix = class'KFFXMat'.static.Mix(EyeMade, Level, CutShare, Used[0], 0);
-	CutMore = class'KFFXMat'.static.Paint(EyeMade, Level, CutMix, 1);
-	// the frame less that, a share of it (as BrightTap, with a picture for the grey)
-	EyeWeight = class'KFFXMat'.static.Tone(EyeMade, Level, 255, 128);
-	BrightEye = class'KFFXMat'.static.Paint(EyeMade, Level, class'KFFXMat'.static.Mix(EyeMade, Level,
-		class'KFFXMat'.static.Mix(EyeMade, Level, EyeWeight, CutPic, 2), Tap.Frame, 1), 1);
-
-	EyeReady = Overlay(class'KFFXMat'.static.Paint(EyeMade, Level, Pane, 2));
-	EyeLay = Overlay(class'KFFXMat'.static.Paint(EyeMade, Level, Pane, 3));
-	bEyeMade = true;
-	bEyeFresh = true;
-}
-
-// The eye's pictures are given back (it was switched off)
-simulated function DropEye()
-{
-	local array<CameraOverlay> Nothing;
-
-	Hang(Nothing);
-	Shut(EyeReady);
-	Shut(EyeLay);
-	EyeReady = None;
-	EyeLay = None;
-	BrightEye = None;
-	PaneMix = None;
-	CutMix = None;
-	MeterLayer.Length = 0;
-	SmallLayer.Length = 0;
-	class'KFFXMat'.static.FreeAll(EyeMade, Level);
-	bEyeMade = false;
-}
-
-// The greys the eye works with, from the figures (which may be changed while the game runs)
-simulated function SetEye()
-{
-	local float Rest, Take;
-	local int V;
-
-	// The view is multiplied by twice (Rest less what the eye is used to). What the eye is used to is the view's
-	// average AdaptPull times over, and never more than Take: that leaves the view at AdaptFloor.
-	Rest = FClamp(AdaptRest, 0.5, 1.0);
-	Take = FClamp(Rest - 0.5 * AdaptFloor, 0.3, Rest);
-	// (kept as a share of Take, so that it stops at white where the floor is: the average, Pull / Take times over)
-	V = Clamp(int(255.0 * AdaptPull / Take / 4.0), 0, 255);
-	NewShare.Color.R = V;
-	NewShare.Color.G = V;
-	NewShare.Color.B = V;
-	V = Clamp(int(255.0 * Rest), 0, 255);
-	RestTone.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-	V = Clamp(int(255.0 * Take / Rest), 0, 255);
-	LessTone.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-	// Bloom by the eye. The frame bloom reads has not been multiplied yet, so its grey is the one that does the
-	// same after the multiplying: with the eye at rest it comes to about BloomCut, less in the dark, more in the light.
-	V = Clamp(int(float(BloomCut) * 0.25 / Rest), 0, 255);
-	CutFloor.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-	V = Clamp(int(255.0 * Take), 0, 255);
-	CutShare.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-}
-
-// Before each frame: every so often the view is measured again and the eye moves a little toward it
-simulated function LookEye()
-{
-	local float Real;
-
-	Real = (Level.TimeSeconds - EyeLast) / FMax(0.1, Level.TimeDilation);
-	if (!bEyeFresh && Real < AdaptEvery && Real >= 0.0)
-		return;
-	SetEye();
-	// (the first time, the eye is used to what it sees at once)
-	if (bEyeFresh)
-		NewShare.Color.A = 255;
-	else
-		NewShare.Color.A = Clamp(int(255.0 * (1.0 - Exp(-Real / FMax(0.05, AdaptQuick)))), 6, 255);
-	bEyeFresh = false;
-	EyeLast = Level.TimeSeconds;
-	Cur = 1 - Cur;
-	PaneMix.Material2 = Used[Cur];
-	CutMix.Material2 = Used[Cur];
-	Meter.Revision++;
-	Small.Revision++;
-	Used[Cur].Revision++;
-	CutPic.Revision++;
-	Pane.Revision++;
-}
-
 // How strong the glow is, shared out among the three blurs, and the grey that is taken from the frame
 simulated function SetGain()
 {
@@ -471,11 +295,11 @@ simulated function BuildSoft(int ScreenX, int ScreenY)
 	}
 	// (drawn one after another as the whole, a half, a third... of what is there, pictures come out averaged)
 	for (i = 0; i < 16; i++)
-		FrameLayer[i] = Ghost(SoftMade, Tap.Frame, 255 / (i + 1));
+		FrameLayer[i] = Ghost(Tap.Frame, 255 / (i + 1));
 	for (i = 0; i < 9; i++)
 	{
-		SoftLayer1[i] = Ghost(SoftMade, Soft[0], 255 / (i + 1));
-		SoftLayer2[i] = Ghost(SoftMade, Soft[1], 255 / (i + 1));
+		SoftLayer1[i] = Ghost(Soft[0], 255 / (i + 1));
+		SoftLayer2[i] = Ghost(Soft[1], 255 / (i + 1));
 	}
 	for (i = 0; i < 3; i++)
 	{
@@ -489,10 +313,10 @@ simulated function BuildSoft(int ScreenX, int ScreenY)
 }
 
 // A picture drawn over what is there, as solid as Alpha (of 255) says
-simulated function Material Ghost(out array<Object> Made, Material Pic, int Alpha)
+simulated function Material Ghost(Material Pic, int Alpha)
 {
-	return class'KFFXMat'.static.Paint(Made, Level,
-		class'KFFXMat'.static.Mix(Made, Level, class'KFFXMat'.static.Tone(Made, Level, 255, Alpha), Pic, 2), 0);
+	return class'KFFXMat'.static.Paint(SoftMade, Level,
+		class'KFFXMat'.static.Mix(SoftMade, Level, class'KFFXMat'.static.Tone(SoftMade, Level, 255, Alpha), Pic, 2), 0);
 }
 
 simulated function Destroyed()
@@ -508,10 +332,6 @@ simulated function Destroyed()
 	Shut(SoftReady);
 	for (i = 0; i < 3; i++)
 		Shut(SoftLay[i]);
-	Shut(EyeReady);
-	Shut(EyeLay);
-	class'KFFXMat'.static.FreeAll(EyeMade, Level);
-	bEyeMade = false;
 	class'KFFXMat'.static.FreeAll(MendMade, Level);
 	class'KFFXMat'.static.FreeAll(BloomMade, Level);
 	class'KFFXMat'.static.FreeAll(SoftMade, Level);
@@ -536,19 +356,6 @@ simulated function Smear(ScriptedTexture Into, int Size, Material Ninth, int Fro
 	for (i = -1; i <= 1; i++)
 		for (j = -1; j <= 1; j++)
 			Into.DrawTile(Step * i, Step * j, Size, Size, 0, 0, From, From, Ninth, W);
-}
-
-// A picture brought down to Size across: each pixel the average of sixteen places in the part of the bigger picture
-// that falls on it
-simulated function Shrink(ScriptedTexture Into, int Size, float FromW, float FromH, out array<Material> Layers)
-{
-	local Color W;
-	local int i;
-
-	W = class'Canvas'.static.MakeColor(255, 255, 255, 255);
-	for (i = 0; i < 16; i++)
-		Into.DrawTile(0, 0, Size, Size, Spread(i & 3, 4) * FromW / float(Size), Spread(i / 4, 4) * FromH / float(Size),
-			FromW, FromH, Layers[i], W);
 }
 
 // The same with nothing lost: nine of a picture averaged. The first covers the whole of it.
@@ -578,7 +385,6 @@ simulated event RenderTexture(ScriptedTexture Tex)
 	local Color W;
 	local float FW, FH;
 	local int i, j, n;
-	local Material M;
 
 	if (Tap == None || Tap.Frame == None)
 		return;
@@ -603,42 +409,9 @@ simulated event RenderTexture(ScriptedTexture Tex)
 	else if (Tex == Bright)
 	{
 		CutTone.Color.A = 512 / (n * n);
-		M = BrightTap;
-		// (by the eye's measure if the eye is on: its pictures for this frame were made before this was asked for)
-		if (bEyeAdapt && bEyeMade && !bBloomFixed)
-		{
-			EyeWeight.Color.A = 512 / (n * n);
-			M = BrightEye;
-		}
 		for (i = 0; i < n; i++)
 			for (j = 0; j < n; j++)
-				Tex.DrawTile(0, 0, 512, 512, Spread(i, n) * FW / 512.0, Spread(j, n) * FH / 512.0, FW, FH, M, W);
-	}
-	else if (bEyeMade && Tex == Pane)
-	{
-		// (a thing drawn unseen is made ready: each of these is made from the one before)
-		Tex.DrawTile(0, 0, 1, 1, 0, 0, 1, 1, MeterSeen, W);
-		Tex.DrawTile(0, 0, 1, 1, 0, 0, 1, 1, SmallSeen, W);
-		Tex.DrawTile(0, 0, 1, 1, 0, 0, 1, 1, UsedSeen[Cur], W);
-		Tex.DrawTile(0, 0, 1, 1, 0, 0, 1, 1, CutSeen, W);
-		// the rest grey, less its share of the middle of what the eye is used to
-		Tex.DrawTile(0, 0, 4, 4, 0, 0, 1, 1, PaneBase, W);
-		Tex.DrawTile(0, 0, 4, 4, 2.0, 2.0, 0.01, 0.01, PaneLess, W);
-	}
-	else if (bEyeMade && Tex == CutPic)
-	{
-		Tex.DrawTile(0, 0, 4, 4, 0, 0, 1, 1, CutBase, W);
-		Tex.DrawTile(0, 0, 4, 4, 2.0, 2.0, 0.01, 0.01, CutMore, W);
-	}
-	else if (bEyeMade && Tex == Meter)
-		Shrink(Tex, 64, FW, FH, MeterLayer);
-	else if (bEyeMade && Tex == Small)
-		Shrink(Tex, 8, 64.0, 64.0, SmallLayer);
-	else if (bEyeMade && Tex == Used[Cur])
-	{
-		// what the eye was used to, and the new measure over it
-		Tex.DrawTile(0, 0, 4, 4, 0, 0, 4, 4, Old[1 - Cur], W);
-		Tex.DrawTile(0, 0, 4, 4, 0, 0, 8, 8, NewOver, W);
+				Tex.DrawTile(0, 0, 512, 512, Spread(i, n) * FW / 512.0, Spread(j, n) * FH / 512.0, FW, FH, BrightTap, W);
 	}
 	else if (Tex == Blur1)
 		Smear(Tex, 256, Tap1, 512, 1.2);
@@ -668,7 +441,6 @@ defaultproperties
 {
      bBloom=True
      bHitBlur=True
-     bEyeAdapt=True
      BloomGain=0.600000
      BloomCut=110
      BlurPerDamage=0.025000
@@ -677,11 +449,6 @@ defaultproperties
      BlurShrink=3.750000
      BlurHold=0.200000
      BlurFadeTime=1.400000
-     AdaptQuick=1.100000
-     AdaptEvery=0.050000
-     AdaptRest=0.902000
-     AdaptPull=1.600000
-     AdaptFloor=0.500000
      DrawType=DT_None
      bHidden=True
      RemoteRole=ROLE_None
