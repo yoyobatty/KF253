@@ -5,6 +5,12 @@ var bool bBeamEnabled;
 var DualiesAttachment brother;
 var () Mesh BrotherMesh;
 
+replication
+{
+	reliable if( bNetDirty && (Role==ROLE_Authority) )
+		brother, bIsOffHand;
+}
+
 var Actor TacShine;
 
 var  Effects TacShineCorona;
@@ -67,7 +73,7 @@ simulated function vector GetTracerStart()
     else
 	if ( brother != none && brother.mMuzFlash3rd != None && !bMyFlashTurn)
 		return  brother.mMuzFlash3rd.Location;
-	//   return Location;
+	return Location;
 }
 
 simulated function UpdateTacBeam( float Dist )

@@ -15,10 +15,11 @@ function DoFireEffect()
         PlayerController(Instigator.Controller).ReceiveLocalizedMessage(class'BoomStickKillMessage');
 }
 
-                                   
+
 defaultproperties
 {
     ProjPerFire=100 //Uh oh lol
     Spread=3500.000000
     ProjectileClass=Class'KFMod.BoomStickSuperBullet'
+    SlugClass=Class'KFMod.BoomStickSuperSlug'
 }

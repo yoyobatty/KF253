@@ -1,4 +1,5 @@
-class KFCinematicGame extends KFSPGameType;
+class KFCinematicGame extends KFSPGameType
+     CacheExempt;
 
 defaultproperties
 {

@@ -54,6 +54,15 @@ var localized string KFSurvivalDescText[KFPROPNUM];
 
 var() globalconfig float WaveStartSpawnPeriod;
 var() globalconfig int StartingCash,MinRespawnCash;  // Cash amount Players start with to buy equipment
+
+struct CashRecord
+{
+	var string ID;
+	var PlayerController PC;
+	var float Cash;
+	var bool bSaved;
+};
+var array<CashRecord> CashRecords;
 var() globalconfig bool bNoBots,bUseEndGameBoss;
 var() globalconfig bool bNoLateJoiners;
 var() globalconfig string EndGameBossClass,BossBattleSong;
@@ -93,6 +102,12 @@ var bool bBotsAdded;
 var config bool bEnemyHealthBars;
 
 var ZombieVolume LastZVol;
+var KFFloorMap FloorMap;
+var array< class<Monster> > RecycledSquad;
+var array<float> FloorSpawnCheckTime;
+var array<byte> FloorSpawnOK;
+var float OffFloorSince;
+var() float OffFloorSpawnDelay;
 
 // Per-volume spawn cooldown: prevents the same volume being chosen repeatedly.
 // SpawnCooldownPenalty is subtracted immediately after a spawn and decays linearly
@@ -108,6 +123,9 @@ var float LastStatsSaveTime;
 
 var() globalconfig array<string> VeterancySkills,AvailableChars;
 var array< Class<KFVeterancyTypes> > LoadedSkills;
+var string NextBotName;   // the lobby's pick for the bot about to be added
+var KFSwarm Swarm;                         // how the specimens of a wave work as a crowd; None when switched off
+var() globalconfig float SwarmStrength;    // 0 off, 1 full
 var() globalconfig bool bPerksEnabled;
 var() globalconfig int MaxZombiesOnce;
 
@@ -141,13 +159,73 @@ function bool BecomeSpectator(PlayerController P)
 {
 	if( P.PlayerReplicationInfo==None || P.PlayerReplicationInfo.bOnlySpectator )
 		Return False; // Already are spectator.
-	Return Super.BecomeSpectator(P);
+	if( !Super.BecomeSpectator(P) )
+		Return False;
+	SaveCashRecord(P);
+	Return True;
+}
+function int FindCashRecord( PlayerController P )
+{
+	local int i;
+
+	if( P==None )
+		Return -1;
+	For( i=0; i<CashRecords.Length; i++ )
+	{
+		if( CashRecords[i].PC==P )
+			Return i;
+	}
+	Return -1;
+}
+function RegisterCashRecord( PlayerController P )
+{
+	local string ID;
+	local int i;
+
+	if( P==None || P.PlayerReplicationInfo==None || FindCashRecord(P)>=0 )
+		Return;
+	ID = P.GetPlayerIDHash();
+	if( ID=="" )
+		Return;
+	For( i=0; i<CashRecords.Length; i++ )
+	{
+		if( CashRecords[i].PC==None && CashRecords[i].ID==ID )
+		{
+			CashRecords[i].PC = P;
+			if( CashRecords[i].bSaved && !P.PlayerReplicationInfo.bOnlySpectator )
+				P.PlayerReplicationInfo.Score = CashRecords[i].Cash;
+			Return;
+		}
+	}
+	i = CashRecords.Length;
+	CashRecords.Length = i+1;
+	CashRecords[i].ID = ID;
+	CashRecords[i].PC = P;
+}
+function SaveCashRecord( PlayerController P )
+{
+	local int i;
+
+	i = FindCashRecord(P);
+	if( i<0 || P.PlayerReplicationInfo==None )
+		Return;
+	CashRecords[i].Cash = P.PlayerReplicationInfo.Score;
+	CashRecords[i].bSaved = true;
+}
+function float GetRejoinCash( PlayerController P )
+{
+	local int i;
+
+	i = FindCashRecord(P);
+	if( i>=0 && CashRecords[i].bSaved )
+		Return CashRecords[i].Cash;
+	Return StartingCash;
 }
 function bool AllowBecomeActivePlayer(PlayerController P)
 {
 	if( P.PlayerReplicationInfo==None || !P.PlayerReplicationInfo.bOnlySpectator )
 		Return False; // Already are active player.
-	if ( !GameReplicationInfo.bMatchHasBegun || (NumPlayers >= MaxPlayers) || P.IsInState('GameEnded') || P.IsInState('RoundEnded') )
+	if ( !GameReplicationInfo.bMatchHasBegun || (CountRealPlayers() >= MaxPlayers) || P.IsInState('GameEnded') || P.IsInState('RoundEnded') )
 	{
 		P.ReceiveLocalizedMessage(GameMessageClass, 13);
 		return false;
@@ -157,7 +235,7 @@ function bool AllowBecomeActivePlayer(PlayerController P)
 		RemainingBots--;
 		bPlayerBecameActive = true;
 	}
-	P.PlayerReplicationInfo.Score = StartingCash;
+	P.PlayerReplicationInfo.Score = GetRejoinCash(P);
 	return true;
 }
 
@@ -206,10 +284,19 @@ function SaveAllStats() // Ultimate lag function.
 function Logout(Controller Exiting)
 {
     local KFPlayerController PC;
+    local int i;
     
     PC = KFPlayerController(Exiting);
     if (PC != None && PC.MyActiveStats != None)
         PC.MyActiveStats.SaveConfig();
+
+    i = FindCashRecord(PlayerController(Exiting));
+    if (i >= 0)
+    {
+        if (Exiting.PlayerReplicationInfo != None && !Exiting.PlayerReplicationInfo.bOnlySpectator)
+            SaveCashRecord(PlayerController(Exiting));
+        CashRecords[i].PC = None;
+    }
     
     Super.Logout(Exiting);
 }
@@ -288,6 +375,9 @@ event InitGame( string Options, out string Error )
 	Super.InitGame(Options, Error);
 
 	FixAFewActors();
+
+	FloorMap = Spawn(class'KFFloorMap');
+	FloorMap.Build();
 
 	bTradingDoorsOpen = True;
 
@@ -403,6 +493,7 @@ PlayInfo.AddSetting(default.GameGroup,"InitialCountDownValue", GetDisplayText("I
 	PlayInfo.AddSetting(default.RulesGroup,"bNoLateJoiners", GetDisplayText("bNoLateJoiners"),	1, 0, "Check",				,				,True,True);
 	PlayInfo.AddSetting(default.RulesGroup, "MaxZombiesOnce","Max Specimens",0,1,"Text","4;6:600");
 	PlayInfo.AddSetting(default.RulesGroup,"bPerksEnabled","Perks enabled",0,1,"Check");
+	PlayInfo.AddSetting(default.RulesGroup,"SwarmStrength","Swarm strength",0,1,"Text","4;0.0:1.0");
 	PlayInfo.AddSetting(default.RulesGroup,"bUseEndGameBoss","Use EndGame Boss",0,1,"Check");
 	
 	PlayInfo.AddSetting(default.ServerGroup, "LobbyTimeOut",			GetDisplayText("LobbyTimeOut"),			0, 1, "Text",		"3;0:120",				,True,True);
@@ -476,6 +567,7 @@ static event string GetDescriptionText(string PropName)
 		case "LobbyTimeOut":				return default.KFSurvivalDescText[5];
 		case "MaxZombiesOnce":				return "Maximum zombies at once on playtime, note that high values will LAG when theres a lot of them.";
 		case "bPerksEnabled":				return "Have special player veterancy skills enabled.";
+		case "SwarmStrength":				return "How much the specimens work as a swarm: making straight for the players, spreading over them and closing round them. 0 is off, 1 is full.";
 		case "InitialCountDownValue":			return default.KFSurvivalDescText[7];
 		case "bUseEndGameBoss":				return "Spawn the final boss on end of final wave.";
 		case "TmpWavesInf":					return "Configure the KF waves.";
@@ -673,7 +765,8 @@ function InitializeBot(Bot NewBot, UnrealTeamInfo BotTeam, RosterEntry Chosen)
 	else ChangeName(NewBot, Chosen.PlayerName, false);
 	BotTeam.SetBotOrders(NewBot,Chosen);
 
-	S = Class'KFGameType'.Static.GetValidCharacter("");
+	// (the lobby's pick, when there is one: the team's roster takes no notice of a name)
+	S = Class'KFGameType'.Static.GetValidCharacter(NextBotName);
 	NewBot.PlayerReplicationInfo.SetCharacterName(S);
 	log("Initialized bot: "$NewBot.PlayerReplicationInfo.PlayerName);
 	xBot(NewBot).PawnSetupRecord = class'xUtil'.static.FindPlayerRecord(S);
@@ -843,6 +936,8 @@ function bool AddBot(optional string botName)
 	if (bNoBots)
 		return false;
 
+	if( botName=="" )
+		botName = NextBotName;
 	NewBot = SpawnBot(botName);
 
 	if ( NewBot == None )
@@ -1025,7 +1120,9 @@ State MatchInProgress
 
 			if((NumPlayers + NumBots) < MaxPlayers && KFGameReplicationInfo(GameReplicationInfo).PendingBots > 0 )
 			{
+				NextBotName = KFGameReplicationInfo(GameReplicationInfo).LastBotName[Min(KFGameReplicationInfo(GameReplicationInfo).PendingBots,5)];
 				AddBots(1);
+				NextBotName = "";
 				KFGameReplicationInfo(GameReplicationInfo).PendingBots --;
 			}
 
@@ -1480,6 +1577,7 @@ static function array<string> GetAllLoadHints(optional bool bThisClassOnly)
 {
 	return default.KFHints;
 }
+
 function PlayStartupMessage()
 {
 }
@@ -1494,6 +1592,7 @@ event PostLogin( PlayerController NewPlayer )
 	NewPlayer.PlayerReplicationInfo.PlayerID = CurrentID++;
 
 	Super.PostLogin(NewPlayer);
+	RegisterCashRecord(NewPlayer);
 
 	if (UnrealPlayer(NewPlayer) != None)
 		UnrealPlayer(NewPlayer).ClientReceiveLoginMenu(LoginMenuClass, bAlwaysShowLoginMenu);
@@ -1535,8 +1634,26 @@ function Killed( Controller Killer, Controller Killed, Pawn KilledPawn, class<Da
 		KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = TotalMaxMonsters+NumMonsters-1;
 		if( KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters<0 )
 			KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = 0;
+		LastKilledMonsterClass = class<Monster>(KilledPawn.class);
 	}
 	Super.Killed(Killer,Killed,KilledPawn,DamageType);
+}
+
+// The swarm follows its setting from wave to wave
+function UpdateSwarm()
+{
+	if( SwarmStrength>0 && Swarm==None )
+		Swarm = Spawn(class'KFSwarm');
+	else if( SwarmStrength<=0 && Swarm!=None )
+	{
+		Swarm.Destroy();
+		Swarm = None;
+	}
+	if( Swarm!=None )
+	{
+		Swarm.Strength = FMin(SwarmStrength,1.0);
+		Swarm.SetDifficulty(GameDifficulty);
+	}
 }
 
 function SetupWave()
@@ -1544,6 +1661,7 @@ function SetupWave()
 	local int i,j;
 	local float NewMaxMonsters;
 
+	UpdateSwarm();
 	if ( WaveNum > 15 )
 	{
 		SetupRandomWave();
@@ -1605,7 +1723,12 @@ function bool AddSquad()
 
 	if(LastZVol==none || NextSpawnSquad.length==0)
 	{
-		BuildNextSquad();
+		if( RecycledSquad.Length>0 )
+		{
+			NextSpawnSquad = RecycledSquad;
+			RecycledSquad.Length = 0;
+		}
+		else BuildNextSquad();
 		LastZVol = FindSpawningVolume();
 		if(LastZVol!=None)
 			lastSpawnLocation = LastZVol.location;
@@ -1623,7 +1746,9 @@ function bool AddSquad()
 		NumMonsters += numspawned; //NextSpawnSquad.Length;
 		WaveMonsters+= numspawned; //NextSpawnSquad.Length;
 
-		NextSpawnSquad.Remove(0, numSpawned);
+		RemoveSpawnedFromSquad();
+		if( numspawned==0 )
+			TryToSpawnInAnotherVolume();
 
 		return true;
 	}
@@ -1659,7 +1784,7 @@ function bool AddBoss()
 		NumMonsters += numspawned; //NextSpawnSquad.Length;
 		WaveMonsters+= numspawned; //NextSpawnSquad.Length;
 
-		NextSpawnSquad.Remove(0, numSpawned);
+		RemoveSpawnedFromSquad();
 
 		return true;
 	}
@@ -1668,6 +1793,56 @@ function bool AddBoss()
 		TryToSpawnInAnotherVolume();
         return false;
 	}
+}
+
+function RemoveSpawnedFromSquad()
+{
+	local int i;
+
+	for( i=NextSpawnSquad.Length-1; i>=0; i-- )
+	{
+		if( LastZVol.SpawnedMember(i) )
+			NextSpawnSquad.Remove(i,1);
+	}
+}
+
+function bool CanSpawnOnFloor(byte Floor)
+{
+	local ZombieVolume z;
+	local int i;
+
+	if( FloorMap==None )
+		return false;
+	i = Min(Floor,FloorMap.NumFloors);
+	if( FloorSpawnCheckTime.Length<=i )
+	{
+		FloorSpawnCheckTime.Length = i+1;
+		FloorSpawnOK.Length = i+1;
+	}
+	else if( Level.TimeSeconds-FloorSpawnCheckTime[i]<1.f )
+		return (FloorSpawnOK[i]!=0);
+	FloorSpawnCheckTime[i] = Level.TimeSeconds;
+	FloorSpawnOK[i] = 0;
+	ForEach AllActors(class'ZombieVolume',z)
+	{
+		if( !FloorMap.OtherFloor(Floor,z.GetFloor(FloorMap)) && RateZombieVolume(z)>1 )
+		{
+			FloorSpawnOK[i] = 1;
+			break;
+		}
+	}
+	return (FloorSpawnOK[i]!=0);
+}
+
+function bool RecycleMonster(KFMonster M)
+{
+	if( !bWaveInProgress || bWaveBossInProgress || bGameEnded || M.bBoss )
+		return false;
+	RecycledSquad[RecycledSquad.Length] = M.Class;
+	TotalMaxMonsters++;
+	LastZVol = None;
+	M.KilledBy(M);
+	return true;
 }
 
 // If spawning in the previous zombie volume failed, try another
@@ -1687,6 +1862,9 @@ function ZombieVolume FindSpawningVolume()
 
 	ForEach AllActors(class'ZombieVolume',z)
 	{
+		if( KFZombieSpawnVolume(z)!=None && !KFZombieSpawnVolume(z).bActive )
+			Continue;
+
 		tScore = RateZombieVolume(z);
 		if(tScore > BestScore)
 		{
@@ -1694,6 +1872,16 @@ function ZombieVolume FindSpawningVolume()
 			BestZ = z;
 		}
 	}
+	if( BestZ!=None && BestScore==1 )
+	{
+		if( OffFloorSince==0 )
+			OffFloorSince = Level.TimeSeconds;
+		if( Level.TimeSeconds-OffFloorSince<OffFloorSpawnDelay )
+			return None;
+		OffFloorSince = Level.TimeSeconds;
+	}
+	else if( BestZ!=None )
+		OffFloorSince = 0;
 	return BestZ;
 }
 
@@ -1706,6 +1894,8 @@ function float RateZombieVolume(ZombieVolume z)
 
 	if ( z.PhysicsVolume.bWaterVolume )
 		return -10000000;
+	else if ( KFZombieSpawnVolume(z) != None && !KFZombieSpawnVolume(z).bActive )
+		return -100;
 	else if( !z.CanSpawnInHere(NextSpawnSquad) )
 	{
 		//log(z$" couldn't spawn here");
@@ -1769,6 +1959,8 @@ function float RateZombieVolume(ZombieVolume z)
 
 	if (PlayerCount > 0)
 		Score += PlayerScore / PlayerCount;
+	if( FloorMap!=None && !FloorMap.FloorOccupied(z.GetFloor(FloorMap)) )
+		return 1;
 	// if we get here, return at least a 5
 	//log(z$" returned score" $Score);
 	return FMax(Score,5);
@@ -1907,7 +2099,7 @@ event PlayerController Login(string Portal, string Options, out string Error)
 		NewPlayer.Destroy();
 		return None;
 	}
-	else if ( !NewPlayer.PlayerReplicationInfo.bOnlySpectator && NumPlayers > MaxPlayers && !NewPlayer.PlayerReplicationInfo.bAdmin )
+	else if ( !NewPlayer.PlayerReplicationInfo.bOnlySpectator && CountRealPlayers() > MaxPlayers && !NewPlayer.PlayerReplicationInfo.bAdmin )
 	{
 		Error = GameMessageClass.Default.MaxedOutMessage;
 		NewPlayer.Destroy();
@@ -1956,7 +2148,19 @@ function bool AtCapacity(bool bSpectator)
 		return ( (NumSpectators >= MaxSpectators)
 				&& ((Level.NetMode != NM_ListenServer) || (NumPlayers > 0)) );
 	else
-		return ( (MaxPlayers>0) && (NumPlayers>=MaxPlayers) );
+		return ( (MaxPlayers>0) && (CountRealPlayers()>=MaxPlayers) );
+}
+function int CountRealPlayers()
+{
+	local Controller C;
+	local int n;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( PlayerController(C)!=None && C.PlayerReplicationInfo!=None && !C.PlayerReplicationInfo.bOnlySpectator )
+			n++;
+	}
+	Return n;
 }
 
 // Mod this to include the choices made in the GUIClassMenu
@@ -2194,9 +2398,11 @@ static function string GetLoadingHint( PlayerController PC, string MapName, Colo
 
 defaultproperties
 {
+     OffFloorSpawnDelay=8.000000
      SpawnCooldownPenalty=8000000.0
      SpawnCooldownTime=30.0
      SpawnSizeMultiplier=20.0
+     SwarmStrength=1.000000
      MonsterClasses(0)=(MClassName="KFChar.ZombieClot",Mid="A")
      MonsterClasses(1)=(MClassName="KFChar.ZombieCrawler",Mid="B")
      MonsterClasses(2)=(MClassName="KFChar.ZombieGoreFast",Mid="C")

@@ -5,7 +5,8 @@ class MachinePFire extends SingleFire;
 
 function DoTrace(Vector Start, Rotator Dir)
 {
-     DamageType = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.static.GetMAC10DamageType();
+     if ( KFPawn(Instigator) != None )
+          DamageType = KFPawn(Instigator).GetVeteran().static.GetMAC10DamageType();
      Super.DoTrace(Start,Dir);
 }
 

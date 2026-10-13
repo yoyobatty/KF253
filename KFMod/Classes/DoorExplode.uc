@@ -24,8 +24,11 @@ simulated static function Boom( Actor Other, rotator SpawnRot )
 {
 	local int i;
 	local vector DGVec, Perpendicular,X,Y,Z;
+	local Actor Dust;
 
-	Other.Spawn(Default.DoorDustClass,,,Other.Location+vect(0,0,1) * Default.ShrapnelAreaHeight * 0.5, Other.Rotation );
+	Dust = Other.Spawn(Default.DoorDustClass,,,Other.Location+vect(0,0,1) * Default.ShrapnelAreaHeight * 0.5, Other.Rotation );
+	if( Dust!=None )
+		Dust.RemoteRole = ROLE_None;
 
 	Perpendicular = Normal(vector(Other.rotation) cross vect(0, 0, 1));
 	GetAxes(Other.Rotation,X,Y,Z);

@@ -2,56 +2,15 @@
 
 class KnifeFire extends KFMeleeFire;
 
-var() array<name> FireAnims;
-var name LastFireAnim;
-
-
-function PlayFiring()
-{
-     Super.PlayFiring();
-}
-
-simulated event ModeDoFire()
-{
-     local int AnimToPlay;
-
-     if(FireAnims.length > 0)
-     {
-
-         AnimToPlay = rand(FireAnims.length);
-
-          LastFireAnim = FireAnim;
-          FireAnim = FireAnims[AnimToPlay];
-     
-          damageConst = default.damageConst;
-          DamagedelayMin = default.DamagedelayMin;
-
-           //  3  and 2 should never play consecutively. it looks screwey.
-            //  3 should never repeat directly after itself. buffer with 1
-
-          if(LastFireAnim == FireAnims[1] && FireAnim == FireAnims[2] ||
-           LastFireAnim == FireAnims[2] && FireAnim == FireAnims[1] ||
-            LastFireAnim == FireAnims[2] && FireAnim == FireAnims[2])
-            FireAnim = FireAnims[0];
-
-           if(FireAnim == FireAnims[2])
-            {
-              damageConst *= 1.5;
-              DamagedelayMin = 0.25;
-            }
-            
-     }
-
-  Super(KFMeleeFire).ModeDoFire();
-
-}
-
+// A slash to the left, one back to the right, then a harder backhand
 defaultproperties
 {
      WeaponRange=65.000000
-     FireAnims(0)="Fire"
-     FireAnims(1)="Fire2"
-     FireAnims(2)="fire3"
+     bSweep=True
+     Swings(0)=(Anim="Fire",From=0.020000,To=0.110000,StartYaw=30.000000,StartPitch=4.000000,EndYaw=-30.000000,EndPitch=-4.000000,Across=20.000000,DamageScale=1.000000)
+     Swings(1)=(Anim="Fire2",From=0.015000,To=0.125000,StartYaw=-30.000000,StartPitch=10.000000,EndYaw=30.000000,EndPitch=-10.000000,Across=20.000000,DamageScale=1.000000)
+     Swings(2)=(Anim="fire3",From=0.200000,To=0.315000,StartYaw=-32.000000,StartPitch=-2.000000,EndYaw=28.000000,EndPitch=-8.000000,Across=20.000000,DamageScale=1.500000)
+     HitPunch=40.000000
      damageConst=40
      maxAdditionalDamage=15
      DamagedelayMin=0.100000

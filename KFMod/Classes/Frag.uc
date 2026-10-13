@@ -12,6 +12,7 @@ var bool bTossSpawned;
 
 var float   NadeThrowTimeout;   // Fallback countdown so that player couldn't get stuck unable to fire regardless of if the server drops some packets
 var float   NadeThrowTime;      // Last time a nade was thrown
+var float   NextServerThrowTime;
 
 replication
 {
@@ -62,6 +63,16 @@ simulated function Timer()
 
 function ServerThrow()
 {
+	if( Instigator==None || Instigator.Health<=0 )
+		Return;
+	if( AIController(Instigator.Controller)==None )
+	{
+		if( AmmoAmount(0)<=0 || Level.TimeSeconds<NextServerThrowTime )
+			Return;
+		if( KFHumanPawn(Instigator)!=None && KFHumanPawn(Instigator).bIsDowned )
+			Return;
+		NextServerThrowTime = Level.TimeSeconds + 0.5*TossSpawnTime;
+	}
 	ConsumeAmmo(0, 1);
 	FireMode[0].DoFireEffect();
 }
@@ -155,6 +166,7 @@ defaultproperties
      ReloadAnimRate=1.000000
      Weight=1.000000
      bKFNeverThrow=True
+     bIsGrenadeWeapon=True
      FireModeClass(0)=Class'KFMod.FragFire'
      FireModeClass(1)=Class'KFMod.NoFire'
      PutDownAnim="PutDown"

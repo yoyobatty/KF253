@@ -53,7 +53,8 @@ function float BotDesireability(Pawn Bot)
 	M = Ammunition(Bot.FindInventoryType(InventoryType));
 	if ( (M != None) && (M.AmmoAmount >= M.MaxAmmo) )
 		return -1;
-	return 0.25 * MaxDesireability;
+    Desire = 0.25 * MaxDesireability;
+    return Desire;
 }
 
 auto state pickup

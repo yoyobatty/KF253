@@ -196,6 +196,10 @@ Ignores HitWall;
 
 simulated function Explode(vector HitLocation, vector HitNormal);
 
+// ProcessTouch lands the hit on every machine, a client's own bodies included, so the stock
+// second hit on a client's body is left out.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
+
 simulated function ProcessTouch (Actor Other, vector HitLocation)
 {
 	local vector X,End,HL,HN;
@@ -205,10 +209,10 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 		return;
 
 	// Don't allow hits on poeple on the same team
-    if ( KFHumanPawn(Other) != None
-         && Instigator != None && Instigator.Controller != None
-         && KFHumanPawn(Other).Controller != None
-         && KFHumanPawn(Other).Controller.SameTeamAs(Instigator.Controller) )
+    if ( KFHumanPawn(Other) != None && Instigator != None
+         && KFHumanPawn(Other).PlayerReplicationInfo != None && KFHumanPawn(Other).PlayerReplicationInfo.Team != None
+         && Instigator.PlayerReplicationInfo != None && Instigator.PlayerReplicationInfo.Team != None
+         && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
     {
         return;
     }

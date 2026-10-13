@@ -77,6 +77,20 @@ function playServerSound()
 	}
 }
 
+// A swept swing's blow on flesh. The player swinging hears it at once from his own machine (PlayHitSoundHere),
+// so the server leaves him out.
+function PlayHitSound()
+{
+	if( MeleeHitSounds.Length>0 && MeleeHitSounds[0]!=None )
+		PlayOwnedSound(MeleeHitSounds[Rand(MeleeHitSounds.Length)], SLOT_None, MeleeHitVolume);
+}
+
+simulated function PlayHitSoundHere()
+{
+	if( MeleeHitSounds.Length>0 && MeleeHitSounds[0]!=None )
+		PlaySound(MeleeHitSounds[Rand(MeleeHitSounds.Length)], SLOT_None, MeleeHitVolume);
+}
+
 simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 {
 	local vector boxscreenloc,endpoint,eyepoint;

@@ -15,11 +15,10 @@ var() bool bFiringDoesntAffectMovement;
 var()           bool            bRandomPitchFireSound;      // Fire sound randomly change pitch (use this instead of lots of multiple sounds to save memory)
 var()           float           RandomPitchAdjustAmt;       // How much to randomly adjust the pitch for firing sounds
 
-var rotator ViewPunchOffset;      // Current punch offset being applied
-var rotator ViewPunchVelocity;    // Velocity at which the punch returns to zero
-var rotator LastPunchOffset;	  // Last offset applied to the view (for smooth return)
+// View punch stuff (the punch itself lives in KFPlayerController)
 var float   ViewPunchDamping;     // Damping factor for smooth return
 var float   ViewPunchSpring;      // Spring force for return
+var float   KickScale;            // This shot's share of the weapon's UpKick
 
 function float GetFireSpeed()
 {
@@ -28,6 +27,8 @@ function float GetFireSpeed()
 		return KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetFireSpeedMod(Weapon);
 	}
 
+	if( KFPawn(Instigator)!=None )
+		Return KFPawn(Instigator).GetFireSpeedScale();
 	Return 1;
 }
 
@@ -53,7 +54,14 @@ event ModeDoFire()
 
 	if (Weapon.Owner != none && AllowFire() && !bFiringDoesntAffectMovement && Weapon.Owner.Physics != PHYS_Falling )
 	{
-		if (FireRate > 0.25)
+		if ( KFPawn(Weapon.Owner) != None )
+		{
+			if (FireRate > 0.25)
+				KFPawn(Weapon.Owner).WeaponBrake(0.1);
+			else
+				KFPawn(Weapon.Owner).WeaponBrake(0.5);
+		}
+		else if (FireRate > 0.25)
 		{
 			Weapon.Owner.Velocity.x *= 0.1;
 			Weapon.Owner.Velocity.y *= 0.1;
@@ -74,88 +82,22 @@ event ModeDoFire()
     }
 }
 
-// Call this every tick
-simulated function ModeTick(float DeltaTime)
-{
-    local PlayerController PC;
-    local float SpringForce;
-    local float Damping;
-
-    Super.ModeTick(DeltaTime);
-
-    PC = PlayerController(Instigator.Controller);
-    if (PC == None)
-        return;
-
-    // HL2-style view punch decay (integrate, damp, spring)
-    // 1. Integrate position from velocity
-    ViewPunchOffset.Pitch += ViewPunchVelocity.Pitch * DeltaTime;
-    ViewPunchOffset.Yaw   += ViewPunchVelocity.Yaw   * DeltaTime;
-    // 2. Damp velocity (multiplicative, clamped to prevent reversal)
-    Damping = FMax(1.0 - ViewPunchDamping * DeltaTime, 0.0);
-    ViewPunchVelocity.Pitch *= Damping;
-    ViewPunchVelocity.Yaw   *= Damping;
-    // 3. Spring pulls back toward zero (clamped for framerate stability)
-    SpringForce = FMin(ViewPunchSpring * DeltaTime, 2.0);
-    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * SpringForce;
-    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * SpringForce;
-
-	PC.SetRotation(PC.Rotation - LastPunchOffset + ViewPunchOffset);
-    LastPunchOffset = ViewPunchOffset;
-
-    // Snap to zero if all axes are very close, to prevent endless drift
-    if (Abs(ViewPunchOffset.Pitch) < 1.0 && Abs(ViewPunchVelocity.Pitch) < 1.0 &&
-        Abs(ViewPunchOffset.Yaw) < 1.0 && Abs(ViewPunchVelocity.Yaw) < 1.0)
-    {
-        ViewPunchOffset = rot(0,0,0);
-        ViewPunchVelocity = rot(0,0,0);
-        LastPunchOffset = rot(0,0,0);
-    }
-}
-
 // Call this on each shot
 function HandleRecoil()
 {
-    local float PunchPitch, PunchYaw;
-	local PlayerController PC;
-
-	PC = PlayerController(Instigator.Controller);
-    if (PC == None)// || PC.bBehindView)
-        return;
-
-	ViewPunchReset(5000.f);
-    // HL2-style impulse: velocity * 20 for spring response, plus small immediate
-    // offset for punchiness (HL2 gets this free via additive render overlay,
-    // but we modify rotation directly so need a small kick to feel immediate)
-    PunchPitch = Clamp(0.5*KFWeapon(Weapon).UpKick * (0.5 + FRand()*0.5), 80, 5000); 
-    PunchYaw   = (FRand() - 0.5) * KFWeapon(Weapon).SideKick; 
-
-    ViewPunchOffset.Pitch += PunchPitch;
-    ViewPunchOffset.Yaw   += PunchYaw;
-    ViewPunchVelocity.Pitch += PunchPitch * 20.0;
-    ViewPunchVelocity.Yaw   += PunchYaw * 20.0;
+	KFWeapon(Weapon).ViewKick(KickScale, 1.0, ViewPunchDamping, ViewPunchSpring);
 }
 
-function ViewPunchReset( float tolerance )
+// A projectile made inside an enemy is used up on the spot: it never flies, pushes nothing back and
+// passes through nothing. So when something shootable is nearer than the muzzle, start just short of it.
+function projectile SpawnProjectile(Vector Start, Rotator Dir)
 {
-	local float check;
-    local float PitchVal, YawVal;
+	local vector HitLocation, HitNormal;
 
-	if ( tolerance != 0 )
-	{
-		tolerance *= tolerance;	// square
-        // Compute squared "size" of punch using pitch + yaw components
-        PitchVal = ViewPunchOffset.Pitch  + ViewPunchVelocity.Pitch;
-        YawVal   = ViewPunchOffset.Yaw    + ViewPunchVelocity.Yaw;
-
-     	check = PitchVal * PitchVal + YawVal * YawVal;
-		if ( check > tolerance )
-			return;
-	}
-	ViewPunchOffset = rot(0,0,0);
-	ViewPunchVelocity = rot(0,0,0);
+	if ( Instigator.Trace(HitLocation, HitNormal, Start, Instigator.Location + Instigator.EyePosition(), true) != None )
+		Start = HitLocation;
+	return Super.SpawnProjectile(Start, Dir);
 }
-
 
 simulated function bool AllowFire()
 {
@@ -267,4 +209,5 @@ defaultproperties
 	Spread=3000.000000
 	ViewPunchDamping=9.000000
 	ViewPunchSpring=65.000000
+	KickScale=1.000000
 }

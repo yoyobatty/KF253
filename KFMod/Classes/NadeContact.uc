@@ -21,6 +21,7 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 {
 	local PlayerController  LocalPlayer;
 	local Projectile P;
+	local Actor FX;
 	local byte i;
 
 	bHasExploded = True;
@@ -45,7 +46,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 
         if ( EffectIsRelevant(Location,false) )
 	  	{
-			Spawn(Class'KFmod.KFNadeExplosionSmall',,, HitLocation, rotator(vect(0,0,1)));
+			FX = Spawn(Class'KFmod.KFNadeExplosion',,, HitLocation, rotator(vect(0,0,1)));
+			if( FX!=None )
+				FX.RemoteRole = ROLE_None;
 			Spawn(ExplosionDecal,self,,HitLocation, rotator(-HitNormal));
   	   	}
   	  	

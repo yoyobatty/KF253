@@ -313,7 +313,7 @@ function ClawDamageTarget()
 		if( HumanTarget!=None )
 			HumanTargetController = KFPlayerController(HumanTarget.Controller);
 		if( HumanTargetController!=None )
-			HumanTargetController.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
+			HumanTargetController.ClientKFShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 		PlayZombieAttackHitSound();
 	}
 }
@@ -350,8 +350,8 @@ function SpinDamage(actor Target)
 	if (KFHumanPawn(Target)!=none)
 	{
 		HumanTarget = KFHumanPawn(Target);
-		if (HumanTarget.Controller != none) 
-			HumanTarget.Controller.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
+		if (KFPlayerController(HumanTarget.Controller) != none) 
+			KFPlayerController(HumanTarget.Controller).ClientKFShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 
 		//TODO - line below was KFPawn. Does this whole block need to be KFPawn, or is it OK as KFHumanPawn?
 		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
@@ -506,6 +506,7 @@ defaultproperties
      GroundSpeed=130.000000
      WaterSpeed=120.000000
      HealthMax=1500.000000
+     GibScale=1.300000
      Health=1500
 	 HeadHealth=800
      MenuName="Flesh Pound"

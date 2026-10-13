@@ -21,9 +21,9 @@ function PopulateGameTypes()
             }
         }
         
-       // Hacked. Display only the two KF specific gametypes in the filter
+       // Hacked. Display only the KF specific gametypes in the filter
 
-       if (Games[i].GameName == "Survival" || Games[i].GameName == "Story")
+       if (Left(Games[i].ClassName,2) ~= "KF")
        {
         Records.Insert(j, 1);
         Records[j] = Games[i];
@@ -34,6 +34,7 @@ function PopulateGameTypes()
 defaultproperties
 {
      bPlayerVerified=True
+     CurrentGameType="KFMod.KFGameType"
      Begin Object Class=moComboBox Name=GameTypeCombo
          bReadOnly=True
          CaptionWidth=0.100000

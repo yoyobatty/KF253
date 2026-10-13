@@ -193,12 +193,45 @@ function EEndlessWaveType GetWaveType(int Wave)
     return EWT_Normal;
 }
 
+// Total monster pool for the wave, before clamping. Overridable for pacing tweaks.
+// Base 15, +3 per wave. Wave 1=18, wave 5=30, wave 10=45, wave 20=75, wave 30=105
+function float GetWaveTotalMonsters(EEndlessWaveType WType)
+{
+    local float NewMaxMonsters;
+
+    NewMaxMonsters = 15.0 + float(WaveNum) * 3.0;
+    NewMaxMonsters *= (FMin(GameDifficulty, 7.0) + 3.0) / 7.0 * FClamp(float(NumPlayers + NumBots) * 0.8, 2.0, 50.0);
+
+    // Special waves get fewer but more focused monsters
+    if (WType != EWT_Normal)
+        NewMaxMonsters *= 0.75;
+
+    return NewMaxMonsters;
+}
+
+// Max monsters allowed on screen at once for the wave. Overridable for pacing tweaks.
+function int GetWaveConcurrentCap(int TotalMax)
+{
+    return Clamp(TotalMax, 5, MaxZombiesOnce);
+}
+
+// Seconds to wait before the next squad/monster spawn attempt. Overridable for pacing tweaks.
+function float GetSpawnInterval()
+{
+    if (NextSpawnSquad.Length > 0)
+        return 0.2;
+    if (CurrentWaveType == EWT_Holdout)
+        return 0.15;
+    return FMax(1.0 - float(WaveNum) * 0.03, 0.4);
+}
+
 // Scale wave setup for infinite progression with tiered random squads
 function SetupWave()
 {
     local int i, j, k, CombinedMask, MaskEnd;
     local float NewMaxMonsters;
 
+    UpdateSwarm();
     TraderProblemLevel = 0;
     rewardFlag = false;
     ZombiesKilled = 0;
@@ -260,16 +293,10 @@ function SetupWave()
         Broadcast(Self, "--- SPECIAL WAVE: Shades! ---");
 
     // Monster count: own scaling formula, independent of Waves array
-    // Base 15, +3 per wave. Wave 1=18, wave 5=30, wave 10=45, wave 20=75, wave 30=105
-    NewMaxMonsters = 15.0 + float(WaveNum) * 3.0;
-    NewMaxMonsters *= (FMin(GameDifficulty, 7.0) + 3.0) / 7.0 * FClamp(float(NumPlayers + NumBots) * 0.8, 2.0, 50.0);
-
-    // Special waves get fewer but more focused monsters
-    if (CurrentWaveType != EWT_Normal)
-        NewMaxMonsters *= 0.75;
+    NewMaxMonsters = GetWaveTotalMonsters(CurrentWaveType);
 
     TotalMaxMonsters = Clamp(int(NewMaxMonsters), 5, 800);
-    MaxMonsters = Clamp(TotalMaxMonsters, 5, MaxZombiesOnce);
+    MaxMonsters = GetWaveConcurrentCap(TotalMaxMonsters);
 
     KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = TotalMaxMonsters;
     KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn = true;
@@ -359,6 +386,28 @@ function BuildNextSquad()
 
     // Normal waves: use parent logic
     Super.BuildNextSquad();
+}
+
+// Called once the wave's monster pool is exhausted (TotalMaxMonsters<=0).
+// Helps wind down a wave by force-killing a remaining zombie no player can
+// currently see (so players don't have to hunt down a straggler hiding in a
+// corner), then ends the wave once every monster is dead. Overridable so a
+// stricter mode can require every last zombie to be genuinely killed.
+function HandleWaveMonsterPoolExhausted()
+{
+    local Controller C;
+
+    if (NumMonsters <= 5)
+    {
+        for (C = Level.ControllerList; C != None; C = C.NextController)
+            if (MonsterController(C) != None && !C.Pawn.PlayerCanSeeMe())
+            {
+                C.Pawn.KilledBy(C.Pawn);
+                break;
+            }
+    }
+    if (NumMonsters <= 0)
+        DoWaveEnd();
 }
 
 function ForceKillAllMonsters()
@@ -509,17 +558,7 @@ State MatchInProgress
 
             if (TotalMaxMonsters <= 0)
             {
-                if (NumMonsters <= 5)
-                {
-                    for (C = Level.ControllerList; C != None; C = C.NextController)
-                        if (MonsterController(C) != None && !C.Pawn.PlayerCanSeeMe())
-                        {
-                            C.Pawn.KilledBy(C.Pawn);
-                            break;
-                        }
-                }
-                if (NumMonsters <= 0)
-                    DoWaveEnd();
+                HandleWaveMonsterPoolExhausted();
             }
             // Still monsters left to spawn
             else if (Level.TimeSeconds > NextMonsterTime
@@ -527,15 +566,7 @@ State MatchInProgress
             {
                 WaveEndTime = Level.TimeSeconds + 160.0;
                 AddSquad();
-                if (NextSpawnSquad.Length > 0)
-                    NextMonsterTime = Level.TimeSeconds + 0.2;
-                else
-                {
-                    if (CurrentWaveType == EWT_Holdout)
-                        NextMonsterTime = Level.TimeSeconds + 0.15;
-                    else
-                        NextMonsterTime = Level.TimeSeconds + FMax(1.0 - float(WaveNum) * 0.03, 0.4);
-                }
+                NextMonsterTime = Level.TimeSeconds + GetSpawnInterval();
             }
         }
         else if (NumMonsters <= 0)
@@ -614,12 +645,13 @@ State MatchInProgress
         local Controller C;
         local KFDoorMover KFDM;
 
-        // Stop boss music on maps with no default music
+        // Stop boss music so regular combat music can restart
         if (bWaveBossInProgress)
         {
             for (C = Level.ControllerList; C != None; C = C.NextController)
                 if (PlayerController(C) != None)
                     PlayerController(C).ClientSetMusic("", MTRAN_FastFade);
+            MusicPlaying = false;
         }
         
         bEndlessWaveActive = false;

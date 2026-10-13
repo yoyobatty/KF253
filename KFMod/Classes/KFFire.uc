@@ -16,12 +16,10 @@ var()           float           RandomPitchAdjustAmt;       // How much to rando
 
 var() int MaxFireBurst; // Maximum number of shots in a burst, 0 for unlimited
 
-// View punch stuff
-var rotator ViewPunchOffset;      // Current punch offset being applied
-var rotator ViewPunchVelocity;    // Velocity at which the punch returns to zero
-var rotator LastPunchOffset;	  // Last offset applied to the view (for smooth return)
+// View punch stuff (the punch itself lives in KFPlayerController)
 var() float   ViewPunchDamping;     // Damping factor for smooth return
 var() float   ViewPunchSpring;      // Spring force for return
+var float     KickScale;            // This shot's share of the weapon's UpKick (crouch, aim, perk)
 
 // Accuracy update based on pawn velocity
 var() float RecoilMovePenaltySlow, RecoilMovePenaltyFast;            
@@ -30,7 +28,7 @@ var() float BotRecoilMovePenaltySlow, BotRecoilMovePenaltyFast;
 function float GetFireSpeed()
 {
 	if( KFPawn(Instigator)!=None )
-		Return KFPawn(Instigator).GetVeteran().Static.GetFireSpeedMod(Weapon);
+		Return KFPawn(Instigator).GetVeteran().Static.GetFireSpeedMod(Weapon)*KFPawn(Instigator).GetFireSpeedScale();
 	Return 1;
 }
 
@@ -148,18 +146,20 @@ event ModeDoFire()
 		Spread = Default.Spread;
 	else Spread = FMin(Spread+0.01,0.12);
 
+	KickScale = 1.0;
+
 	// Small spread bonus for firing crouched
     if( Instigator != none && Instigator.bIsCrouched )
     {
         Spread *= 0.85;
-		KFWeapon(Weapon).UpKick *= 0.85;
+		KickScale *= 0.85;
     }
 
 	// Spread bonus for firing aiming
     if( KFWeapon(Weapon).bAimingRifle )
     {
         Spread *= 0.5;
-		KFWeapon(Weapon).UpKick *= 0.5;
+		KickScale *= 0.5;
     }
 
 	Rec = GetFireSpeed();
@@ -171,7 +171,7 @@ event ModeDoFire()
 	if( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
 	{
 		Spread*=KFPawn(Instigator).GetVeteran().Static.ModifyRecoilSpread(Self,Rec);
-		KFWeapon(Weapon).UpKick*=KFPawn(Instigator).GetVeteran().Static.ModifyRecoilSpread(Self,Rec);
+		KickScale*=KFPawn(Instigator).GetVeteran().Static.ModifyRecoilSpread(Self,Rec);
 	}
 
 	LastFireTime = Level.TimeSeconds;
@@ -200,8 +200,13 @@ event ModeDoFire()
             PenaltyFactor = Lerp(KFPawn(Instigator).GetVeteran().Static.GetRecoilMovementSpeedModifier(), PenaltyFactor, 1.0);
         }
 
-        Weapon.Owner.Velocity.x *= PenaltyFactor;
-        Weapon.Owner.Velocity.y *= PenaltyFactor;
+        if ( KFPawn(Weapon.Owner) != None )
+            KFPawn(Weapon.Owner).WeaponBrake(PenaltyFactor);
+        else
+        {
+            Weapon.Owner.Velocity.x *= PenaltyFactor;
+            Weapon.Owner.Velocity.y *= PenaltyFactor;
+        }
     }
 	//log("ModeDoFire called on "$Weapon.GetHumanReadableName());
 	Super.ModeDoFire();
@@ -213,87 +218,10 @@ event ModeDoFire()
     }
 }
 
-simulated function ModeTick(float DeltaTime)
-{
-    local PlayerController PC;
-    local float SpringForce;
-    local float Damping;
-
-    Super.ModeTick(DeltaTime);
-	PC = PlayerController(Instigator.Controller);
-    if (PC == None)
-        return;
-
-    // HL2-style view punch decay (integrate, damp, spring)
-    // 1. Integrate position from velocity
-    ViewPunchOffset.Pitch += ViewPunchVelocity.Pitch * DeltaTime;
-    ViewPunchOffset.Yaw   += ViewPunchVelocity.Yaw   * DeltaTime;
-    // 2. Damp velocity (multiplicative, clamped to prevent reversal)
-    Damping = FMax(1.0 - ViewPunchDamping * DeltaTime, 0.0);
-    ViewPunchVelocity.Pitch *= Damping;
-    ViewPunchVelocity.Yaw   *= Damping;
-    // 3. Spring pulls back toward zero (clamped for framerate stability)
-    SpringForce = FMin(ViewPunchSpring * DeltaTime, 2.0);
-    ViewPunchVelocity.Pitch -= ViewPunchOffset.Pitch * SpringForce;
-    ViewPunchVelocity.Yaw   -= ViewPunchOffset.Yaw   * SpringForce;
-
-	PC.SetRotation(PC.Rotation - LastPunchOffset + ViewPunchOffset);
-    LastPunchOffset = ViewPunchOffset;
-
-
-    if (Abs(ViewPunchOffset.Pitch) < 1.0 && Abs(ViewPunchVelocity.Pitch) < 1.0 &&
-        Abs(ViewPunchOffset.Yaw) < 1.0 && Abs(ViewPunchVelocity.Yaw) < 1.0)
-    {
-        ViewPunchOffset = rot(0,0,0);
-        ViewPunchVelocity = rot(0,0,0);
-        LastPunchOffset = rot(0,0,0);
-    }
-}
 function HandleRecoil()
 {
-    local float PunchPitch, PunchYaw;
-	local float DurationFactor;
-	local PlayerController PC;
-
-	PC = PlayerController(Instigator.Controller);
-    if (PC == None)// || PC.bBehindView)
-        return;
-
-	ViewPunchReset(5000.f);
-    DurationFactor = FClamp(FireCount/6.f,0.0,2.0);
-    DurationFactor = 1.0 + DurationFactor;
-
-    PunchPitch = Clamp(0.5*KFWeapon(Weapon).UpKick * (0.5 + FRand()*0.5), 80, 5000); 
-    PunchYaw   = (FRand() - 0.5) * KFWeapon(Weapon).SideKick; 
-
-	PunchPitch *= DurationFactor;
-    PunchYaw   *= DurationFactor;
-
-    // HL2-style impulse with small immediate offset for punchiness
-    ViewPunchOffset.Pitch += PunchPitch;
-    ViewPunchOffset.Yaw   += PunchYaw;
-    ViewPunchVelocity.Pitch += PunchPitch * 20.0;
-    ViewPunchVelocity.Yaw   += PunchYaw * 20.0;
-}
-
-function ViewPunchReset( float tolerance )
-{
-	local float check;
-    local float PitchVal, YawVal;
-
-	if ( tolerance != 0 )
-	{
-		tolerance *= tolerance;	// square
-        // Compute squared "size" of punch using pitch + yaw components
-        PitchVal = ViewPunchOffset.Pitch  + ViewPunchVelocity.Pitch;
-        YawVal   = ViewPunchOffset.Yaw    + ViewPunchVelocity.Yaw;
-
-     	check = PitchVal * PitchVal + YawVal * YawVal;
-		if ( check > tolerance )
-			return;
-	}
-	ViewPunchOffset = rot(0,0,0);
-	ViewPunchVelocity = rot(0,0,0);
+	// The kick grows through a burst, up to three times after twelve shots
+	KFWeapon(Weapon).ViewKick(KickScale, 1.0 + FClamp(FireCount/6.f,0.0,2.0), ViewPunchDamping, ViewPunchSpring);
 }
 
 function DoTrace(Vector Start, Rotator Dir)
@@ -325,6 +253,9 @@ function DoTrace(Vector Start, Rotator Dir)
                 if( WeapAttach != None )
                     WeapAttach.UpdateHit(Other, HitLocation, HitNormal);
             }
+            // every client keeps a body of its own for a dead specimen, and tries the shot on that
+            else if ( WeapAttach != None && KFMonster(DamageTarget) != None && KFMonster(DamageTarget).Health <= 0 )
+                WeapAttach.UpdateCorpseHit(HitLocation);
             DamageTarget.TakeDamage(Lerp(FRand(), DamageMin, DamageMax), Instigator, HitLocation, Momentum*X, DamageType);
         }
         else
@@ -361,9 +292,10 @@ defaultproperties
 	EmptyFireAnim="EmptyFire"
 	EmptyFireAnimRate=1.000000
 	bRandomPitchFireSound=True
-	RandomPitchAdjustAmt=0.050000
+	RandomPitchAdjustAmt=0.100000
 	ViewPunchDamping=9.000000
 	ViewPunchSpring=65.000000
+	KickScale=1.000000
 	MaxFireBurst=0
     RecoilMovePenaltySlow=0.100000
     RecoilMovePenaltyFast=0.250000

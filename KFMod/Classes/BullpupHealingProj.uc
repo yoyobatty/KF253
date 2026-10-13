@@ -111,6 +111,9 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
     return;
 }
 
+// Touching a body does it no harm. Stock would have a client's own bodies take the full Damage.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
+
 simulated function ProcessTouch(Actor Other, Vector HitLocation)
 {
 	local KFPlayerReplicationInfo PRI;

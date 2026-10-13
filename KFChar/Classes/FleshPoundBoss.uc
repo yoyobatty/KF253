@@ -96,12 +96,16 @@ function GroundPound()
     local Actor Victims;
     local float DamageScale, Dist;
     local vector Dir;
-    local PlayerController PC;
+    local Controller C;
+    local KFPlayerController PC;
 
     // Screen shake for all nearby players
-    PC = Level.GetLocalPlayerController();
-    if( PC != None && PC.ViewTarget != None && VSize(Location - PC.ViewTarget.Location) < GroundPoundRadius )
-        PC.ShakeView(BossRotMag, BossRotRate, BossRotTime, BossOffsetMag, BossOffsetRate, BossOffsetTime);
+    for( C = Level.ControllerList; C != None; C = C.NextController )
+    {
+        PC = KFPlayerController(C);
+        if( PC != None && PC.ViewTarget != None && VSize(Location - PC.ViewTarget.Location) < GroundPoundRadius )
+            PC.ClientKFShakeView(BossRotMag, BossRotRate, BossRotTime, BossOffsetMag, BossOffsetRate, BossOffsetTime);
+    }
 
     if( Level.NetMode == NM_Client )
         return;

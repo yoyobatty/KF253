@@ -56,8 +56,9 @@ function bool InternalOnPreDraw(Canvas Canvas)
 		}
 		else PC.RequestForClasses();
 	}
-	SX = FClamp(Canvas.ClipX/10,20,140);
-	SY = FClamp(Canvas.ClipX/13,15,120);
+	// They stopped growing at 140 by 120 pixels: on a bigger screen they keep the share of its height a 4:3 screen gave them.
+	SX = FMax(FClamp(Canvas.ClipX/10,20,140),Canvas.ClipY/7.5);
+	SY = FMax(FClamp(Canvas.ClipX/13,15,120),Canvas.ClipY/9.75);
 
 	// Positional Values for the Background
 	MyHeader.WinLeft = 0;

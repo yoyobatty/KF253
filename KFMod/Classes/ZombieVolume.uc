@@ -10,11 +10,29 @@ var float LastCheckTime;
 var float LastSpawnedTime;   // Level.TimeSeconds when this volume last produced a real spawn
 var int   SpawnCount;        // Total real spawns this volume has produced
 var bool bSpawnPossible;
+var array<byte> SpawnedMembers;
+var byte FloorId;
+var bool bFloorSet;
 
 function PostBeginPlay()
 {
     bSpawnPossible = true;
     super.PostBeginPlay();
+}
+
+function bool SpawnedMember(int Index)
+{
+    return (Index < SpawnedMembers.Length && SpawnedMembers[Index] != 0);
+}
+
+function byte GetFloor(KFFloorMap FloorMap)
+{
+    if (!bFloorSet)
+    {
+        bFloorSet = true;
+        FloorId = FloorMap.FloorAt(Location);
+    }
+    return FloorId;
 }
 
 // Cached wrapper around SpawnInHere (test mode) to avoid expensive checks every tick.
@@ -51,6 +69,9 @@ function bool SpawnInHere(array< class<Actor> > zombies, int index, optional int
         nextind = index + 1;
     else
         nextind = index;
+
+    if (p == self && !test)
+        SpawnedMembers.Length = 0;
 
     result = true;
     finish = 0;
@@ -110,7 +131,7 @@ function bool SpawnInHere(array< class<Actor> > zombies, int index, optional int
         }
 
         // Ensure counter has a valid starting value for child recursion
-        if (counter == 0 && p != self)
+        if (counter == 0)
         {
             counter = loc + 1;
         }
@@ -139,6 +160,7 @@ function bool SpawnInHere(array< class<Actor> > zombies, int index, optional int
                 TotalMaxMonsters--;
                 WaveMonsters++;
                 numspawned++;
+                p.SpawnedMembers[index] = 1;
             }
         }
     }

@@ -92,13 +92,13 @@ function CheckActivity()
 
 	i = CountAlivePlayers();
 
-	if( i>=NumTouching )
+	if( i>0 && NumTouching>=i )
 	{
 		if( IsInState('TimingOut') )
 			GoToState('');
 		FinishedEvent();
 	}
-	else if( NumTouching>0 && bTimeOut && (float(i)/float(NumTouching))>=PlayerThreshold )
+	else if( i>0 && NumTouching>0 && bTimeOut && (float(NumTouching)/float(i))>=PlayerThreshold )
 	{
 		SetTimer(2,True);
 		if( !IsInState('TimingOut') )

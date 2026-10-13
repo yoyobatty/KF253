@@ -33,18 +33,21 @@ function InitFor( KFPlayerController Other )
 	local int i,j;
 
 	CurrentOwner = Other;
+	LastCheckTime = 0;
 	GameKills = 0;
-	
-	if( CurrentVeterancy!="" )
+
+	KF = KFGameType(Other.Level.Game);
+	if( CurrentVeterancy!="" && KF!=None && KF.bPerksEnabled )
 	{
 		KFPlayerReplicationInfo(Other.PlayerReplicationInfo).ClientVeteranSkill = Class<KFVeterancyTypes>(DynamicLoadObject(CurrentVeterancy,Class'Class',True));
 		if( KFHumanPawn(Other.Pawn)!=None )
 			KFHumanPawn(Other.Pawn).CheckCarryWeight();
 	}
+	else
+		KFPlayerReplicationInfo(Other.PlayerReplicationInfo).ClientVeteranSkill = None;
 	if( bHasBeenInit )
 		Return;
 	bHasBeenInit = True;
-	KF = KFGameType(Other.Level.Game);
 	if( KF==None )
 		Return;
 	j = KF.LoadedSkills.Length;

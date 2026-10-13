@@ -50,12 +50,15 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 {
     local Controller C;
     local PlayerController  LocalPlayer;
+    local Actor FX;
 
     //log("LAW Explode at: " $ HitLocation);
     PlaySound(sound'ONSVehicleSounds-S.TankFire01',,255+TransientSoundVolume);
     if ( EffectIsRelevant(Location,false) )
     {
-        Spawn(class'KFNadeExplosion',,,HitLocation + HitNormal*16,rotator(HitNormal) + rot(-16384,0,0)); //Fixes explosion rotation
+        FX = Spawn(class'KFNadeExplosion',,,HitLocation + HitNormal*16,rotator(HitNormal) + rot(-16384,0,0)); //Fixes explosion rotation
+        if ( FX != None )
+            FX.RemoteRole = ROLE_None;
         Spawn(class'KFLawFireExplosion',,,HitLocation + HitNormal*16, rotator(HitNormal) + rot(-16384,0,0));
         Spawn(class'ExplosionCrap',,, HitLocation + HitNormal*16, rotator(HitNormal));
         if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer) )
@@ -126,6 +129,10 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 
     bHurtEntry = true;
 
+    // A rocket that hit a specimen's extra collision hit the specimen
+    if ( ExtendedZCollision(LastTouched) != None )
+        LastTouched = LastTouched.Owner;
+
     foreach VisibleCollidingActors (class 'Actor', Victims, DamageRadius, HitLocation)
     {
         // don't let blast damage affect fluid - VisibleCollisingActors doesn't really work for them - jag
@@ -178,6 +185,10 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 
     bHurtEntry = false;
 }
+
+// ProcessTouch lands the hit on every machine, a client's own bodies included, so the stock
+// second hit on a client's body is left out.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
 
 //this will make bots and us stop suiciding for once
 simulated function ProcessTouch(Actor Other, Vector HitLocation)

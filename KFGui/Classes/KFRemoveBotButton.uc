@@ -18,10 +18,10 @@ function bool InternalOnClick(GUIComponent Sender)
 
    if (PendingBots > 0)
    {
-    PlayerOwner().ClientMessage("A bot was removed from pending BotList");
-    PlayerOwner().ClientMessage("Number of bots left: "$KFGameReplicationInfo(PlayerOwner().GameReplicationInfo).PendingBots );
     KFPlayerController(PlayerOwner()).GRIKillBotCall(1);
     PendingBots --;
+    PlayerOwner().ClientMessage("A bot was removed from pending BotList");
+    PlayerOwner().ClientMessage("Number of bots left: "$PendingBots );
     BotName = "";
    }
 

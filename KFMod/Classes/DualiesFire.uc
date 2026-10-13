@@ -83,7 +83,7 @@ event ModeDoFire()
 	FireAnim = fa;
 	InitEffects();
 }
-
+/*
 function DoFireEffect()
 {
     local Vector StartTrace;
@@ -105,7 +105,7 @@ function DoFireEffect()
     R = rotator(vector(Aim) + VRand()*FRand()*Spread);
     DoTrace(StartTrace, R);
 }
-
+*/
 defaultproperties
 {
     FireAnim2="FireLeft"

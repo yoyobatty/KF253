@@ -22,15 +22,18 @@ var float GameDiff;  // Since Level.Game  doesnt seem to replicate...let's store
 var bool bEnemyHealthBars,bPerksEnabled;
 var byte EndGameType;
 var bool bHUDShowCash;
+var bool bZombiesMode;
+var byte InstaKillTime, DoublePointsTime;
 
 replication
 {
 	reliable if(Role == ROLE_Authority)
 		MaxMonstersOn, bWaveInProgress, TimeToNextWave,LobbyTimeout,
-		MaxMonsters, PendingBots,LastBotName,TempBotName,EndGameType;
+		MaxMonsters, PendingBots,LastBotName,TempBotName,EndGameType,
+		InstaKillTime, DoublePointsTime;
 
 	reliable if ( bNetInitial && (Role == ROLE_Authority) )
-		GameDiff,bEnemyHealthBars,bNoBots,bPerksEnabled,bHUDShowCash;
+		GameDiff,bEnemyHealthBars,bNoBots,bPerksEnabled,bHUDShowCash,bZombiesMode;
 }
 
 simulated function PostNetBeginPlay()

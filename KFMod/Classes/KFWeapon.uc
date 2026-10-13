@@ -48,6 +48,8 @@ var () float Weight; // how much does it weigh
 
 var bool bKFNeverThrow;
 
+var() bool bIsGrenadeWeapon;
+
 var bool bAmmoHUDAsBar;
 
 var bool bUseCombos; // Disable combos for the time being...Too iffy
@@ -99,6 +101,7 @@ var() float MoveBobPitchRot;
 var() float MoveBobRollRot;          // Roll tilt per bob cycle (side-to-side rock)
 var() float MoveBobSprintMulti;      // Bob amplitude multiplier when sprinting
 var() float MoveBobHorizScale;       // Horizontal bob relative to vertical (figure-8)
+var() float MoveBobVertScale;
 var() float StrafeRollStrength;      // Roll lean from strafing (degrees at full strafe)
 var() float StrafePosStrength;       // Lateral position shift from strafing
 var() float StrafeLeanSpeed;         // How fast lean blends in/out
@@ -112,6 +115,7 @@ var() float ViewLagMaxOffset;    // Clamp positional offset magnitude
 
 // Runtime state
 var rotator PrevViewRot;
+var rotator PrevViewPunch;             // View punch that was in PrevViewRot
 var vector  VM_PosOffset, VM_PosVel;
 var vector  VM_RotOffset, VM_RotVel;   // (Pitch,Yaw,Roll) in degrees
 var float   LastMotionUpdateTime;
@@ -124,6 +128,7 @@ var vector  BobRotOffset;              // Direct bob rotational offset (Pitch,Ya
 var float   StrafeRoll;                // Current strafe lean in degrees
 var float   StrafeOffsetY;             // Current strafe lateral shift
 var EPhysics  PrevPhysics;               // Previous frame physics for jump/land detection
+var float   LastGroundAmpScale;
 var float   BreathOffsetZ;
 var float   BreathPitchOffset;
 
@@ -133,6 +138,13 @@ var() float GunLengthDist;
 var() rotator WallPivotRot;
 var() vector WallPivotOffset;
 
+var float SprintFactor;
+var() float SprintTransitionSpeed;
+var() rotator SprintDownRot;
+var() vector SprintDownOffset;
+var() float ZombiesSprintBobMulti;
+var bool bUpgraded;
+
 replication
 {
 	//TODO - does ClipCount still need sending,
@@ -141,7 +153,7 @@ replication
 		ClipLeft;
 
 	reliable if( bNetDirty && bNetOwner && (Role==ROLE_Authority) )
-		ClipCount;
+		ClipCount, bUpgraded;
 
 	// TODO - which of these ACTUALLY need sending?
 	reliable if(Role < ROLE_Authority)
@@ -165,6 +177,7 @@ simulated function PostBeginPlay()
 	// Initialize motion state
 	if (Instigator != None)
 		PrevViewRot = Instigator.GetViewRotation();
+	PrevViewPunch = AppliedViewPunch();
 	LastMotionUpdateTime = Level.TimeSeconds;
 }
 
@@ -212,7 +225,7 @@ simulated event RenderOverlays( Canvas Canvas )
 {
     local int m;
     local vector WeaponOffset;
-    local rotator NewRotation, CenteredRotation;
+    local rotator NewRotation, CenteredRotation, SprintRotScaled;
     local float PivotAmount;
 	local vector X, Y, Z;
 
@@ -254,14 +267,16 @@ simulated event RenderOverlays( Canvas Canvas )
 	// --- Pivot up and to the left as you get close to a wall ---
 	WallPivotRot = default.WallPivotRot * PivotAmount;
 	WallPivotOffset = default.WallPivotOffset * PivotAmount;
+	SprintRotScaled = default.SprintDownRot * SprintFactor;
+	WallPivotRot.Pitch += SprintRotScaled.Pitch;
+	WallPivotRot.Yaw   += SprintRotScaled.Yaw;
+	WallPivotRot.Roll  += SprintRotScaled.Roll;
+	WallPivotOffset += default.SprintDownOffset * SprintFactor;
 	WeaponOffset = (X*WallPivotOffset.X + Y*WallPivotOffset.Y + Z*WallPivotOffset.Z);
 
-    // Apply spring positional offset in local space
-    WeaponOffset += X * VM_PosOffset.X + Y * VM_PosOffset.Y + Z * (VM_PosOffset.Z + BreathOffsetZ);
-    // Apply direct bob + strafe offsets (bypass spring entirely)
+    WeaponOffset += VM_PosOffset + Z * BreathOffsetZ;
     WeaponOffset += X * BobPosOffset.X + Y * (BobPosOffset.Y + StrafeOffsetY) + Z * BobPosOffset.Z;
 
-    // Final location
     SetLocation(Instigator.Location + Instigator.CalcDrawOffset(self) + WeaponOffset);
 
     // Final rotation (add dynamic rotation offset)
@@ -310,7 +325,7 @@ simulated function UpdateWallOffset()
     // Trace forward from view rotation
     TraceEnd = TraceStart + vector(Instigator.GetViewRotation()) * GunLengthDist;
     HitActor = Trace(HitLocation, HitNormal, TraceEnd, TraceStart, false, vect(0,4,6));
-    if (HitActor != None && HitActor != Instigator && BlockingVolume(HitActor) == None)
+    if (HitActor != None && HitActor != Instigator && BlockingVolume(HitActor) == None && Abs(HitNormal.Z) < 0.5)
     {
         Dist = VSize(HitLocation - TraceStart);
         TargetWallOffsetFactor = FClamp(Dist / GunLengthDist, 0.0, 1.0);
@@ -332,6 +347,8 @@ exec function ReloadMeNow()
 		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
 	}
 	else ReloadMulti = 1;
+	if( KFPawn(Instigator)!=None )
+		ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
 	bIsReloading = true;
 	ReloadTimer = Level.TimeSeconds;
 	ReloadRate = Default.ReloadRate/ReloadMulti;
@@ -349,6 +366,8 @@ simulated function ClientReload()
 		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
 	}
 	else ReloadMulti = 1;
+	if( KFPawn(Instigator)!=None )
+		ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
 	bIsReloading = true;
 	PlayAnim(ReloadAnim, ReloadAnimRate*ReloadMulti, 0.1);
 }
@@ -394,6 +413,9 @@ function ServerRequestAutoReload()
 simulated function bool StartFire(int Mode)
 {
 	local bool RetVal;
+
+	if( KFHumanPawn(Instigator)!=None && KFHumanPawn(Instigator).bIsDowned )
+		return false;
 
 	RetVal = super.StartFire(Mode);
 
@@ -830,6 +852,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
     if (Instigator != None && Instigator.IsHumanControlled())
     {
         PrevViewRot = Instigator.GetViewRotation();
+        PrevViewPunch = AppliedViewPunch();
         VM_PosOffset = vect(0,0,0);
         VM_PosVel    = vect(0,0,0);
         VM_RotOffset = vect(0,0,0);
@@ -841,7 +864,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
         BobRotOffset = vect(0,0,0);
         StrafeRoll = 0;
         StrafeOffsetY = 0;
-        PrevPhysics = PHYS_Walking;
+        PrevPhysics = Instigator.Physics;
         PrevVelocity = vect(0,0,0);
         LastMotionUpdateTime = Level.TimeSeconds;
     }
@@ -926,7 +949,8 @@ function OwnerEvent(name EventName)
 
 simulated function WeaponTick(float DT)
 {
-	local float LastSeenSeconds, ReloadMulti;
+	local float LastSeenSeconds, ReloadMulti, t, baseBrightness;
+	local int battery;
 
     if ( (Level.NetMode == NM_Client) || Instigator == None || KFFriendlyAI(Instigator.Controller) == none && Instigator.PlayerReplicationInfo == None)
         return;
@@ -938,10 +962,26 @@ simulated function WeaponTick(float DT)
 		AdjustLightGraphic();
 		if (FlashLight.bHasLight)
 		{
-			if (KFHumanPawn(Instigator).TorchBatteryLife<40) 
-				Flashlight.TacLightGlow.LightBrightness *= (KFHumanPawn(Instigator).TorchBatteryLife / KFHumanPawn(Instigator).default.TorchBatteryLife) * 10;
-			else Flashlight.LightBrightness = Flashlight.default.LightBrightness;
-			if (Instigator.Health <= 0 || KFHumanPawn(Instigator).TorchBatteryLife <= 0 || Instigator.PendingWeapon != none )
+			battery = KFHumanPawn(Instigator).TorchBatteryLife;
+			if (battery <= 100)
+			{
+				t = 1.0 - float(battery) / 100.0;
+				baseBrightness = Flashlight.TacLightGlow.default.LightBrightness * float(battery) / 100.0;
+				// Sputter in final moments like a dying filament
+				if (battery <= 30)
+					baseBrightness *= 0.3 + 0.7 * FRand();
+				Flashlight.TacLightGlow.LightBrightness = baseBrightness;
+				// Warm amber/orange shift as filament cools: hue 0->20, saturation 255->100
+				Flashlight.TacLightGlow.LightHue = byte(20.0 * t);
+				Flashlight.TacLightGlow.LightSaturation = byte(255.0 - 155.0 * t);
+			}
+			else
+			{
+				Flashlight.TacLightGlow.LightBrightness = Flashlight.TacLightGlow.default.LightBrightness;
+				Flashlight.TacLightGlow.LightHue = Flashlight.TacLightGlow.default.LightHue;
+				Flashlight.TacLightGlow.LightSaturation = Flashlight.TacLightGlow.default.LightSaturation;
+			}
+			if (Instigator.Health <= 0 || battery <= 0 || Instigator.PendingWeapon != none)
 			{
 				KFHumanPawn(Instigator).bTorchOn = false;
 				ServerSpawnLight();
@@ -980,6 +1020,8 @@ simulated function WeaponTick(float DT)
 					ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
 				}
 				else ReloadMulti = 1;
+				if( KFPawn(Instigator)!=None )
+					ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
 				PlaySound(ReloadSound, SLOT_Misc, TransientSoundVolume,,TransientSoundRadius,ReloadMulti,false);
 
 				InsertBullet();
@@ -1010,22 +1052,55 @@ simulated function Tick(float DeltaTime)
         	UpdateViewModelMotion(Instigator.GetViewRotation(), DeltaTime);
 }
 
+// The view punch that is in the owner's view right now.
+simulated function rotator AppliedViewPunch()
+{
+	if ( Instigator != None && KFPlayerController(Instigator.Controller) != None )
+		return KFPlayerController(Instigator.Controller).PunchApplied;
+	return rot(0,0,0);
+}
+
+// Kicks the owner's view for one shot. Scale is the shot's share of UpKick, Duration grows through a burst.
+simulated function ViewKick( float Scale, float Duration, float Damping, float Spring )
+{
+	local KFPlayerController PC;
+	local float Largest;
+
+	if ( Instigator == None )
+		return;
+	PC = KFPlayerController(Instigator.Controller);
+	if ( PC == None )
+		return;
+
+	// A shot kicks between half and all of Largest
+	Largest = 0.5 * UpKick * Scale;
+	PC.PunchDamping = Damping;
+	PC.PunchSpring = Spring;
+	PC.ViewPunch(FClamp(Largest * (0.5 + FRand()*0.5), 80, 5000) * Duration, (FRand() - 0.5) * SideKick * Duration,
+		FClamp(Largest, 80, 5000) * Duration, 0.5 * SideKick * Duration);
+}
+
+//All vibe coded
 simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
 {
-    local rotator dR;
+    local rotator dR, Punch;
     local float dyawDeg, dpitchDeg;
     local float angVelYaw, angVelPitch;
-    local vector forcePos, torqueRot;
+    local float turnYaw, turnPitch;
+    local vector forcePos, forcePosWorld, torqueRot;
     local float speed2D, speedNorm, bobHz, ampScale, breathVal, strafeSpeed, strafeNorm;
     local vector viewX, viewY, viewZ, accelVec;
     local vector targetBobPos, targetBobRot;
     local float targetStrafeRoll, targetStrafeY;
-    local bool bOnGround, bSprinting;
+    local bool bOnGround, bSprinting, bZombiesSprint;
     local EPhysics curPhysics;
     local float fallSpeed, landScale;
+    local float SprintTargetFactor;
 
     if (DeltaTime <= 0.0)
         return;
+
+    GetAxes(CurViewRot, viewX, viewY, viewZ);
 
     dR.Yaw   = CurViewRot.Yaw - PrevViewRot.Yaw;
     dR.Pitch = CurViewRot.Pitch - PrevViewRot.Pitch;
@@ -1047,16 +1122,22 @@ simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
     torqueRot.X =  angVelPitch    * LagRotStrength * 0.025;
     torqueRot.Z = -angVelYaw      * LagRotStrength * 0.008;
 
+    // The player's own turning, without the view punch: a shot's kick is not a flick
+    Punch = AppliedViewPunch();
+    turnYaw   = angVelYaw   - float(Punch.Yaw   - PrevViewPunch.Yaw)   * (360.0/65536.0) / DeltaTime;
+    turnPitch = angVelPitch - float(Punch.Pitch - PrevViewPunch.Pitch) * (360.0/65536.0) / DeltaTime;
+    PrevViewPunch = Punch;
+
     // Flick impulses
-    if (Abs(angVelYaw) > FlickThresholdDegPerSec)
+    if (Abs(turnYaw) > FlickThresholdDegPerSec)
     {
-        if (angVelYaw > 0) { VM_PosVel.Y -= FlickImpulsePos; VM_RotVel.Z -= FlickImpulseRot; }
-        else               { VM_PosVel.Y += FlickImpulsePos; VM_RotVel.Z += FlickImpulseRot; }
+        if (turnYaw > 0) { VM_PosVel -= viewY * FlickImpulsePos; VM_RotVel.Z -= FlickImpulseRot; }
+        else             { VM_PosVel += viewY * FlickImpulsePos; VM_RotVel.Z += FlickImpulseRot; }
     }
-    if (Abs(angVelPitch) > FlickThresholdDegPerSec)
+    if (Abs(turnPitch) > FlickThresholdDegPerSec)
     {
-        if (angVelPitch > 0) { VM_PosVel.Z += FlickImpulsePos * 0.2; VM_RotVel.X += FlickImpulseRot * 0.35; }
-        else                 { VM_PosVel.Z -= FlickImpulsePos * 0.2; VM_RotVel.X -= FlickImpulseRot * 0.35; }
+        if (turnPitch > 0) { VM_PosVel += viewZ * (FlickImpulsePos * 0.2); VM_RotVel.X += FlickImpulseRot * 0.35; }
+        else               { VM_PosVel -= viewZ * (FlickImpulsePos * 0.2); VM_RotVel.X -= FlickImpulseRot * 0.35; }
     }
 
     // --- CoD-style Movement Bob (DIRECT offsets, not through spring) ---
@@ -1066,73 +1147,74 @@ simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
         bOnGround = (curPhysics == PHYS_Walking || curPhysics == PHYS_Ladder);
         speed2D = VSize(Instigator.Velocity);
         bSprinting = (KFHumanPawn(Instigator) != None && KFHumanPawn(Instigator).bIsSprinting);
+        bZombiesSprint = bSprinting && KFHumanPawnZombies(Instigator)!=None;
+        if (bZombiesSprint)
+            SprintTargetFactor = 1.0;
+        else
+            SprintTargetFactor = 0.0;
+        SprintFactor += (SprintTargetFactor - SprintFactor) * FMin(DeltaTime * SprintTransitionSpeed, 1.0);
 
-        // --- Jump/Land detection: inject impulses into the spring ---
         if (PrevPhysics == PHYS_Walking && curPhysics == PHYS_Falling)
         {
-            // Takeoff: weapon drops back and pitches up
-            VM_PosVel.Z -= JumpKickPos;
-            VM_PosVel.X -= JumpKickPos * 0.3;
+            VM_PosVel -= viewZ * JumpKickPos;
+            VM_PosVel -= viewX * (JumpKickPos * 0.3);
             VM_RotVel.X += JumpKickRot;
         }
         else if (PrevPhysics == PHYS_Falling && curPhysics == PHYS_Walking)
         {
-            // Landing: weapon slams down and pitches forward, scaled by fall speed
             fallSpeed = FMax(-PrevVelocity.Z, 0.0);
             landScale = 1.0 + LandKickSpeedScale * FClamp(fallSpeed / 600.0, 0.0, 2.0);
-            VM_PosVel.Z -= LandKickPos * landScale;
+            VM_PosVel -= viewZ * (LandKickPos * landScale);
             VM_RotVel.X -= LandKickRot * landScale;
         }
         PrevPhysics = curPhysics;
 
         if (speed2D > 10 && bOnGround)
         {
-            // Normalize speed against default ground speed so bob caps at normal run
             speedNorm = FClamp(speed2D / 200.0, 0.0, 1.0);
-
-            // Sprint = slightly faster cadence, heavier footfalls
-            if (bSprinting)
+            if (bZombiesSprint)
+                bobHz = MoveBobFreq * 1.5;
+            else if (bSprinting)
                 bobHz = MoveBobFreq * 1.3;
             else
                 bobHz = MoveBobFreq;
 
-            // Advance phase
             BobPhase += DeltaTime * bobHz * 6.283185;
             if (BobPhase > 6.283185) BobPhase -= 6.283185;
 
-            // Squared speed curve: walking is very subtle, running ramps up hard
             ampScale = speedNorm * speedNorm;
             ampScale = FClamp(ampScale, 0.0, 1.0);
             if (bSprinting)
                 ampScale *= MoveBobSprintMulti;
-
-            // BobPhase = full stride cycle (two footsteps)
-            // Vertical: smooth V-dip per footstep (2x per stride) using -Abs(Cos)
-            targetBobPos.Z = -Abs(Cos(BobPhase)) * MoveBobAmp * ampScale;
-            // Horizontal: simple side-to-side sway, once per stride
+            if (bZombiesSprint)
+                ampScale *= ZombiesSprintBobMulti;
+            targetBobPos.Z = -Abs(Cos(BobPhase)) * MoveBobAmp * MoveBobVertScale * ampScale;
             targetBobPos.Y = Sin(BobPhase) * MoveBobAmp * MoveBobHorizScale * ampScale;
-            // Minimal forward pull
             targetBobPos.X = 0;
 
-            // Roll follows horizontal sway (lean into step), yaw subtle, pitch minimal
             targetBobRot.Z = Sin(BobPhase)  * MoveBobRollRot  * ampScale;
             targetBobRot.Y = Sin(BobPhase)  * MoveBobYawRot   * ampScale;
             targetBobRot.X = -Abs(Cos(BobPhase)) * MoveBobPitchRot * ampScale;
+
+            LastGroundAmpScale = ampScale;
         }
         else
         {
-            // Decay phase smoothly when stopped/airborne
             BobPhase *= (1.0 - FMin(1.0, 5.0 * DeltaTime));
-            targetBobPos = vect(0,0,0);
-            targetBobRot = vect(0,0,0);
+            LastGroundAmpScale *= (1.0 - FMin(1.0, 5.0 * DeltaTime));
+
+            targetBobPos.Z = -Abs(Cos(BobPhase)) * MoveBobAmp * MoveBobVertScale * LastGroundAmpScale;
+            targetBobPos.Y = Sin(BobPhase) * MoveBobAmp * MoveBobHorizScale * LastGroundAmpScale;
+            targetBobPos.X = 0;
+
+            targetBobRot.Z = Sin(BobPhase)  * MoveBobRollRot  * LastGroundAmpScale;
+            targetBobRot.Y = Sin(BobPhase)  * MoveBobYawRot   * LastGroundAmpScale;
+            targetBobRot.X = -Abs(Cos(BobPhase)) * MoveBobPitchRot * LastGroundAmpScale;
         }
 
-        // Smooth blend bob offsets (weighted follow for organic feel)
         BobPosOffset += (targetBobPos - BobPosOffset) * FMin(DeltaTime * 12.0, 1.0);
         BobRotOffset += (targetBobRot - BobRotOffset) * FMin(DeltaTime * 12.0, 1.0);
 
-        // --- Strafe lean (DIRECT, not through spring) ---
-        GetAxes(CurViewRot, viewX, viewY, viewZ);
         strafeSpeed = Instigator.Velocity dot viewY;
         strafeNorm = strafeSpeed / FMax(Instigator.GroundSpeed, 200.0);
 
@@ -1142,10 +1224,12 @@ simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
         StrafeRoll    += (targetStrafeRoll - StrafeRoll)    * FMin(DeltaTime * StrafeLeanSpeed, 1.0);
         StrafeOffsetY += (targetStrafeY    - StrafeOffsetY) * FMin(DeltaTime * StrafeLeanSpeed, 1.0);
 
-        // --- Movement reaction: weapon shifts opposite to acceleration (through springs) ---
         if (DeltaTime > 0.001)
         {
             accelVec = (Instigator.Velocity - PrevVelocity) / DeltaTime;
+            accelVec.Z = 0;
+            if (VSize(accelVec) > 2000.0)
+                accelVec = Normal(accelVec) * 2000.0;
             forcePos.X += -(accelVec dot viewX) * MoveReactStrength * 0.002;
             forcePos.Y += -(accelVec dot viewY) * MoveReactStrength * 0.002;
             forcePos.Z += -(accelVec dot viewZ) * MoveReactStrength * 0.001;
@@ -1153,8 +1237,9 @@ simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
         PrevVelocity = Instigator.Velocity;
     }
 
-    // Integrate springs
-    VM_PosVel    += ( -LagSpringK * VM_PosOffset - LagSpringDamping * VM_PosVel + forcePos ) * DeltaTime;
+    forcePosWorld = viewX * forcePos.X + viewY * forcePos.Y + viewZ * forcePos.Z;
+
+    VM_PosVel    += ( -LagSpringK * VM_PosOffset - LagSpringDamping * VM_PosVel + forcePosWorld ) * DeltaTime;
     VM_PosOffset += VM_PosVel * DeltaTime;
     if (VSize(VM_PosOffset) > ViewLagMaxOffset)
         VM_PosOffset = Normal(VM_PosOffset) * ViewLagMaxOffset;
@@ -1165,10 +1250,9 @@ simulated function UpdateViewModelMotion(rotator CurViewRot, float DeltaTime)
     if (VM_RotOffset.Y > 12) VM_RotOffset.Y = 12; else if (VM_RotOffset.Y < -12) VM_RotOffset.Y = -12;
     if (VM_RotOffset.Z > 15) VM_RotOffset.Z = 15; else if (VM_RotOffset.Z < -15) VM_RotOffset.Z = -15;
 
-    // Direct breathing offsets (NOT through the spring, so always visible)
-    breathVal = Sin(Level.TimeSeconds * BreathFreq * 6.283185);
-    BreathOffsetZ    = breathVal * BreathAmplitude;        // world units
-    BreathPitchOffset= breathVal * BreathPitchAmplitude;   // degrees
+    breathVal = Sin(Level.TimeSeconds * BreathFreq * 6.283185); //2 * pi
+    BreathOffsetZ    = breathVal * BreathAmplitude;        
+    BreathPitchOffset= breathVal * BreathPitchAmplitude; 
 
     PrevViewRot = CurViewRot;
     LastMotionUpdateTime = Level.TimeSeconds;
@@ -1697,7 +1781,7 @@ simulated function float DesireAmmo(class<Inventory> NewAmmoClass, bool bDetour)
 			if ( curr == 0 )
 				return 1;
 			max = MaxAmmo(i);
-			return ( FMin(0.5*(max-curr),curr)/max ); //Thanks Epic for breaking this function in the first place
+			return 2.0 * (max - curr) / max; //Thanks Epic for breaking this function in the first place
 		}
 	}
 	return 0;
@@ -1761,7 +1845,13 @@ defaultproperties
 	MoveBobPitchRot=0.3
 	MoveBobRollRot=1.5
 	MoveBobHorizScale=0.35
+	MoveBobVertScale=1.7
 	MoveBobSprintMulti=2.0
+
+	SprintTransitionSpeed=7.0
+	SprintDownRot=(Pitch=-1500,Yaw=800,Roll=800)
+	SprintDownOffset=(X=-6,Y=1,Z=-6)
+	ZombiesSprintBobMulti=1.5
 
 	// Strafe lean & movement reaction
 	StrafeRollStrength=6.0

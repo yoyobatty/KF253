@@ -1,18 +1,122 @@
 //=============================================================================
-// BoomStick Fire
+// BoomStick Fire: one barrel. BoomStickAltFire fires both.
 //=============================================================================
 class BoomStickFire extends KFShotgunFire;
 
+var() bool bBothBarrels;               // this mode fires both barrels
+var() class<Projectile> SlugClass;     // projectile when slugs are loaded
+var() name BothAnim, RightAnim, LeftAnim;
+var() float BothFireRate;              // delay after a both-barrel shot
+var() float SingleKick;                // view kick of one barrel as a fraction of both
+var() float SingleSoundPitch;          // one barrel sounds lighter
+var bool bFiringBoth;                  // the shot being fired uses both barrels
+
 simulated function bool AllowFire()
 {
-	return ( Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire);
+	local KFWeapon W;
+
+	W = KFWeapon(Weapon);
+	if ( W == None || W.bIsReloading || W.ClipLeft < 1 )
+		return false;
+	if ( KFPawn(Instigator) != None && (KFPawn(Instigator).SecondaryItem != None || KFPawn(Instigator).bThrowingNade) )
+		return false;
+	return Weapon.AmmoAmount(ThisModeNum) > 0;
 }
 
 function float MaxRange()
 {
+	if ( ProjectileClass == SlugClass )
+		return 3000;
 	return 1500;
 }
-                                   
+
+// Buckshot or slugs for this mode's next shots.
+function SetShells(bool bSlugs, int SlugsPerShell)
+{
+	if ( bSlugs )
+	{
+		ProjectileClass = SlugClass;
+		ProjPerFire = SlugsPerShell;
+		SpreadStyle = SS_Line;
+	}
+	else
+	{
+		ProjectileClass = default.ProjectileClass;
+		ProjPerFire = default.ProjPerFire;
+		SpreadStyle = default.SpreadStyle;
+	}
+	SavedFireProperties.bInitialized = false;
+}
+
+event ModeDoFire()
+{
+	local KFWeapon W;
+
+	if ( !AllowFire() )
+		return;
+
+	W = KFWeapon(Weapon);
+	bFiringBoth = W.ClipLeft > 1 && (bBothBarrels || (BoomStick(Weapon) != None && BoomStick(Weapon).BotWantsBoth()));
+	if ( bFiringBoth )
+	{
+		Load = 2;
+		FireAnim = BothAnim;
+	}
+	else
+	{
+		Load = 1;
+		if ( W.ClipLeft > 1 )
+			FireAnim = RightAnim;     // the right barrel goes first
+		else
+			FireAnim = LeftAnim;
+	}
+
+	Super.ModeDoFire();
+
+	// a bot's both-barrel shot comes from the single-barrel mode
+	if ( bFiringBoth && !bBothBarrels )
+		NextFireTime += BothFireRate - default.FireRate;
+}
+
+function PlayFiring()
+{
+	if ( Weapon.Mesh != None )
+		Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
+	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,FireSoundPitch(),false);
+	ClientPlayForceFeedback(FireForce);
+	FireCount++;
+}
+
+function ServerPlayFiring()
+{
+	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,FireSoundPitch(),false);
+}
+
+function float FireSoundPitch()
+{
+	local float Pitch;
+
+	Pitch = 1.0 + RandomPitchAdjustAmt * (2.0 * FRand() - 1.0);
+	if ( !bFiringBoth )
+		Pitch *= SingleSoundPitch;
+	return Pitch;
+}
+
+// The parent skips the shake once the gun is empty, which here is every both-barrel shot.
+function ShakeView()
+{
+	Super(WeaponFire).ShakeView();
+}
+
+function HandleRecoil()
+{
+	if ( bFiringBoth )
+		KickScale = 1.0;
+	else
+		KickScale = SingleKick;
+	Super.HandleRecoil();
+}
+
 function DoFireEffect()
 {
     local Vector StartProj, StartTrace, X,Y,Z;
@@ -36,7 +140,7 @@ function DoFireEffect()
     {
         StartProj = HitLocation;
     }
-    
+
     Aim = AdjustAim(StartProj, AimError);
 
     SpawnCount = Max(1, ProjPerFire * int(Load));
@@ -70,15 +174,23 @@ function DoFireEffect()
 
 defaultproperties
 {
+    SlugClass=Class'KFMod.BoomStickSlug'
+    BothAnim="Fire"
+    RightAnim="FireRight"
+    LeftAnim="FireLeft"
+    BothFireRate=0.500000
+    SingleKick=0.600000
+    SingleSoundPitch=1.120000
     KickMomentum=(X=-105.000000,Z=55.000000)
     ProjPerFire=20
     bAttachSmokeEmitter=True
     TransientSoundVolume=150.000000
     TransientSoundRadius=500.000000
     FireSound=Sound'KFWeaponSound.DBFire'
-    FireRate=2.500000
+    FireRate=0.350000
+    TweenTime=0.020000
     AmmoClass=Class'KFMod.DBShotgunAmmo'
-    AmmoPerFire=2
+    AmmoPerFire=1
     ProjectileClass=Class'KFMod.BoomStickBullet'
     BotRefireRate=0.700000
     FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'

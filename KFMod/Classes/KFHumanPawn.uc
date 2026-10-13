@@ -13,10 +13,8 @@ var Sound MiscSound;
 var() Material InjuredOverlay, CriticalOverlay;
 
 // --- Camera/Effects ---
-var CameraEffect CameraEffectFound;
-var globalconfig bool bHitBlurEnabled;
-var bool bUsingHitBlur;
-var float StopBlurTime;
+var bool bHitShaking;
+var float StopShakeTime;
 
 // --- Player State ---
 var int ScoreCounter;
@@ -29,44 +27,53 @@ var() float MaxCarryWeight;
 var float CurrentWeight;
 var() HeldWeapon RifleAtt, MeleeAtt;
 
-// --- Torch/Flashlight ---
 var() int TorchBatteryLife;
 var bool bTorchOn;
 var int TempScore;
 
-// --- Movement/Physics ---
 var() float SprintMulti;
 var() float HealthSpeedModifier;
 var bool bIsSprinting;
 
-// --- Miscellaneous ---
 var int SpeedAdjustment;
 var float BaseMeleeIncrease;
 
-// --- Crouch/Jump Parameters ---
 var float  CrouchEndTime;
-var float  LandedTime;
-var() float JumpCrouchBonus;   // Jump height multiplier for crouching
-var() float JumpCrouchTime;
-var bool   bAirCrouched;       // True when we applied the mid-air crouch offset
-var bool   bCrouchJumped;      // True when player was crouched at time of jump
-var bool   bCrouchLanded;      // True when last landing was a crouch-landing (persists through slide window)
-var() float CrouchSlideBoost;  // Horizontal speed multiplier when landing while crouched
-var() float CrouchSlideWindow; // Duration (seconds) of the slide momentum window
+var float  GroundTime;                        // seconds on the ground since landing, counted from the moves themselves
+var() float JumpCrouchBonus, JumpCrouchTime;
+var bool   bCrouchJumped;
+
+
+//Revive system!! Hopefully this works!
+var bool bIsDowned;
+var() float DownedSpeedScale;    // Make us slow when down
+var() float DownedBleedoutTime;  // Seconds before an downed player dies
+var() float DownedRevivedHealth; // Health restored on a successful revive
+var float DownedEndTime;
+
+var bool bBeingRevived;
+var Pawn Reviver;
+var() float ReviveDuration, ReviveRadius;
+var float ReviveProgress;
+
+var() string DownedMessage, RevivedMessage, ReviveStartMessage, ReviveInterruptedMessage;
+var() sound DownedSound, RevivedSound;
 
 replication
 {
-    reliable if (Role == ROLE_Authority)
+    // (not to the player himself: his own machine decides his sprint and sends it with his moves, and the
+    // server's copy coming back late would undo a sprint let go in the meantime)
+    reliable if (Role == ROLE_Authority && !bNetOwner)
         bIsSprinting;
 
 	reliable if ( bNetDirty && (Role == Role_Authority) )
-		bAimingRifle;
+		bAimingRifle, bIsDowned, bBeingRevived, Reviver;
 
 	reliable if ( bNetDirty && (Role == Role_Authority) && bNetOwner )
 		CurrentWeight,MaxCarryWeight,AlphaAmount,bTorchOn,TorchBatteryLife;
 
 	reliable if(RemoteRole == ROLE_AutonomousProxy)
-		DoHitCamEffects, StopHitCamEffects;
+		DoHitCamEffects, StopHitCamEffects, ClientSprintDenied;
 
 	reliable if(Role < ROLE_Authority)
 		SetAiming,ServerStartSprintKF,ServerStopSprintKF;
@@ -100,47 +107,9 @@ event PreBeginPlay()
 
 Simulated function tick(float DeltaTime)
 {
-	local float HeightDiff;
-	local bool bDuckInput;
-
 	super.Tick(DeltaTime);
 
-	// --- Air-crouch: the engine's ProcessMove skips ShouldCrouch() during
-	// PHYS_Falling, so bWantsToCrouch never gets set mid-air.  Read the raw
-	// bDuck input directly from the controller instead. ---
-	bDuckInput = (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0);
-	HeightDiff = default.CollisionHeight - CrouchHeight;
-
-	if (Physics == PHYS_Falling && bDuckInput && !bAirCrouched)
-	{
-		SetCollisionSize(CollisionRadius, CrouchHeight);
-		// No MoveSmooth — server processes bDuck at a different time,
-		// so client/server disagree on Location.Z. Corrections cause pops.
-		// Collision shrinks for gameplay; camera stays via EyeHeight.
-		if (bCrouchJumped)
-			BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
-		else
-			BaseEyeHeight = default.BaseEyeHeight;
-		bAirCrouched = true;
-	}
-	else if (bAirCrouched && Physics == PHYS_Falling && !bDuckInput)
-	{
-		// Don't expand collision during falling — expanding without a
-		// position adjustment can push through terrain below.  Keep
-		// crouch collision; Landed() restores it safely on the ground.
-		BaseEyeHeight = default.BaseEyeHeight;
-	}
-	else if (Physics == PHYS_Falling && bCrouchJumped && !bDuckInput && !bAirCrouched)
-	{
-		// Crouch-jump but player released crouch before air-crouch was applied;
-		// let UpdateEyeHeight smooth toward standing height.
-		BaseEyeHeight = default.BaseEyeHeight;
-	}
-
-	// Safety: if grounded and standing, ensure BaseEyeHeight isn't stuck
-	// low from EndCrouch's crouch-jump path (fast landings, etc.)
-	if (Physics != PHYS_Falling && !bIsCrouched && !bAirCrouched && !bWantsToCrouch
-	    && BaseEyeHeight < default.BaseEyeHeight)
+	if (Physics != PHYS_Falling && !bIsCrouched && !bWantsToCrouch && BaseEyeHeight < default.BaseEyeHeight)
 	{
 		BaseEyeHeight = default.BaseEyeHeight;
 	}
@@ -149,7 +118,7 @@ Simulated function tick(float DeltaTime)
 	{
 		if (KFPlayerReplicationInfo(PlayerController(Controller).PlayerReplicationInfo).ThreeSecondScore > 0 && AlphaAmount > 0)
 			AlphaAmount -=2;
-    
+
 		if (AlphaAmount <= 0)
 		{
 			KFPlayerReplicationInfo(PlayerController(Controller).PlayerReplicationInfo).ThreeSecondScore = 0;
@@ -157,7 +126,6 @@ Simulated function tick(float DeltaTime)
 		}
 	}
 }
-
 
 simulated event PhysicsVolumeChange( PhysicsVolume NewVolume )
 {
@@ -216,7 +184,7 @@ function Timer()
 		PCC = PlayerController(Controller);
 		if(PCC != None )
 		{
-			if(bUsingHitBlur && Level.TimeSeconds >= StopBlurTime)
+			if(bHitShaking && Level.TimeSeconds >= StopShakeTime)
 				StopHitCamEffects();
 			// Update for the scoreboards.
 			if (Health <= 0)
@@ -254,13 +222,20 @@ function Timer()
 
 simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
 {
+	local int HealthWas;
+	local float ArmourWas;
+
+	if( Role<ROLE_Authority )
+		return;
 	if( Controller!=None && Controller.bGodMode )
 		return;
 
 	// Berserkers resist knockback from monsters
-	if( InstigatedBy != none && ((KFMonster(instigatedBy)!=None && GetVeteran().default.VeterancyName=="Berserker") || KFHumanPawn(instigatedBy)!=None) )
+	if( InstigatedBy != none && ((KFMonster(instigatedBy)!=None && ClassIsChildOf(GetVeteran(),class'KFVetBerserker')) || KFHumanPawn(instigatedBy)!=None) )
 		momentum = vect(0,0,0);
 
+	HealthWas = Health;
+	ArmourWas = ShieldStrength;
 	Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
 	//log("TakeDamage: "$self$" Damage: "$Damage$" InstigatedBy: "$instigatedBy$" HitLocation: "$hitlocation$" Momentum: "$momentum$" DamageType: "$damageType);
 	//Bloody Overlays
@@ -270,28 +245,29 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 	if( Controller==none || PlayerController(Controller)==None )
 		return;
 
-	// hopefully this should stop friendly fire view spazzing
-	if (Level.Game.ReduceDamage(Damage, self, instigatedBy, hitLocation, Momentum, DamageType ) > 0)
-		DoHitCamEffects(momentum);
-}                               
+	// The view shakes and blurs only for a hit that got through (not friendly fire the game took away). What it
+	// took is read off health and armour: this used to ask the game's damage rules a second time, so every rule a
+	// mutator adds saw each hit on a player twice. The blur goes by the health lost.
+	if( Health<HealthWas || ShieldStrength<ArmourWas )
+		DoHitCamEffects(momentum, Max(HealthWas-Health,0));
+}
 
 function TakeBileDamage()
 {
-	local int RandBileDamage;
-    local int actualDamage;
+	local int RandBileDamage, HealthWas;
+	local float ArmourWas;
 	local vector BileVect;
-    local vector HitMomentum;
 
 	RandBileDamage = 2+Rand(2);
 
+	HealthWas = Health;
+	ArmourWas = ShieldStrength;
     Super(XPawn).TakeDamage(RandBileDamage, BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
     healthtoGive-=5;
 
-    HitMomentum = vect(0,0,0);
-    actualDamage = Level.Game.ReduceDamage(RandBileDamage, self, BileInstigator, Location, HitMomentum, class'DamTypeVomit');
-
-    if( actualDamage <= 0 )
-        return;
+	// (as in TakeDamage: what it took is read off health and armour)
+	if( Health>=HealthWas && ShieldStrength>=ArmourWas )
+		return;
 
 	//TODO: move this sanity check to DoHitCamEffect?
 	if(Controller == none || PlayerController(Controller) == None)
@@ -303,21 +279,23 @@ function TakeBileDamage()
 	BileVect.X=frand()*400.0-200.0;
 	BileVect.Y=frand()*200.0-100.0;
 	BileVect.Z=frand()*400.0-200.0;
-	DoHitCamEffects( BileVect );
+	DoHitCamEffects( BileVect, Max(HealthWas-Health,0) );
 }
 
-simulated function DoHitCamEffects(vector Momentum)
+simulated function DoHitCamEffects(vector Momentum, optional int Damage)
 {
-	//if(!bHitBlurEnabled)
-	//	return;
-	StopBlurTime = Level.TimeSeconds+3;
-	if(!bUsingHitBlur)
+	local KFScreenFX FX;
+
+	// the view goes out of focus by how hard the hit was (KFScreenFX clears it again by itself)
+	FX = class'KFFrameTap'.static.GetFX(PlayerController(Controller));
+	if( FX!=None )
+		FX.HitBlur(Damage);
+
+	StopShakeTime = Level.TimeSeconds+3;
+	if(!bHitShaking)
 	{
 		//reset to false if need be.
 		SetTimer(1.5,true);
-
-		if( bHitBlurEnabled && !PlatformIsMacOS() && !PlatformIsUnix())
-			FindCameraEffect(class 'KFmod.UnderWaterBlur');
 
 		// this cast is OK as long as this is only called from TakeDamage,
 		// where the controller is tested before this function is called
@@ -326,81 +304,29 @@ simulated function DoHitCamEffects(vector Momentum)
 			   60 * (Normal(Momentum)/30),
 			   vect(1,1,1)/200,
 			   1);
-		bUsingHitBlur = true;
+		bHitShaking = true;
 	}
 }
 
 simulated function StopHitCamEffects()
 {
-	if(bUsingHitBlur)
+	if(bHitShaking)
 	{
-		RemoveCameraEffect(CameraEffectFound);
 		// StopViewShaking zeroes Rate/Max/Time but leaves the current
 		// ShakeRot/ShakeOffset intact.  ViewShake only decays them when
 		// Rate != 0, so the residual offset persists forever.  Zero them.
 		PlayerController(Controller).StopViewShaking();
 		PlayerController(Controller).ShakeRot = rot(0,0,0);
 		PlayerController(Controller).ShakeOffset = vect(0,0,0);
-		bUsingHitBlur=false;
+		bHitShaking=false;
 	}
 }
 
 simulated function Died(Controller Killer, class<DamageType> damageType, vector HitLocation)
 {
 	StopHitCamEffects();
-	log("Died: "$Controller.GetHumanReadableName()$" Killer: "$Killer.GetHumanReadableName()$" DamageType: "$damageType);
+
 	Super.Died(Killer, damageType, HitLocation);
-}
-
-simulated function CameraEffect FindCameraEffect(class<CameraEffect> CameraEffectClass)
-{
-	local PlayerController PlayerControllerLocal;
-	local int i;
-
-	PlayerControllerLocal = Level.GetLocalPlayerController();
-	if ( PlayerControllerLocal != None )
-	{
-		for (i = 0; i < PlayerControllerLocal.CameraEffects.Length; i++)
-			if ( PlayerControllerLocal.CameraEffects[i].Class == CameraEffectClass )
-			{
-				CameraEffectFound = PlayerControllerLocal.CameraEffects[i];
-				break;
-			}
-		if ( CameraEffectFound == None )
-			CameraEffectFound = CameraEffect(Level.ObjectPool.AllocateObject(CameraEffectClass));
-		if ( CameraEffectFound != None )
-			PlayerControllerLocal.AddCameraEffect(CameraEffectFound);
-	}
-	return CameraEffectFound;
-}
-
-
-//=============================================================================
-// RemoveCameraEffect
-//
-// Removes one reference to the CameraEffect from the CameraEffects array. If
-// there are any more references to the same CameraEffect object, they remain
-// there. The CameraEffect will be put back in the ObjectPool if no other
-// references to it are left in the CameraEffects array.
-//=============================================================================
-
-simulated function RemoveCameraEffect(CameraEffect CameraEffect)
-{
-  local PlayerController PlayerControllerLocal;
-  local int i;
-
-  PlayerControllerLocal = Level.GetLocalPlayerController();
-  if ( PlayerControllerLocal != None ) {
-    PlayerControllerLocal.RemoveCameraEffect(CameraEffect);
-    for (i = 0; i < PlayerControllerLocal.CameraEffects.Length; i++)
-      if ( PlayerControllerLocal.CameraEffects[i] == CameraEffect ) {
-        log(CameraEffect@"still in CameraEffects array");
-        return;
-      }
-    log("Freeing"@CameraEffect);
-    Level.ObjectPool.FreeObject(CameraEffect);
-    CameraEffectFound = none;
-  }
 }
 
 simulated function PrevWeapon()
@@ -575,30 +501,24 @@ simulated function vector CalcDrawOffset(inventory Inv)
 	else
 	{
 		DrawOffset.Z += EyeHeight;
-        //if( bWeaponBob )
-		//    DrawOffset += WeaponBob(Inv.BobDamping);
-         DrawOffset += CameraShake();
+		DrawOffset += CameraShake();
 	}
 	return DrawOffset;
 }
 
 
-simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
+// Whether the server lets a network player sprint who says he does
+function bool MaySprint()
+{
+	return true;
+}
+
+// The player's pace as his health, his load, his sprint and his perk make it
+simulated function UpdateSpeed()
 {
     local float HealthMod, SprintMod, WeightMod;
 	local float EncumbrancePercentage;
-	local float InitialCrouchSpeed, CrouchDecayRate;
-	local float Speed2D, FrictionBlend, Drop, NewSpeed, SpeedFraction;
-
-    Super.ModifyVelocity(DeltaTime, OldVelocity);
-
-	if (Controller == none)
-		return;
-
-	// Cancel crouch-landing slide if the player stands up — prevents
-	// the inflated GroundSpeed cap from applying at full standing speed.
-	if (bCrouchLanded && !bIsCrouched && !bWantsToCrouch)
-		bCrouchLanded = false;
+	local KFWeapon KFW;
 
 	// Calculate encumbrance, but cap it to the maxcarryweight so when we use dev weapon cheats we don't move mega slow
 	EncumbrancePercentage = (FMin(CurrentWeight, MaxCarryWeight)/MaxCarryWeight);
@@ -606,74 +526,51 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 	WeightMod = (1.0 - (EncumbrancePercentage * 0.13));
 	// Calculate the health modifier to speed
 	HealthMod = ((Health/HealthMax) * HealthSpeedModifier) + (1.0 - HealthSpeedModifier);
-	if(!bCrouchLanded && (bIsSprinting || Physics == PHYS_Falling)) 
-	{
-		if(!bIsCrouched)
-			SprintMod = SprintMulti;
-		else SprintMod = 1.0;
-		InitialCrouchSpeed = 1.5;
-		CrouchDecayRate = 1.0;
-	}
-	else 
-	{
+	// (in the air a player keeps the pace he left the ground at: a jump is not a sprint)
+	if (bIsSprinting && !bIsCrouched)
+		SprintMod = SprintMulti;
+	else
 		SprintMod = 1.0;
-		InitialCrouchSpeed = 1.25;
-		CrouchDecayRate = 1.5;
-	}
 	GroundSpeed = default.GroundSpeed * HealthMod;
 	GroundSpeed *= WeightMod;
 	GroundSpeed *= SprintMod;
+	if( bIsDowned )
+		GroundSpeed *= DownedSpeedScale;
 	AccelRate = default.AccelRate * SprintMod;
 
 	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
 	{
 		GroundSpeed *= KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetMovementSpeedModifier();
-		if(Weapon != none && KFWeapon(Weapon).bMeleeWeapon)
+		KFW = KFWeapon(Weapon);
+		if(KFW != none && KFW.bMeleeWeapon)
 			GroundSpeed += (default.GroundSpeed * (BaseMeleeIncrease + KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.GetMeleeMovementSpeedModifier()));
 	}
+}
 
-	// Check if the player is crouching
-	if (bIsCrouched)
-	{
-		// Gradually reduce the ground speed towards the crouch speed
-		// Don't decay during falling or the landing slide window (native physics
-		// scales speed by CrouchedPct — decaying it eats slide momentum).
-		if(Physics != PHYS_Falling && Level.TimeSeconds - LandedTime >= CrouchSlideWindow)
-			CrouchedPct = FClamp(CrouchedPct - (DeltaTime * CrouchDecayRate), default.CrouchedPct, InitialCrouchSpeed);
-	}
-	else if (!bCrouchLanded)
-	{
-		// Don't ramp up during the crouch-landing slide window — preserve
-		// the default CrouchedPct that Landed set.
-		CrouchedPct = FClamp(CrouchedPct + (DeltaTime * 200), default.CrouchedPct, InitialCrouchSpeed);
-	}
+simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
+{
+	local float Speed2D, FrictionBlend, Drop, NewSpeed, SpeedFraction;
 
-	// Clear crouch-landed flag once the slide window expires.
-	if (bCrouchLanded && Level.TimeSeconds - LandedTime >= CrouchSlideWindow)
-		bCrouchLanded = false;
+    Super.ModifyVelocity(DeltaTime, OldVelocity);
 
-	// Preserve slide momentum after landing — don't let GroundSpeed cap the
-	// slide velocity (including any CrouchSlideBoost) during the slide window.
-	if (Physics == PHYS_Walking && bCrouchLanded && Level.TimeSeconds - LandedTime < CrouchSlideWindow)
-		GroundSpeed = FMax(GroundSpeed, Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y));
+	if (Controller == none)
+		return;
 
-	// Ground friction when not accelerating.
+	UpdateSpeed();
+
 	if (Physics == PHYS_Walking)
 	{
+		// (by the moves, not by the clock: the server and a network player's own machine then agree on it)
+		GroundTime = FMin(GroundTime + DeltaTime, 10.0);
+
 		if (Acceleration.X * Acceleration.X + Acceleration.Y * Acceleration.Y < 1.0)
 		{
 			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
 			SpeedFraction = FClamp(Speed2D / FMax(default.GroundSpeed, 1.0), 0.0, 2.0);
 
-			if (bCrouchLanded && Level.TimeSeconds - LandedTime < CrouchSlideWindow)
+			if (GroundTime < 0.3)
 			{
-				// Crouch-landing slide: high momentum preservation, gentle decel
-				FrictionBlend = 0.98 - (Level.TimeSeconds - LandedTime) * (0.03 / FMax(CrouchSlideWindow, 0.01));
-			}
-			else if (Level.TimeSeconds - LandedTime < 0.3)
-			{
-				// Normal landing: brief grace period but shorter
-				FrictionBlend = 0.93 - (Level.TimeSeconds - LandedTime) * 0.20;
+				FrictionBlend = 0.93 - GroundTime * 0.20;
 			}
 			else
 			{
@@ -686,10 +583,7 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
 			if (Speed2D > 1.0)
 			{
-				if (bCrouchLanded)
-					Drop = default.GroundSpeed * 1.0 * DeltaTime;
-				else
-					Drop = Speed2D * 4.0 * DeltaTime;
+				Drop = Speed2D * 4.0 * DeltaTime;
 				NewSpeed = FMax(Speed2D - Drop, 0.0) / Speed2D;
 				Velocity.X *= NewSpeed;
 				Velocity.Y *= NewSpeed;
@@ -697,87 +591,23 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 		}
 	}
 
-	if(VSize(Velocity) < 1.f && Bot(Controller) == None) //No sprinting when standing still, except for bots
+	if(VSize(Velocity) < 1.f && Bot(Controller) == None) //Hack to make it so bots don't unsprint if they bumped into a wall or something
+	{
+		if( bIsSprinting && Role<ROLE_Authority )
+			ServerStopSprintKF();
 		bIsSprinting = False;
+	}
 }
 
 event Landed(vector HitNormal)
 {
-    local float HeightDiff;
-    local bool bWasCrouchLanding;
-    local float Speed2D, MaxSlideSpeed, BoostedSpeed;
-
-    bWasCrouchLanding = bAirCrouched
-        && (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0);
-
-    if (bAirCrouched)
-    {
-        HeightDiff = default.CollisionHeight - CrouchHeight;
-
-        // Always restore standing collision so native crouch tracking
-        // (StartCrouch/EndCrouch/bIsCrouched) stays consistent.
-        MoveSmooth(vect(0,0,1) * HeightDiff);
-        OldZ += HeightDiff;
-        SetCollisionSize(CollisionRadius, default.CollisionHeight);
-
-        if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
-        {
-            // Still holding crouch — compensate EyeHeight for the upward move
-            // so the camera stays at the same world position.  The engine will
-            // re-crouch us next tick (StartCrouch adds HeightDiff back).
-            EyeHeight -= HeightDiff;
-            BaseEyeHeight = EyeHeight;
-            bWantsToCrouch = true;
-        }
-        else
-        {
-            EyeHeight -= HeightDiff;
-            BaseEyeHeight = default.BaseEyeHeight;
-        }
-        bAirCrouched = false;
-    }
-    else if (bCrouchJumped)
-    {
-        // Crouch-jump that landed before Tick applied air-crouch.
-        // EndCrouch lowered BaseEyeHeight; restore it now.
-        if (PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
-            bWantsToCrouch = true;
-        else
-            BaseEyeHeight = default.BaseEyeHeight;
-    }
     bCrouchJumped = false;
-    super.Landed(HitNormal);
-    LandedTime = Level.TimeSeconds;
-
-    // Crouch-landing speed boost: reward landing while holding crouch.
-    // Cap so repeated crouch-landings can't compound beyond sprint speed.
-    if (bWasCrouchLanding && CrouchSlideBoost > 0)
-    {
-        CrouchedPct = default.CrouchedPct;
-        Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
-        MaxSlideSpeed = default.GroundSpeed * SprintMulti * (1.0 + CrouchSlideBoost);
-        if (Speed2D < MaxSlideSpeed)
-        {
-            BoostedSpeed = FMin(Speed2D * (1.0 + CrouchSlideBoost), MaxSlideSpeed);
-            if (Speed2D > 0)
-            {
-                Velocity.X *= (BoostedSpeed / Speed2D);
-                Velocity.Y *= (BoostedSpeed / Speed2D);
-            }
-        }
-        bCrouchLanded = true;
-    }
-    else
-    {
-        bCrouchLanded = false;
-    }
+    Super.Landed(HitNormal);
+    GroundTime = 0;
 }
 
 event StartCrouch(float HeightAdjust)
 {
-    // Clear landing-bob/recovery state so the recovery path's
-    // FMin(lerp, BaseEyeHeight) clamp can't snap EyeHeight when
-    // BaseEyeHeight drops from standing to crouch in one frame.
     bJustLanded = false;
     bLandRecovery = false;
     Super.StartCrouch(HeightAdjust);
@@ -786,60 +616,7 @@ event StartCrouch(float HeightAdjust)
 event EndCrouch(float HeightAdjust)
 {
     CrouchEndTime = Level.TimeSeconds;
-    if (bCrouchJumped)
-    {
-        // Engine uncrouched for the jump — undo its position change and
-        // restore crouch collision. Both client and server fire EndCrouch
-        // deterministically at jump time, so no network disagreement.
-        // Shrink collision BEFORE moving down — standing collision (50)
-        // clips the floor and blocks the MoveSmooth.
-        SetCollisionSize(CollisionRadius, CrouchHeight);
-        MoveSmooth(vect(0,0,-1) * HeightAdjust);
-        BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
-        bAirCrouched = true;
-    }
-    else if (Physics == PHYS_Falling && PlayerController(Controller) != None && PlayerController(Controller).bDuck != 0)
-    {
-        // Engine forced uncrouch (walked off ledge) but player still holding
-        // duck.  Undo the native position/collision change immediately so the
-        // pawn stays crouched with no visual pop.
-        // Gated on PHYS_Falling — on the ground the MoveSmooth down can
-        // push the pawn into terrain; let Super handle ground uncrouching.
-        SetCollisionSize(CollisionRadius, CrouchHeight);
-        MoveSmooth(vect(0,0,-1) * HeightAdjust);
-        BaseEyeHeight = FMin(0.8 * CrouchHeight, CrouchHeight - 10);
-        bAirCrouched = true;
-    }
-    else
-    {
-        Super.EndCrouch(HeightAdjust);
-    }
-}
-
-simulated event UpdateEyeHeight(float DeltaTime)
-{
-    local float MaxEyeHeight;
-    local Actor HitActor;
-    local vector HitLocation, HitNormal;
-
-    super.UpdateEyeHeight(DeltaTime);
-
-    // While air-crouched, lock EyeHeight so the native stair-smoothing
-    // formula (which uses OldZ) can't fight our MoveSmooth offset.
-    // Clamp against ceiling trace so the camera can't poke through
-    // low ceilings (collision is shorter than standing eye height).
-    if (bAirCrouched)
-    {
-        HitActor = Trace(HitLocation, HitNormal,
-            Location + (CollisionHeight + MAXSTEPHEIGHT + 14) * vect(0,0,1),
-            Location + CollisionHeight * vect(0,0,1), true);
-        if (HitActor == None)
-            MaxEyeHeight = CollisionHeight + MAXSTEPHEIGHT;
-        else
-            MaxEyeHeight = HitLocation.Z - Location.Z - 14;
-
-        EyeHeight = FClamp(BaseEyeHeight, -0.5 * CollisionHeight, MaxEyeHeight);
-    }
+    Super.EndCrouch(HeightAdjust);
 }
 
 //Player Jumped
@@ -890,6 +667,13 @@ function ServerStartSprintKF()
 {
 	if(!bIsSprinting && !bIsCrouched)
 		bIsSprinting = True;
+	else if(!bIsSprinting)
+		ClientSprintDenied();
+}
+
+simulated function ClientSprintDenied()
+{
+	bIsSprinting = False;
 }
 
 simulated function StopSprintKF()
@@ -958,8 +742,7 @@ defaultproperties
 	CrouchedPct=0.500000
 	JumpCrouchBonus=0.350000
 	JumpCrouchTime=0.300000
-	CrouchSlideBoost=0.300000
-	CrouchSlideWindow=0.800000
+	GroundTime=1.000000
 	HealthSpeedModifier=0.300000
 	ControllerClass=Class'KFMod.KFInvasionBot'
 	CrouchTurnRightAnim="CrouchR"

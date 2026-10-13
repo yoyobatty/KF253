@@ -4,6 +4,7 @@ class DamTypeCrossbowHeadShot extends KFWeaponDamageType
 defaultproperties
 {
      WeaponClass=Class'KFMod.Crossbow'
+     bSniperWeapon=True
      DeathString="%ÿ%k put an arrow %o's head."
      FemaleSuicide="%o shot herself in the head."
      MaleSuicide="%o shot himself in the head."

@@ -82,18 +82,18 @@ simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
 simulated function Explode(vector HitLocation,vector HitNormal)
 {
     local FuelFlameHurting F;
+    local bool bRelevant;
 
     if ( Role == ROLE_Authority )
         HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
-    if ( EffectIsRelevant(Location,false) )
-    {
+    bRelevant = EffectIsRelevant(Location,false);
+    if ( bRelevant )
         Spawn(ExplosionDecal,self,, Location);
-        if ( CanSpawnFuelFlameNear(3, 36.0) )
-        {
-            F = Spawn(class'FuelFlameHurting',Instigator,,Location + vect(0,0,1));
-            if ( F != None )
-                F.BurnTime = 3.0;
-        }
+    if ( (bRelevant || Level.NetMode != NM_Client) && CanSpawnFuelFlameNear(3, 36.0) )
+    {
+        F = Spawn(class'FuelFlameHurting',Instigator,,Location + vect(0,0,1));
+        if ( F != None )
+            F.BurnTime = 3.0;
     }
     SetCollisionSize(0.0, 0.0);
     Destroy();
@@ -123,13 +123,10 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
         return;
 
     // Don't allow hits on people on the same team
-    if (
-        KFHumanPawn(Other) != none &&
-        KFHumanPawn(Other).Controller != none &&
-        Instigator != none &&
-        Instigator.Controller != none &&
-        KFHumanPawn(Other).Controller.SameTeamAs(Instigator.Controller)
-    )
+    if( KFHumanPawn(Other) != none && Instigator != none
+        && KFHumanPawn(Other).PlayerReplicationInfo != none && KFHumanPawn(Other).PlayerReplicationInfo.Team != none
+        && Instigator.PlayerReplicationInfo != none && Instigator.PlayerReplicationInfo.Team != none
+        && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
         return;
 
     Other.TakeDamage(Damage, Instigator, HitLocation, vect(0,0,0), MyDamageType);

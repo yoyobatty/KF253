@@ -7,10 +7,20 @@ function AddPanels()
 
     for ( i = 0; i < Panels.Length; i++ )
     {
+        // (the stock menu's own help page comes along with its list: KF has one of its own)
+        if ( Panels[i].ClassName ~= "GUI2K4.UT2K4Tab_MidGameHelp" )
+            continue;
         Panel = MidGamePanel(c_Main.AddTabItem(Panels[i]));
         if ( Panel != None )
             Panel.ModifiedChatRestriction = UpdateChatRestriction;
     }
+}
+
+// A game of one's own has no server info and no voice chat. (The stock code takes out the second and fourth of its
+// own list, which here are other pages.)
+function RemoveMultiplayerTabs(GameInfo Game)
+{
+    Panels.Remove(1,2);
 }
 
 defaultproperties

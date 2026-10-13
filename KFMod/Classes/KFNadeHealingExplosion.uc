@@ -33,6 +33,12 @@ simulated function Timer()
     if ( Role < ROLE_Authority )
         return;
 
+	if (HealTime <= 0)
+	{
+		SetTimer(0, false);
+		return;
+	}
+
 	for (i=0;i<Touching.length;i++)
 	{
 		if ( Touching[i] != None )
@@ -93,6 +99,7 @@ defaultproperties
     Emitters(0)=SpriteEmitter'KFMod.KFNadeHealingExplosion.SpriteEmitter0'
 
     AutoDestroy=True
+    LifeSpan=11.000000
     bNoDelete=False
     RemoteRole=ROLE_SimulatedProxy
     bNotOnDedServer=False

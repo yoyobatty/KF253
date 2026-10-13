@@ -104,7 +104,7 @@ function FireRockets() // And the point of this function is (it isnt even in syn
 	P = Spawn(class'KFMod.LawProj',,, Start, Dir);
 }
 
-function RemoveChopper()
+simulated function RemoveChopper()
 {
 	bHidden = true;
 } 

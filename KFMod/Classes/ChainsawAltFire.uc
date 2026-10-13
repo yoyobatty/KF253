@@ -6,6 +6,7 @@ class ChainsawAltFire extends AxeFire;
 
 defaultproperties
 {
+     bSweep=False
      WeaponRange=150.000000
      damageConst=190
      maxAdditionalDamage=80

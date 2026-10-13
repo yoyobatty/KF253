@@ -106,7 +106,7 @@ simulated function HurtRadius( float ExplosionDamage, float DamageRadius, class<
     foreach VisibleCollidingActors( class 'Actor', Victims, DamageRadius, HitLocation )
     {
         // don't let blast damage affect fluid - VisibleCollisingActors doesn't really work for them - jag
-        if( (Hurtwall != Victims) && (Victims.Role == ROLE_Authority) && !Victims.IsA('FluidSurfaceInfo') )
+        if( (Hurtwall != Victims) && (Victims.Role == ROLE_Authority) && !Victims.IsA('FluidSurfaceInfo') && ExtendedZCollision(Victims)==None )
         {
             dir = Victims.Location - HitLocation;
             dist = FMax(1,VSize(dir));

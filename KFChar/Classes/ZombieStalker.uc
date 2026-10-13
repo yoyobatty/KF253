@@ -5,6 +5,7 @@ var bool bCloaking;
 var float LastCheckTimes;
 var float LastUncloakTime;
 var KFHumanPawn LocalKFHumanPawn;
+var bool bShownHeadless;	// this machine has taken the cloak off her because the head is gone
 
 #exec OBJ LOAD FILE=KFCharacters.utx
 #exec OBJ LOAD FILE=KFCharacterModels.ukx
@@ -37,10 +38,19 @@ simulated function PostNetBeginPlay()
 
 simulated function Tick(float DeltaTime)
 {
+	local PlayerController PC;
+
 	Super.Tick(DeltaTime);
 	if( Level.NetMode==NM_DedicatedServer )
 		Return; // Servers aren't intrested in this info.
-  
+
+	if( LocalKFHumanPawn == None || LocalKFHumanPawn.Health <= 0 )
+	{
+		PC = Level.GetLocalPlayerController();
+		if( PC != None && PC.Pawn != None )
+			LocalKFHumanPawn = KFHumanPawn(PC.Pawn);
+	}
+
 	if( Level.TimeSeconds>LastCheckTimes && Health > 0 )
 	{
 		LastCheckTimes = Level.TimeSeconds+0.5;
@@ -129,6 +139,19 @@ function RemoveHead()
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
 		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 	}
+}
+
+// RemoveHead only runs on the server. This runs on every machine that draws her, so a network
+// player also sees the cloak drop with the head.
+simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread )
+{
+	if ( !bShownHeadless && !bAshen && Level.NetMode != NM_DedicatedServer )
+	{
+		bShownHeadless = true;
+		Skins[0] = Shader'KFCharacters.Zombie4Shader';
+		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
+	}
+	Super.SeverHead(bThrow, Dir, Spread);
 }
 
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)

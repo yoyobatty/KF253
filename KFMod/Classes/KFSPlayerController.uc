@@ -48,20 +48,6 @@ State Dead{
 
 
 
- function PawnDied(Pawn P)
- {
-    local int i;
-
-        for (i = 0; i < CameraEffects.Length; i++){
-            	RemoveCameraEffect(CameraEffects[i]);
-    	}
-
-     Super.PawnDied(P);
- }
-
-
-
-
 exec function DeleteSavePoint()
 {
 //local KFDataObject SPAmmo;

@@ -79,7 +79,7 @@ static function float GetHeadShotDamMulti()
 // Render some extra info on HUD
 static function SpecialHUDInfo( Canvas C );
 
-// Modify the spear/recoil for a weapon fire.
+// Modify the spread/recoil for a weapon fire.
 static function float ModifyRecoilSpread( WeaponFire Other, out float Recoil )
 {
 	Recoil = 1;

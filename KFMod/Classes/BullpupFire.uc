@@ -18,7 +18,8 @@ function DoTrace(Vector Start, Rotator Dir)
 */
 event ModeDoFire()
 {
-    DamageType = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.static.GetMAC10DamageType();
+    if ( KFPawn(Instigator) != None )
+        DamageType = KFPawn(Instigator).GetVeteran().static.GetMAC10DamageType();
     Super.ModeDoFire();
 }
 
@@ -43,6 +44,7 @@ function PlayFiring()
 function ServerPlayFiring()
 {
 	Weapon.PlayOwnedSound(FireSounds[rand(10)],SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,,false);
+	FireCount++;
 }
 
 defaultproperties

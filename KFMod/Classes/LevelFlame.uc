@@ -67,4 +67,5 @@ defaultproperties
      CollisionHeight=30.000000
      bCollideActors=True
      bUseCylinderCollision=True
+     bNotOnDedServer=False
 }

@@ -71,6 +71,9 @@ simulated function PostBeginPlay()
     }
 }
 
+// Touching a body does it no harm. Stock would have a client's own bodies take the full Damage.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
+
 simulated function ProcessTouch( actor Other, vector HitLocation )
 {
    // if ( !Other.bWorldGeometry && (Other != Instigator || bCanHitOwner) )

@@ -79,6 +79,9 @@ function SpawnTwoShots()
     local vector X,Y,Z, FireStart;
     local rotator FireRotation;
 
+    // (the animation can get here after the bloat has died)
+    if( Controller==None )
+        return;
     if( Controller!=None && KFDoorMover(Controller.Target)!=None )
     {
         Controller.Target.TakeDamage(22,Self,Location,vect(0,0,0),Class'DamTypeVomit');
@@ -148,7 +151,11 @@ function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
   local bool AttachSucess;
 
   super.PlayDyingAnimation(DamageType, HitLoc);
-  
+
+  // blown to pieces: there is no body left to put the bile jet on
+  if ( bDeleteMe )
+    return;
+
   if(BloatJet!=none)
   {
     AttachSucess=AttachToBone(BloatJet,'Bip01 Spine');
@@ -240,6 +247,7 @@ defaultproperties
   GroundSpeed=75.000000
   WaterSpeed=102.000000
   HealthMax=500.000000
+  GibScale=1.200000
   Health=500
   HeadHeight=2.5
   HeadScale=1.5

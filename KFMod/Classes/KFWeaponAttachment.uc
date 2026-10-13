@@ -26,6 +26,56 @@ var Pawn LastInstig;
 
 var vector OlComprVect;
 
+var class<Weapon> WeaponClass;	// the gun this is the third-person model of; a client needs its damage figures
+var byte CorpseHitSeen;			// the last shot from the server that was tried against this machine's bodies
+var byte CorpseShotCount, CorpseShotSeen;	// shots the server saw stop on a dead specimen, and the last one tried here
+var vector CorpseShotLoc;		// where the last of those stopped
+var() float CorpseHitReach;		// how far past the server's hit point a client looks for its own body
+
+replication
+{
+	reliable if ( bNetInitial && Role == ROLE_Authority )
+		WeaponClass;
+	reliable if ( bNetDirty && Role == ROLE_Authority )
+		CorpseShotCount, CorpseShotLoc;
+}
+
+function InitFor(Inventory I)
+{
+	Super.InitFor(I);
+	WeaponClass = class<Weapon>(I.Class);
+}
+
+// A shot that stopped on a dead specimen here. No wall was hit, so no hit effect goes out with it.
+function UpdateCorpseHit(vector HitLocation)
+{
+	CorpseShotCount++;
+	CorpseShotLoc = HitLocation;
+	NetUpdateTime = Level.TimeSeconds - 1;
+}
+
+// A dead specimen is handed over to each machine, which keeps its own ragdoll; a dedicated server has
+// none. So each client lands a shot on its own bodies, from where the server says the shot ended:
+// on the world, or on the server's own idea of a dead specimen.
+simulated function HitCorpse( vector ShotEnd )
+{
+	local class<InstantFire> F;
+	local vector Start, Dir, HitLoc, HitNorm;
+	local Actor A;
+
+	if ( Instigator == None || WeaponClass == None )
+		return;
+	F = class<InstantFire>(WeaponClass.default.FireModeClass[0]);
+	if ( F == None )
+		return;
+	Start = Instigator.Location + Instigator.EyePosition();
+	Dir = Normal(ShotEnd - Start);
+	A = Instigator.Trace(HitLoc, HitNorm, ShotEnd + Dir * CorpseHitReach, Start, true);
+	if ( KFMonster(A) != None && A.bTearOff && KFMonster(A).Health <= 0 )
+		A.TakeDamage(Lerp(FRand(), F.default.DamageMin, F.default.DamageMax), Instigator, HitLoc,
+			F.default.Momentum * Dir, F.default.DamageType);
+}
+
 simulated function name GetThirdPersonAnim()
 {
     if( FiringMode==1 && TPAnimsB.Length>0 )
@@ -47,6 +97,18 @@ simulated function PostNetReceive()
 			KFPawn(Instigator).WeaponAttachment = Self;
 		}
 	}
+	if ( SpawnHitCount != CorpseHitSeen )
+	{
+		CorpseHitSeen = SpawnHitCount;
+		if ( Level.NetMode == NM_Client )
+			HitCorpse(mHitLocation);
+	}
+	if ( CorpseShotCount != CorpseShotSeen )
+	{
+		CorpseShotSeen = CorpseShotCount;
+		if ( Level.NetMode == NM_Client )
+			HitCorpse(CorpseShotLoc);
+	}
 }
 simulated function PostNetBeginPlay()
 {
@@ -58,6 +120,8 @@ simulated function PostNetBeginPlay()
 	}
 	LastInstig = Instigator;
 	mHitLocation = vect(0,0,0);
+	CorpseHitSeen = SpawnHitCount;
+	CorpseShotSeen = CorpseShotCount;
 	bNetNotify = True;
 }
 
@@ -242,6 +306,7 @@ defaultproperties
      mTracerPullback=50.000000
      mTracerSpeed=7500.000000
      HitEffectType=Class'KFMod.KFHitEffect'
+     CorpseHitReach=300.000000
      WeaponIdleMovementAnim="Idle_Rifle"
      LightType=LT_Steady
      LightEffect=LE_NonIncidence

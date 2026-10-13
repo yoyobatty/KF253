@@ -12,7 +12,7 @@ function ShowShotgunInfo(Canvas C)
 defaultproperties
 {
      cost=10000
-     AmmoCost=100
+     AmmoCost=200
      Description="Boom."
      ItemName="Super Hunting Shotgun"
      AmmoItemName="Evil fucking ZED nuker shells"

@@ -1,6 +1,12 @@
 // Full Auto version of the  standard 9mm
 class MachinePistol extends KFWeapon;
 
+simulated function PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	SetBoneScale(0, 0.0, 'LightBone');
+}
+
 function byte BestMode()
 {
     return 0;

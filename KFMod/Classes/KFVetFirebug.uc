@@ -3,7 +3,7 @@ Class KFVetFirebug extends KFVeterancyTypes
 
 static function bool QualityFor( KFPlayerStats Other )
 {
-	Return (Other.FlameThrowerDamage>=200);
+	Return (Other.FlameThrowerDamage>=20000);
 }
 
 static function bool FlamingNades()

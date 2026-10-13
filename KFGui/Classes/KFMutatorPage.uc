@@ -32,7 +32,7 @@ function SetCurrentGame( CacheManager.GameRecord CurrentGame )
 
 	for (i=0;i<MutatorList.Length;i++)
 	{
-		if ( Left(MutatorList[i].GroupName,2)== "KF" )
+		if ( Left(MutatorList[i].GroupName,2)== "KF" || Left(MutatorList[i].ClassName,2) ~= "KF" )
 			lb_Avail.List.Add(MutatorList[i].FriendlyName,,MutatorList[i].Description);
         else if ( b_Allow2004Muts.IsChecked() )
 			lb_Avail.List.Add(MutatorList[i].FriendlyName,,MutatorList[i].Description);
@@ -84,7 +84,7 @@ function ListChange(GUIComponent Sender)
 
         for (i=0;i<MutatorList.Length;i++)
         {
-            if ( Left(MutatorList[i].GroupName,2)== "KF" )
+            if ( Left(MutatorList[i].GroupName,2)== "KF" || Left(MutatorList[i].ClassName,2) ~= "KF" )
                 lb_Avail.List.Add(MutatorList[i].FriendlyName,,MutatorList[i].Description);
             else if ( b_Allow2004Muts.IsChecked() )
                 lb_Avail.List.Add(MutatorList[i].FriendlyName,,MutatorList[i].Description);

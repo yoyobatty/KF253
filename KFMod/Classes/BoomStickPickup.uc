@@ -12,7 +12,7 @@ function ShowShotgunInfo(Canvas C)
 defaultproperties
 {
      cost=450
-     AmmoCost=20
+     AmmoCost=40
      BuyClipSize=6
      PowerValue=90
      SpeedValue=30

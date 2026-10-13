@@ -147,6 +147,8 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 {
 	if( bHidden || instigatedBy==None || MyTrigger==None )
 		Return; // Or else we see a lot of warnings on log.
+	if( MyTrigger.bBuyableDoor )
+		Return;
 	if (bNoSeal)
 	{
 		if ( bDamageTriggered && (Damage >= DamageThreshold) )
@@ -207,6 +209,8 @@ function Bump( Actor Other )
 	// Stop breaking elevator doors damnit
 	if( KFElevatorTrigger(MyTrigger) != None )
 		return;
+	if( MyTrigger != None && MyTrigger.bBuyableDoor )
+		return;
 	if( (bSealed || bClosed) && KFMonster(Other)!=None ) // Notify zombie to break this door.
 		KFMonsterController(KFMonster(Other).Controller).BreakUpDoor(Self);
 	else if( (bSealed || bClosed) && ExtendedZCollision(Other)!=None && Other.Base != none && KFMonster(Other.Base) != none )
@@ -214,9 +218,20 @@ function Bump( Actor Other )
 	else if( bSealed && bStartSealed && Pawn(Other)!=None && KFInvasionBot(Pawn(Other).Controller)!=None )
 		KFInvasionBot(Pawn(Other).Controller).SealUpDoor(Self);
 }
+// Zombies mode: force this door permanently open after a buyable-door purchase.
+function UnsealForPurchase()
+{
+	bKeyLocked = false;
+	bShouldBeOpen = true;
+	SetWeldStrength(0);
+	if( bClosed )
+		Trigger(Self, None);
+}
+
 function SetWeldStrength(float NewStrength)
 {
 	WeldStrength = NewStrength;
+	NetUpdateTime = Level.TimeSeconds - 1;
 	if(WeldStrength>0)
 		bSealed = true;
 	else 
@@ -267,6 +282,8 @@ function Tick( float Delta )
 		PathUdpTimer = Level.TimeSeconds+0.5;
 		DoorPathNode.ExtraCost = InitExtraCost;
 		if( (MyTrigger==None || bTriggerTooFar) && bClosed && !bHidden )
+			DoorPathNode.ExtraCost = 9999999;
+		else if( MyTrigger!=None && MyTrigger.bBuyableDoor && !MyTrigger.bDoorPurchased && bClosed && !bHidden )
 			DoorPathNode.ExtraCost = 9999999;
 		else if( bSealed && MyTrigger != none)
 		{

@@ -11,7 +11,7 @@ var string LibraryListHeaders[LIBLIST_CATS];
 
 var bool bChoseStarting, bClassChosen;
 var bool IsInLobby;
-var int CashThrowAmount; // Amount of cash a player throws per keypress.   Set in the player settings menu
+var globalconfig int CashThrowAmount; // Amount of cash a player throws per keypress.   Set in the player settings menu
 
 var KFMusicInteraction KFInterAct;
 var string DelayedSongToPlay;
@@ -40,21 +40,46 @@ var Rotator								BehindViewAimRotator;
 
 var() float FlySpeedMulti;
 var bool bWantsSprint;
+var float PendingBrake;        // what the player's next move checks his speed by (a shot's or a swing's), 0 for none
+var float LastSprintDeny;      // (server) when a network player was last told his sprint is refused
+var bool bMoveCrouched;        // whether the player was crouched when his last move was made
 
 // Fractional Parts of Pitch/Yaw Input
 var transient float PitchFraction, YawFraction;
 
+var input byte bUseKey;
+var float UseHoldTime, NextUseSendTime;
+var() float UseSendInterval;
+
+// View punch, after Half-Life 2: weapons call ViewPunch, a spring swings the view back to the player's aim.
+var vector PunchAngle;         // Current punch in rotator units (X pitch, Y yaw)
+var vector PunchVelocity;      // Its speed, units a second
+var rotator PunchApplied;      // The part of PunchAngle that is in Rotation right now
+var() float PunchDamping;      // How fast the swing dies down (the weapon that fired last sets it)
+var() float PunchSpring;       // Pull back towards the aim (the weapon that fired last sets it)
+var() float PunchImpulse;      // Speed a punch gives, per unit
+var() float PunchInstant;      // Share of a punch that lands at once
+var() float PunchCeiling;      // Punches that keep coming level off near this many times the largest one
+var() float PunchLookAhead;    // Seconds of travel counted in when judging how far the view is already kicked
+var() float PunchMaxStep;      // Longest spring step in seconds, so the swing is the same at any frame rate
+
 replication
 {
-	reliable if(REMOTEROLE == ROLE_AUTONOMOUSPROXY)
+	reliable if(RemoteRole == ROLE_AUTONOMOUSPROXY)
 		NetPlayMusic, NetStopMusic,ClientSwitchToBestMeleeWeapon,ShowLobbyMenu,ClientReceiveStat,StatsFinished,ClientGetStats;
 
 	reliable if( Role < ROLE_Authority )
-		KFSwitchToBestWeapon,ServerSetGRIPendingBots,ServerSetTempBotName,GRIKillBotCall,SelectVeterancy,ServerSendStats,UpdateStatsScreen;
+		KFSwitchToBestWeapon,ServerSetGRIPendingBots,ServerSetTempBotName,GRIKillBotCall,SelectVeterancy,ServerSendStats,UpdateStatsScreen,ServerSetWantsSprint;
+
+	unreliable if( Role < ROLE_Authority )
+		ServerAccumulateUse;
 
 	// Functions server can call.
-	reliable if( Role==ROLE_Authority )
+	reliable if( Role == ROLE_Authority )
 		KFClientNetWorkMsg;
+
+	unreliable if( Role == ROLE_Authority )
+		ClientKFShakeView;
 }
 
 simulated function InitInputSystem()
@@ -294,6 +319,12 @@ function ShakeView(vector shRotMag, vector shRotRate, float shRotTime,
 	Super.ShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
 }
 
+function ClientKFShakeView(vector shRotMag, vector shRotRate, float shRotTime,
+                   vector shOffsetMag, vector shOffsetRate, float shOffsetTime)
+{
+	ShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
+}
+
 function ViewShake(float DeltaTime)
 {
 	if(Pawn == None || Pawn.Health <= 0)
@@ -308,9 +339,106 @@ function ViewFlash(float DeltaTime)
 	Super.ViewFlash(DeltaTime);
 }
 
+// Kicks the view by Pitch and Yaw rotator units. Largest is the biggest punch the caller ever gives:
+// with it, punches that keep coming level off near Largest * PunchCeiling instead of piling up.
+function ViewPunch( float Pitch, float Yaw, optional float LargestPitch, optional float LargestYaw )
+{
+	if ( Pawn == None )
+		return;
+
+	Pitch = FadePunch(Pitch, PunchAngle.X + PunchVelocity.X * PunchLookAhead, Abs(LargestPitch) * PunchCeiling);
+	Yaw = FadePunch(Yaw, PunchAngle.Y + PunchVelocity.Y * PunchLookAhead, Abs(LargestYaw) * PunchCeiling);
+
+	PunchAngle.X += Pitch * PunchInstant;
+	PunchAngle.Y += Yaw * PunchInstant;
+	PunchVelocity.X += Pitch * PunchImpulse;
+	PunchVelocity.Y += Yaw * PunchImpulse;
+	ApplyViewPunch();
+}
+
+// A punch that pushes the view further the way it is already heading shrinks as that nears Ceiling.
+function float FadePunch( float Punch, float Heading, float Ceiling )
+{
+	if ( Ceiling <= 0 || Punch * Heading <= 0 )
+		return Punch;
+	return Punch * FClamp(1.0 - Abs(Heading) / Ceiling, 0.0, 1.0);
+}
+
+// Half-Life 2's reset: drops the punch, unless it is bigger than Tolerance.
+function ViewPunchReset( optional float Tolerance )
+{
+	if ( Tolerance != 0 && (PunchAngle dot PunchAngle) + (PunchVelocity dot PunchVelocity) > Tolerance * Tolerance )
+		return;
+	PunchAngle = vect(0,0,0);
+	PunchVelocity = vect(0,0,0);
+}
+
+// Runs the punch spring for this frame.
+function UpdateViewPunch( float DeltaTime )
+{
+	local float Step;
+
+	if ( Pawn == None || Pawn.Health <= 0 )
+	{
+		ViewPunchReset();
+		PunchApplied = rot(0,0,0);
+		return;
+	}
+	if ( PunchAngle == vect(0,0,0) && PunchVelocity == vect(0,0,0) && PunchApplied == rot(0,0,0) )
+		return;
+
+	while ( DeltaTime > 0 )
+	{
+		Step = FMin(DeltaTime, FMax(PunchMaxStep, 0.001));
+		DeltaTime -= Step;
+		PunchAngle += PunchVelocity * Step;
+		PunchVelocity *= FMax(1.0 - PunchDamping * Step, 0.0);
+		PunchVelocity -= PunchAngle * FMin(PunchSpring * Step, 2.0);
+	}
+	if ( VSize(PunchAngle) < 0.5 && VSize(PunchVelocity) < 5.0 )
+		ViewPunchReset();
+	ApplyViewPunch();
+}
+
+// Moves the view by the change in the punch since the last call.
+function ApplyViewPunch()
+{
+	local rotator NewRot;
+	local float Whole;
+	local int Pitch, Yaw, Limited;
+
+	Whole = Round(PunchAngle.X);
+	Pitch = int(Whole);
+	Whole = Round(PunchAngle.Y);
+	Yaw = int(Whole);
+
+	NewRot = Rotation;
+	NewRot.Yaw += Yaw - PunchApplied.Yaw;
+	PunchApplied.Yaw = Yaw;
+	if ( Pitch != PunchApplied.Pitch )
+	{
+		Limited = Pawn.LimitPitch(NewRot.Pitch + Pitch - PunchApplied.Pitch);
+		PunchApplied.Pitch += ((Limited - NewRot.Pitch + 32768) & 65535) - 32768;
+		NewRot.Pitch = Limited;
+		// Where the pitch limit stopped the view: what it kept out is never paid back, what it holds in is let go.
+		if ( PunchApplied.Pitch > 0 && Pitch < PunchApplied.Pitch )
+			PunchApplied.Pitch = Max(Pitch, 0);
+		else if ( PunchApplied.Pitch < 0 && Pitch > PunchApplied.Pitch )
+			PunchApplied.Pitch = Min(Pitch, 0);
+	}
+	if ( NewRot != Rotation )
+		SetRotation(NewRot);
+}
+
+function bool CanManageBots()
+{
+	Return Level.NetMode==NM_Standalone || Viewport(Player)!=None
+	 || (PlayerReplicationInfo!=None && PlayerReplicationInfo.bAdmin);
+}
+
 function GRIKillBotCall(int NumBotsToKill)
 {
-	if (KFGameType(Level.Game) != none && NumBotsToKill > 0)
+	if (CanManageBots() && KFGameType(Level.Game) != none && NumBotsToKill > 0)
 		KFGameType(Level.Game).KillBots(NumBotsToKill);
 }
 
@@ -344,6 +472,9 @@ function ServerSetGRIPendingBots(int NumBotsPending,string BotName)
 {
 	local int arraydifference;
 
+	if( !CanManageBots() )
+		Return;
+
 	//if (KFGameReplicationInfo(GameReplicationInfo).PendingBots  > 0)
 	//	arraydifference = 1;
 	//else
@@ -356,6 +487,8 @@ function ServerSetGRIPendingBots(int NumBotsPending,string BotName)
 
 function ServerSetTempBotName(string KFBotName)
 {
+	if( !CanManageBots() )
+		Return;
 	KFGameReplicationInfo(GameReplicationInfo).TempBotName = KFBotName;
 }
 
@@ -366,9 +499,123 @@ exec function ThrowGrenade()
 	//Level.Game.Broadcast(Pawn, Pawn.GetHumanReadableName()$" bot threw nade via quick throw");
 }
 
+// Two things change a player's pace besides his keys: whether he sprints, and the check a shot or a swing
+// puts on his speed (KFPawn.WeaponBrake). Both are made part of his moves. A network player's go to the
+// server inside the move, in the acceleration's Z, which walking does not use: a whole number of twentieths,
+// 32 for a sprint plus 1 to 31 for a check of that many thirty-firsts. His own machine and the server then
+// change his pace at the same point of the same move, and so does a move run again after a correction.
+// (Sent on their own, the two came a move or two apart, and the server put the player right each time.)
+function AddMoveBrake( float Factor )
+{
+	Factor = FClamp(Factor, 0.01, 1.0);
+	if ( PendingBrake > 0 )
+		PendingBrake *= Factor;
+	else
+		PendingBrake = Factor;
+}
+
+function ReplicateMove( float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot )
+{
+	local float Code, Flat, Room;
+
+	if ( IsInState('PlayerWalking') )
+	{
+		if ( PendingBrake > 0 )
+		{
+			Code = FClamp(Round(31.0 * PendingBrake), 1.0, 31.0);
+			// a move of its own: the engine runs two like moves together as one, and the check would be lost in that
+			DoubleClickMove = DCLICK_Done;
+		}
+		if ( KFHumanPawn(Pawn) != None && KFHumanPawn(Pawn).bIsSprinting )
+			Code += 32.0;
+		if ( Code > 0 )
+		{
+			NewAccel.Z = 20.0 * Code;
+			// (the engine cuts a saved move's acceleration down to 3072 in length, and the code with it:
+			// the rest is shortened here first. It is still more than a player can use.)
+			Room = Sqrt(3000.0 * 3000.0 - NewAccel.Z * NewAccel.Z);
+			Flat = Sqrt(NewAccel.X * NewAccel.X + NewAccel.Y * NewAccel.Y);
+			if ( Flat > Room )
+			{
+				NewAccel.X *= Room / Flat;
+				NewAccel.Y *= Room / Flat;
+			}
+		}
+	}
+	PendingBrake = 0;
+	// A move in which the player rose or crouched leaves his pace changed. The engine may run this move and
+	// that one together as one, here with his stance and pace as that move left them, on the server with
+	// those from before it: marked as a move of its own, this one is not run together with it.
+	if ( Pawn != None && Pawn.bIsCrouched != bMoveCrouched )
+	{
+		bMoveCrouched = Pawn.bIsCrouched;
+		DoubleClickMove = DCLICK_Done;
+	}
+	Super.ReplicateMove(DeltaTime, NewAccel, DoubleClickMove, DeltaRot);
+}
+
+// The check that came in with a move
+// What a network player's move came in with, on his own machine and on the server
+function MoveExtras( float Z )
+{
+	local float Code;
+	local bool bSprint;
+	local KFHumanPawn P;
+
+	Code = Round(Z / 20.0);
+	if ( Code < 1.0 || Code > 63.0 )
+		Code = 0;
+	bSprint = (Code >= 32.0);
+	if ( bSprint )
+		Code -= 32.0;
+
+	P = KFHumanPawn(Pawn);
+	if ( P != None )
+	{
+		// the server takes the player's word for it, unless he has no sprint to give
+		if ( bSprint && Role == ROLE_Authority && !P.MaySprint() )
+		{
+			bSprint = false;
+			if ( Level.TimeSeconds - LastSprintDeny > 0.25 )
+			{
+				LastSprintDeny = Level.TimeSeconds;
+				P.ClientSprintDenied();
+			}
+		}
+		P.bIsSprinting = bSprint;
+	}
+	if ( Code > 0 && Pawn != None )
+	{
+		Pawn.Velocity.X *= Code / 31.0;
+		Pawn.Velocity.Y *= Code / 31.0;
+	}
+}
+
+// The moves run again after the server has put the player right each carry the sprint they were made with.
+// The player's sprint as it stands now is not theirs to change.
+function ClientUpdatePosition()
+{
+	local KFHumanPawn P;
+	local bool bWas;
+
+	P = KFHumanPawn(Pawn);
+	if ( P != None )
+		bWas = P.bIsSprinting;
+	Super.ClientUpdatePosition();
+	if ( P != None && P == Pawn )
+		P.bIsSprinting = bWas;
+}
+
+function ServerSetWantsSprint( bool bNewWantsSprint )
+{
+	bWantsSprint = bNewWantsSprint;
+}
+
 exec simulated function StartSprintKF()
 {
 	bWantsSprint = true;
+	if( Role<ROLE_Authority )
+		ServerSetWantsSprint(true);
 	if (KFHumanPawn(Pawn) != None)
 		KFHumanPawn(Pawn).StartSprintKF();
 }
@@ -376,6 +623,8 @@ exec simulated function StartSprintKF()
 exec simulated function StopSprintKF()
 {
 	bWantsSprint = false;
+	if( Role<ROLE_Authority )
+		ServerSetWantsSprint(false);
 	if (KFHumanPawn(Pawn) != None)
 		KFHumanPawn(Pawn).StopSprintKF();
 }
@@ -555,7 +804,38 @@ event PlayerTick( float DeltaTime )
 	if( bHasDelayedSong && Player!=None )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
     Super.PlayerTick(DeltaTime);
+    UpdateViewPunch(DeltaTime);
+    if (bUseKey != 0)
+    {
+        UseHoldTime += DeltaTime;
+        if (Level.TimeSeconds >= NextUseSendTime)
+        {
+            NextUseSendTime = Level.TimeSeconds + UseSendInterval;
+            ServerAccumulateUse(UseSendInterval);
+        }
+    }
+    else
+    {
+        UseHoldTime = 0.0;
+    }
 }
+
+function ServerAccumulateUse(float DeltaTime)
+{
+	local Actor A;
+	local KFBarricade B;
+
+	if (Pawn == None || !Pawn.bCanUse)
+		return;
+
+	ForEach Pawn.TouchingActors(class'Actor', A)
+	{
+		B = KFBarricade(A);
+		if (B != None)
+			B.AccumulateUse(Pawn, DeltaTime);
+	}
+}
+
 
 //===========================================================================
 // Behind View support
@@ -774,19 +1054,6 @@ auto state PlayerWaiting
 	}
 }
 
-
-// unpossessed a pawn (because pawn was killed)
-function PawnDied(Pawn P)
-{
-	local int i;
-
-	for (i = 0; i < CameraEffects.Length; i++)
-	{
-      	RemoveCameraEffect(CameraEffects[i]);
-	}
-	Super.PawnDied(P);
-}
- 
 function ZoneInfo GetCurrentZone()
 {
   return Region.Zone;
@@ -892,6 +1159,15 @@ function SelectVeterancy( Class<KFVeterancyTypes> VetSkill )
 	}
 }
 
+// The key is bound to this with no amount: then it is the amount set in the player settings
+exec function TossCash( int Amount )
+{
+	if( Amount<=0 )
+		Amount = CashThrowAmount;
+	if( KFPawn(Pawn)!=None )
+		KFPawn(Pawn).TossCash(Amount);
+}
+
 exec function OpenVeterancyMenu() 
 { 
 	if( Viewport(Player)==None || PlayerReplicationInfo==None || PlayerReplicationInfo.bOnlySpectator || KFGameReplicationInfo(Level.GRI)==None
@@ -912,7 +1188,7 @@ function ServerSendStats()
 {
 	local int i;
 
-	if( MyActiveStats==None || !FindStatsObject() || KFGameReplicationInfo(Level.GRI)==None || !KFGameReplicationInfo(Level.GRI).bPerksEnabled )
+	if( (MyActiveStats==None && !FindStatsObject()) || KFGameReplicationInfo(Level.GRI)==None || !KFGameReplicationInfo(Level.GRI).bPerksEnabled )
 	{
 		StatsFinished();
 		Return;
@@ -951,7 +1227,7 @@ function UpdateStatsScreen()
 	if( StatsUdpTimer>Level.TimeSeconds )
 		Return;
 	StatsUdpTimer = Level.TimeSeconds+10;
-	if( MyActiveStats==None || !FindStatsObject() )
+	if( MyActiveStats==None && !FindStatsObject() )
 		Return;
 	ClientGetStats(MyActiveStats.TotalKills,MyActiveStats.TotalMeleeDamage,MyActiveStats.DecaptedKills,MyActiveStats.PowerWpnKills
 	 ,MyActiveStats.TotalHealed,MyActiveStats.TotalWelded,MyActiveStats.StalkerKills,MyActiveStats.BullpupDamage,MyActiveStats.TotalPlaytime
@@ -1053,9 +1329,26 @@ state PlayerWalking
     {
         local vector OldAccel;
         local bool OldCrouch;
-		
+        local float Check;
+
 		if ( Pawn == None )
 			return;
+		// the player's sprint and a weapon's check on his speed, with the move they belong to (see AddMoveBrake)
+		if ( Role < ROLE_Authority || Viewport(Player) == None )
+			MoveExtras(NewAccel.Z);
+		else if ( PendingBrake > 0 )
+		{
+			// (the player at the server's own machine, or one playing alone: his moves go nowhere.
+			// In the same thirty-firsts, so that a game alone and a game on a server feel the same.)
+			Check = FClamp(Round(31.0 * PendingBrake), 1.0, 31.0) / 31.0;
+			Pawn.Velocity.X *= Check;
+			Pawn.Velocity.Y *= Check;
+			PendingBrake = 0;
+		}
+		NewAccel.Z = 0;
+		// (his pace for this move, not for the one after)
+		if ( KFHumanPawn(Pawn) != None )
+			KFHumanPawn(Pawn).UpdateSpeed();
 		if ( (DoubleClickMove == DCLICK_Active) && (Pawn.Physics == PHYS_Falling) )
 			DoubleClickDir = DCLICK_Active;
 		else if ( (DoubleClickMove != DCLICK_None) && (DoubleClickMove < DCLICK_Active) )
@@ -1117,6 +1410,18 @@ ignores SeePlayer, HearNoise, Bump, ServerSpectate;
         else
             ProcessMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
     }
+
+    function ProcessMove(float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot)
+    {
+        if (Pawn != None)
+        {
+            if (bWantsSprint)
+                Pawn.AirSpeed = Pawn.default.AirSpeed * FlySpeedMulti;
+            else
+                Pawn.AirSpeed = Pawn.default.AirSpeed;
+        }
+        Super.ProcessMove(DeltaTime, NewAccel, DoubleClickMove, DeltaRot);
+    }
 }
 
 state Spectating
@@ -1132,6 +1437,10 @@ state Spectating
     function ProcessMove(float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot)
     {
         Acceleration = NewAccel;
+        if (bWantsSprint)
+            SpectateSpeed = default.SpectateSpeed * FlySpeedMulti;
+        else
+            SpectateSpeed = default.SpectateSpeed;
         MoveSmooth(SpectateSpeed * Normal(Acceleration) * DeltaTime);
     }
 
@@ -1167,8 +1476,21 @@ state Spectating
     }
 }
 
+function PlayStartupMessage(byte StartupStage)
+{
+}
+
 defaultproperties
 {
+	CashThrowAmount=50
+	UseSendInterval=0.100000
+	PunchDamping=9.000000
+	PunchSpring=65.000000
+	PunchImpulse=20.000000
+	PunchInstant=1.000000
+	PunchCeiling=2.000000
+	PunchLookAhead=0.050000
+	PunchMaxStep=0.008000
 	BuyListHeaders(0)="My Inventory"
 	BuyListHeaders(1)="Melee"
 	BuyListHeaders(2)="Power"

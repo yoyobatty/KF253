@@ -48,6 +48,16 @@ var() SpriteWidget BatteryMeter;
 var() SpriteWidget CashIcon;
 var() NumericWidget DigitsCash;
 
+var transient bool bScoreInited;
+var transient float LastDisplayedScore;
+var transient int ScorePopupAmount;
+var transient float ScorePopupStartTime;
+var transient float ScorePopupEndTime;
+var transient float ScorePopupRiseOffset;
+var float ScorePopupDuration;
+var float ScorePopupRiseDistance;
+var float ScorePopupRiseTime;
+
 var() SpriteWidget ToolChargeMeter;
 
 //const MAXWEIGHT = 50; //why hardcap this in the first place though?
@@ -94,6 +104,7 @@ var bool bInitialDark;  // a variable that initializes the overlay as black so t
 var bool bHasFogTint; 
 
 var () float VeterancyMatScaleFactor;   // Amount to scale all Veterancy indicators on the HUD by
+var int FontPixels[9];   // how tall each of the HUD's fonts is, biggest first
 
 
 var float CurrentR,CurrentG,CurrentB;
@@ -149,6 +160,8 @@ simulated function PostBeginPlay()
 	}
 	Super.PostBeginPlay();
 	SetHUDAlpha();
+	// bloom and the hit blur start with the HUD
+	class'KFFrameTap'.static.Of(PlayerOwner);
 	foreach DynamicActors(class'KFSPLevelInfo', KFLevelRule)
 		Break;
 	if ( CustomCrosshairsAllowed() )
@@ -216,7 +229,8 @@ simulated function DrawCrosshair (Canvas C)
     local color CurrentCrosshairColor;
 	local SpriteWidget CHtexture;
 
-    if (!bCrosshairShow)
+    // (no crosshair records found: nothing to draw, and no error line every frame)
+    if (!bCrosshairShow || Crosshairs.Length == 0)
         return;
 
 	if ( bUseCustomWeaponCrosshairs && (PawnOwner != None) && (PawnOwner.Weapon != None) )
@@ -335,6 +349,10 @@ simulated function Tick(float deltaTime)
 
 	if( KFGameReplicationInfo(Level.GRI)!=None && KFGameReplicationInfo(Level.GRI).EndGameType>0 && EndGameHUDTime<1 )
 		EndGameHUDTime+=(deltaTime/3.f);
+
+	if ( ScorePopupEndTime > Level.TimeSeconds && ScorePopupRiseOffset < ScorePopupRiseDistance )
+		ScorePopupRiseOffset = FMin(ScorePopupRiseDistance, ScorePopupRiseOffset + deltaTime*(ScorePopupRiseDistance/ScorePopupRiseTime));
+
 	Super.Tick(deltaTime);
 
 	Global_Delta = DeltaTime;
@@ -425,10 +443,11 @@ function DrawPlayerInfo(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
 	local float OldZ;
 	local Class<KFVeterancyTypes> VE;
 	local Material M;
-	local int MW;
+	local float MW, BS;
 
 	if( P.PlayerReplicationInfo==none || KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic )
 		return;
+	BS = BigScreenScale(C);
 
 	Dist = vsize(P.Location - PlayerOwner.CalcViewLocation);
 	Dist -= HealthBarFullVisDist;
@@ -457,16 +476,16 @@ function DrawPlayerInfo(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
 		if( VE!=None )
 		{
 			M = VE.Default.OnHUDIcon;
-			MW = 36.f*VeterancyMatScaleFactor;
+			MW = 36.f*VeterancyMatScaleFactor*BS;
 			if( M!=None )
 			{
-				C.SetPos(ScreenLocX - FClamp(XL/2,BarLength/2,500.f)-50,ScreenLocY-YL-18);    // -31
+				C.SetPos(ScreenLocX - FClamp(XL/2,BS*BarLength/2,500.f)-50*BS,ScreenLocY-YL-18*BS);    // -31
 				C.DrawTile(M,MW,MW,0,0,M.MaterialUSize(),M.MaterialVSize());
 			}
 			M = VE.Default.SubHUDIcon;
 			if( M!=None )
 			{
-				C.SetPos(ScreenLocX - FClamp(XL/2,BarLength/2,500.f)-50,ScreenLocY-YL-8);
+				C.SetPos(ScreenLocX - FClamp(XL/2,BS*BarLength/2,500.f)-50*BS,ScreenLocY-YL-8*BS);
 				C.DrawTile(M,MW,MW,0,0,M.MaterialUSize(),M.MaterialVSize());
 			}
 		}
@@ -474,30 +493,80 @@ function DrawPlayerInfo(Canvas C, Pawn P, float ScreenLocX, float ScreenLocY)
 
 	// Health
 	if (P.Health > 0)
-		DrawKFBar(C, ScreenLocX, (ScreenLocY - YL)-0.5*BarHeight, FClamp(P.Health/P.HealthMax,0,1), BeaconAlpha);
+		DrawKFBar(C, ScreenLocX, (ScreenLocY - YL)-0.5*BarHeight*BS, FClamp(P.Health/P.HealthMax,0,1), BeaconAlpha);
 	// Armor
 	if (P.ShieldStrength > 0)
-		DrawKFBar(C, ScreenLocX, (ScreenLocY - YL)-1.5*BarHeight, FClamp(P.ShieldStrength/100.f,0,1), BeaconAlpha, true);
+		DrawKFBar(C, ScreenLocX, (ScreenLocY - YL)-1.5*BarHeight*BS, FClamp(P.ShieldStrength/100.f,0,1), BeaconAlpha, true);
 	C.Z = OldZ;
+}
+
+// The bars and icons over players and doors are sized in pixels for a screen up to 1200 lines: bigger on a bigger one
+simulated function float BigScreenScale(Canvas C)
+{
+	return FMax(1.0, C.ClipY/1200.f);
+}
+
+// A length of the native widgets' own measure (640 by 480) on this screen, by its height
+simulated function float HudUnits(float Units)
+{
+	return Units * HudCanvasScale * ResScaleY * HudScale;
+}
+
+// Where the native code draws a widget: its left and top edge on the screen, and its size
+simulated function WidgetBox(Canvas C, SpriteWidget W, out float X, out float Y, out float XL, out float YL)
+{
+	local float SX, SY;
+
+	SX = W.TextureScale * HudCanvasScale * ResScaleX * HudScale;
+	SY = W.TextureScale * HudCanvasScale * ResScaleY * HudScale;
+	XL = (Abs(W.TextureCoords.X2 - W.TextureCoords.X1) + 1.0) * SX;
+	YL = (Abs(W.TextureCoords.Y2 - W.TextureCoords.Y1) + 1.0) * SY;
+	X = (W.PosX * HudCanvasScale + (1.0 - HudCanvasScale) * 0.5) * C.SizeX + W.OffsetX * SX;
+	Y = (W.PosY * HudCanvasScale + (1.0 - HudCanvasScale) * 0.5) * C.SizeY + W.OffsetY * SY;
+	if( W.DrawPivot==DP_UpperMiddle || W.DrawPivot==DP_MiddleMiddle || W.DrawPivot==DP_LowerMiddle )
+		X -= 0.5*XL;
+	else if( W.DrawPivot==DP_UpperRight || W.DrawPivot==DP_MiddleRight || W.DrawPivot==DP_LowerRight )
+		X -= XL;
+	if( W.DrawPivot==DP_MiddleLeft || W.DrawPivot==DP_MiddleMiddle || W.DrawPivot==DP_MiddleRight )
+		Y -= 0.5*YL;
+	else if( W.DrawPivot==DP_LowerLeft || W.DrawPivot==DP_LowerMiddle || W.DrawPivot==DP_LowerRight )
+		Y -= YL;
+}
+
+// The font nearest in size to what font Index is on a screen of 1200 lines
+simulated function Font HeightFont(Canvas C, int Index)
+{
+	local float Want;
+	local int i, Best;
+
+	Want = FontPixels[Index] * C.ClipY/1200.f;
+	Best = ArrayCount(FontPixels)-1;
+	for( i=0; i<ArrayCount(FontPixels); i++ )
+		if( Abs(FontPixels[i]-Want) < Abs(FontPixels[Best]-Want) )
+			Best = i;
+	return LoadFont(Best);
 }
 
 simulated function DrawKFBar(Canvas C, float XCentre, float YCentre, float BarPercentage, byte BarAlpha, optional bool bArmor)
 {
-	local float BorderWidth;
+	local float BorderWidth, BL, BH;
 	local int InnerBarLength, TexLength;
 
+	BL = BarLength*BigScreenScale(C);
+	BH = BarHeight*BigScreenScale(C);
+
 	C.SetDrawColor(255,255,255,BarAlpha);
-	C.SetPos(XCentre - 0.5*BarLength , YCentre-0.5*BarHeight );
-	C.DrawTileClipped(Texture'KFKillMeNow.KFHUDIcons', BarLength, BarHeight, 37,204, 217,21);
-	BorderWidth = (BarLength/217.0)*4;
+	C.SetPos(XCentre - 0.5*BL , YCentre-0.5*BH );
+	C.DrawTileClipped(Texture'KFKillMeNow.KFHUDIcons', BL, BH, 37,204, 217,21);
+	BorderWidth = (BL/217.0)*4;
 
 	if (bArmor)
 		C.SetDrawColor(25,200,230,BarAlpha);
 	else C.SetDrawColor(255,0,0,BarAlpha);
-	C.SetPos( (XCentre - 0.5*BarLength)+BorderWidth , YCentre-0.5*BarHeight );
-	InnerBarLength = (BarLength-BorderWidth) * BarPercentage;
+	C.SetPos( (XCentre - 0.5*BL)+BorderWidth , YCentre-0.5*BH );
+	InnerBarLength = (BL-BorderWidth) * BarPercentage;
 	TexLength = 209* BarPercentage;
-	C.DrawTileClipped(Texture'KFKillMeNow.KFHUDIcons', InnerBarLength, BarHeight, 41,146, TexLength,17);
+	C.DrawTileClipped(Texture'KFKillMeNow.KFHUDIcons', InnerBarLength, BH, 41,146, TexLength,17);
 }
 
 simulated function DrawHud( Canvas C )
@@ -568,6 +637,7 @@ simulated function DrawHud( Canvas C )
 			else DrawEndGameHUD(C,False);
 		}
 		DrawKFHUDTextElements(C);
+		DrawZombiesHUD(C);
 	}
 
 	if (KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
@@ -575,6 +645,192 @@ simulated function DrawHud( Canvas C )
 		PassStyle = STY_Alpha;
 		DrawCinematicHUD(C);
 	}  
+}
+
+simulated function DrawZombiesBar(Canvas C, float X, float Y, float W, float H, float Pct, byte R, byte G, byte B)
+{
+	C.SetDrawColor(0,0,0,160);
+	C.SetPos(X, Y);
+	C.DrawTile(Texture'Engine.WhiteSquareTexture', W, H, 0, 0, 2, 2);
+
+	C.SetDrawColor(R,G,B,220);
+	C.SetPos(X+2, Y+2);
+	C.DrawTile(Texture'Engine.WhiteSquareTexture', (W-4)*FClamp(Pct,0.0,1.0), H-4, 0, 0, 2, 2);
+}
+
+simulated function DrawZombiesText(Canvas C, string S, float CentreX, float Y)
+{
+	local float XL, YL;
+
+	C.TextSize(S, XL, YL);
+	C.SetPos(CentreX - XL*0.5, Y);
+	C.DrawText(S, false);
+}
+
+simulated function DrawZombiesPerk(Canvas C, bool bHasPerk, string Label, byte R, byte G, byte B, out float X, float Y, float Size)
+{
+	local float XL, YL;
+
+	if( !bHasPerk )
+		Return;
+
+	C.SetDrawColor(R,G,B,200);
+	C.SetPos(X, Y);
+	C.DrawTile(Texture'Engine.WhiteSquareTexture', Size, Size, 0, 0, 2, 2);
+
+	C.SetDrawColor(255,255,255,255);
+	C.TextSize(Label, XL, YL);
+	C.SetPos(X + (Size-XL)*0.5, Y + (Size-YL)*0.5);
+	C.DrawText(Label, false);
+
+	X += Size + 4;
+}
+
+simulated function DrawZombiesHUD(Canvas C)
+{
+	local KFGameReplicationInfo ZGRI;
+	local KFHumanPawnZombies ZP, Other;
+	local KFPlayerReplicationInfo ZPRI;
+	local float CentreX, X, Y, BarW, BarH, XL, YL, Size;
+	local vector CamLoc, WorldPos, ScreenPos;
+	local rotator CamRot;
+	local string S;
+	local int i;
+	local bool bAnyDowned;
+	local byte OldStyle;
+
+	ZGRI = KFGameReplicationInfo(PlayerOwner.GameReplicationInfo);
+	if( ZGRI==None || !ZGRI.bZombiesMode )
+		Return;
+
+	OldStyle = C.Style;
+	C.Style = ERenderStyle.STY_Alpha;
+
+	CentreX = C.ClipX*0.5;
+	BarW = C.ClipX*0.18;
+	BarH = FMax(10, C.ClipY*0.014);
+
+	C.Font = GetFontSizeIndex(C, -1);
+	C.TextSize("A", XL, YL);
+
+	C.SetDrawColor(200,20,20,255);
+	DrawZombiesText(C, "ROUND" @ (ZGRI.WaveNumber+1), C.ClipX-HudUnits(25.6), HudUnits(52.8));
+
+	Y = C.ClipY*0.12;
+	C.SetDrawColor(255,255,255,255);
+	if( ZGRI.InstaKillTime>0 )
+	{
+		DrawZombiesText(C, "INSTA-KILL" @ ZGRI.InstaKillTime, CentreX, Y);
+		Y += YL;
+	}
+	if( ZGRI.DoublePointsTime>0 )
+		DrawZombiesText(C, "DOUBLE POINTS" @ ZGRI.DoublePointsTime, CentreX, Y);
+
+	ZP = KFHumanPawnZombies(PawnOwner);
+	if( ZP==None )
+	{
+		C.Style = OldStyle;
+		Return;
+	}
+
+	if( KFWeapon(ZP.Weapon)!=None && KFWeapon(ZP.Weapon).bUpgraded )
+	{
+		C.SetDrawColor(255,215,0,255);
+		DrawZombiesText(C, "UPGRADED", C.ClipX*0.90, C.ClipY*0.80);
+	}
+
+	if( ZP.UsePrompt!="" && !ZP.bIsDowned )
+	{
+		C.SetDrawColor(255,255,255,255);
+		DrawZombiesText(C, ZP.UsePrompt, CentreX, C.ClipY*0.62);
+	}
+
+	if( ZP.bIsDowned )
+	{
+		C.SetDrawColor(255,60,60,255);
+		if( ZP.bSelfReviving )
+			S = "QUICK REVIVE";
+		else if( ZP.bBeingRevived )
+			S = "BEING REVIVED";
+		else
+			S = "YOU ARE DOWN";
+		DrawZombiesText(C, S, CentreX, C.ClipY*0.40);
+
+		if( ZP.bSelfReviving || ZP.bBeingRevived )
+			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.40+YL+4, BarW, BarH, float(ZP.ReviveByte)/255.0, 60,220,60);
+		else
+			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.40+YL+4, BarW, BarH, float(ZP.BleedoutByte)/255.0, 220,40,40);
+	}
+	else if( ZP.CurrentStamina<ZP.MaxStamina )
+	{
+		if( ZP.bStaminaExhausted )
+			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.93, BarW, BarH, ZP.CurrentStamina/ZP.MaxStamina, 220,40,40);
+		else
+			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.93, BarW, BarH, ZP.CurrentStamina/ZP.MaxStamina, 230,230,230);
+	}
+
+	For( i=0; i<ZGRI.PRIArray.Length; i++ )
+	{
+		if( KFPlayerReplicationInfo(ZGRI.PRIArray[i])!=None && KFPlayerReplicationInfo(ZGRI.PRIArray[i]).bIsDowned )
+		{
+			bAnyDowned = true;
+			Break;
+		}
+	}
+
+	if( bAnyDowned )
+	{
+		C.GetCameraLocation(CamLoc, CamRot);
+
+		ForEach DynamicActors(class'KFHumanPawnZombies', Other)
+		{
+			if( Other==ZP || !Other.bIsDowned || Other.Health<=0 )
+				Continue;
+
+			S = "REVIVE";
+			if( Other.PlayerReplicationInfo!=None )
+				S = S @ Other.PlayerReplicationInfo.PlayerName;
+
+			if( Other.bBeingRevived && Other.Reviver==ZP )
+			{
+				C.SetDrawColor(60,220,60,255);
+				DrawZombiesText(C, "REVIVING" @ Mid(S, 7), CentreX, C.ClipY*0.52);
+				DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.52+YL+4, BarW, BarH, float(Other.ReviveByte)/255.0, 60,220,60);
+				Continue;
+			}
+
+			WorldPos = Other.Location + vect(0,0,1)*Other.CollisionHeight;
+			if( (WorldPos-CamLoc) Dot vector(CamRot) <= 0 )
+				Continue;
+
+			ScreenPos = C.WorldToScreen(WorldPos);
+			if( ScreenPos.X<0 || ScreenPos.X>C.ClipX || ScreenPos.Y<0 || ScreenPos.Y>C.ClipY )
+				Continue;
+
+			C.SetDrawColor(255,Other.BleedoutByte,Other.BleedoutByte,255);
+			DrawZombiesText(C, S, ScreenPos.X, ScreenPos.Y-YL-BarH-2);
+			if( Other.bBeingRevived )
+				DrawZombiesBar(C, ScreenPos.X-BarW*0.25, ScreenPos.Y-BarH, BarW*0.5, BarH, float(Other.ReviveByte)/255.0, 60,220,60);
+			else
+				DrawZombiesBar(C, ScreenPos.X-BarW*0.25, ScreenPos.Y-BarH, BarW*0.5, BarH, float(Other.BleedoutByte)/255.0, 220,40,40);
+		}
+	}
+
+	ZPRI = KFPlayerReplicationInfo(PawnOwnerPRI);
+	if( ZPRI!=None )
+	{
+		C.Font = GetFontSizeIndex(C, -3);
+		Size = FMax(32, C.ClipY*0.045);
+		X = C.ClipX*0.02;
+		Y = C.ClipY*0.78;
+		DrawZombiesPerk(C, ZPRI.bHasJuggernog, "JUG", 190,30,30, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasQuickRevive, "REV", 40,120,220, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasSpeedCola, "SPD", 30,150,60, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasDoubleTap, "DBL", 210,120,20, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasStaminUp, "STA", 190,170,20, X, Y, Size);
+	}
+
+	C.Style = OldStyle;
 }
 
 simulated function DrawHealthBar(Canvas C, Actor A, int Health, int MaxHealth, float Height)
@@ -587,8 +843,8 @@ simulated function DrawHealthBar(Canvas C, Actor A, int Health, int MaxHealth, f
 	// rjp --  don't draw the health bar if menus are open
 	// exception being, the Veterancy menu
 
-	if ( PlayerOwner.Player.GUIController.bActive && GUIController(PlayerOwner.Player.GUIController).ActivePage.Name !=
-        'GUIVeterancyBinder')
+	if ( PlayerOwner.Player.GUIController.bActive && (GUIController(PlayerOwner.Player.GUIController).ActivePage==None
+		|| !GUIController(PlayerOwner.Player.GUIController).ActivePage.IsA('GUIVeterancyBinder')) )
 		return;
 
 	OldDrawColor = C.DrawColor;
@@ -717,6 +973,29 @@ simulated function UpdateHud()
 	}
 
 	DigitsCash.Value=PawnOwnerPRI.Score;
+
+	if ( !bScoreInited )
+	{
+		LastDisplayedScore = PawnOwnerPRI.Score;
+		bScoreInited = true;
+	}
+	else if ( PawnOwnerPRI.Score > LastDisplayedScore )
+	{
+		if ( ScorePopupEndTime > Level.TimeSeconds )
+			ScorePopupAmount += int(PawnOwnerPRI.Score - LastDisplayedScore);
+		else
+		{
+			// Only reset the rise-animation clock when the previous popup has fully expired -
+			// otherwise sustained fire keeps restarting the rise and it never gets to play out.
+			ScorePopupAmount = int(PawnOwnerPRI.Score - LastDisplayedScore);
+			ScorePopupStartTime = Level.TimeSeconds;
+			ScorePopupRiseOffset = 0;
+		}
+		ScorePopupEndTime = Level.TimeSeconds + ScorePopupDuration;
+		LastDisplayedScore = PawnOwnerPRI.Score;
+	}
+	else LastDisplayedScore = PawnOwnerPRI.Score;
+
 	ToolChargeMeter.Scale=CurAmmoPrimary/MaxAmmoPrimary;
 	Super.UpdateHud();
 }
@@ -756,7 +1035,7 @@ simulated function DrawHudPassA (Canvas C)
 	local int i;
 	local Material Ma;
 	local class<KFVeterancyTypes> VE;
-	local int MW,MH;
+	local float MW, BX, BY, BXL, BYL;
 
 	DrawDoorHealthBars(C);
 
@@ -811,11 +1090,17 @@ simulated function DrawHudPassA (Canvas C)
         {
 	 DrawSpriteWidget(C, CashIcon);
 	 DrawNumericWidget(C, DigitsCash, DigitsBig);
+	 DrawScorePopup(C);
         }
 
 	//10x easier and faster than using spritewidgets, also allows for more weight than the stock capped 20 - by YoYoBatty
-	if(KFHumanPawn(PawnOwner)!=None)
+	if(KFHumanPawn(PawnOwner)!=None && KFHumanPawnZombies(PawnOwner)==None)
 	{
+		// stacked right above the nade icon wherever that is drawn, just like original, and sized by the screen as it is
+		WidgetBox(C, GrenadeIcon, BX, BY, BXL, BYL);
+		MW = HudUnits(8.8);
+		BX += 0.5*(BXL-MW);
+		BY -= HudUnits(13.2);
 		for( i=0; i<KFHumanPawn(PawnOwner).MaxCarryWeight; i++ )
 		{
 			if(i < KFHumanPawn(PawnOwner).CurrentWeight )
@@ -834,8 +1119,8 @@ simulated function DrawHudPassA (Canvas C)
 			//C.DrawColor.G = WEIGHTOFF_G;
 			//C.DrawColor.B = WEIGHTOFF_B;
 
-			C.SetPos(C.ClipX*0.97,C.ClipY*0.87 - (i*29)); //draws it right above the nade left icon, just like original
-			C.DrawTile(CarryIcon,22,30,210,65,35,63); //nice and clean, gets the full icon size too
+			C.SetPos(BX,BY - i*HudUnits(11.6));
+			C.DrawTile(CarryIcon,MW,HudUnits(12.0),210,65,35,63); //nice and clean, gets the full icon size too
 		}
 	}
 
@@ -850,25 +1135,35 @@ simulated function DrawHudPassA (Canvas C)
 			C.DrawColor.A = 255;
 
 			Ma = VE.Default.OnHUDIcon;
-			
-			MW = 36;
 
-			MW *= VeterancyMatScaleFactor * 1.4;   // Should always be larger on the HUD
-			MH = MW;
+			// Should always be larger on the HUD. (36 pixels on a screen of 1200 lines, 2.5 of them to a unit.)
+			MW = HudUnits(36 * VeterancyMatScaleFactor * 1.4 / 2.5);
+			// it stands on the health and armour box
+			WidgetBox(C, HealthArmourBorderLeft, BX, BY, BXL, BYL);
 
 			if( Ma!=None )
 			{
-				C.SetPos(C.ClipX/56,C.ClipY*0.95-85);
-				C.DrawTile(Ma,MW,MH,0,0,Ma.MaterialUSize(),Ma.MaterialVSize());  // 36
+				C.SetPos(HudUnits(11.43),BY-MW);
+				C.DrawTile(Ma,MW,MW,0,0,Ma.MaterialUSize(),Ma.MaterialVSize());  // 36
 			}
 			Ma = VE.Default.SubHUDIcon;
 			if( Ma!=None )
 			{
-				C.SetPos(C.ClipX/56,C.ClipY*0.95-85);
-				C.DrawTile(Ma,MW,MH,0,0,Ma.MaterialUSize(),Ma.MaterialVSize());
+				C.SetPos(HudUnits(11.43),BY-MW);
+				C.DrawTile(Ma,MW,MW,0,0,Ma.MaterialUSize(),Ma.MaterialVSize());
 			}
 		}
 	}
+}
+
+simulated function bool LobbyOpen()
+{
+	local GUIController G;
+
+	if ( PlayerOwner == None || PlayerOwner.Player == None )
+		return false;
+	G = GUIController(PlayerOwner.Player.GUIController);
+	return G != None && G.bActive && G.ActivePage != None && G.ActivePage.IsA('LobbyMenu');
 }
 
 simulated event PostRender( canvas Canvas )
@@ -890,8 +1185,10 @@ simulated event PostRender( canvas Canvas )
 
 	LinkActors();
 
-	ResScaleX = Canvas.SizeX / 640.0;
-	ResScaleY = Canvas.SizeY / 480.0;
+	// One scale both ways, so that nothing is drawn wider than it is tall on a wide screen (it used to be
+	// SizeX/640 across and SizeY/480 down). On a 4:3 screen the two are the same number.
+	ResScaleX = FMin(Canvas.SizeX / 640.0, Canvas.SizeY / 480.0);
+	ResScaleY = ResScaleX;
 
 	CheckCountDown(PlayerOwner.GameReplicationInfo);
 
@@ -960,7 +1257,9 @@ simulated event PostRender( canvas Canvas )
 
 		if (bShowBadConnectionAlert)
 			DisplayBadConnectionAlert(Canvas);
-		DisplayMessages(Canvas);
+		// the lobby has its own chat box
+		if ( !LobbyOpen() )
+			DisplayMessages(Canvas);
 		if( bShowVoteMenu && VoteMenu!=None )
 			VoteMenu.RenderOverlays(Canvas);
 	}
@@ -973,6 +1272,34 @@ simulated event PostRender( canvas Canvas )
 	Canvas.ColorModulate=OldModulate;
 	Canvas.DrawColor = OldColor;
 	OnPostRender(Self, Canvas);
+}
+
+simulated function DrawScorePopup(Canvas C)
+{
+	local float DltA, TimeLeft, XL, YL, HUDWidgetScale;
+	local string PopupText;
+
+	if ( ScorePopupEndTime <= Level.TimeSeconds )
+		return;
+
+	TimeLeft = ScorePopupEndTime - Level.TimeSeconds;
+
+	// Hold full opacity for the first 60% of the popup's life, then fade out.
+	if ( TimeLeft > ScorePopupDuration*0.4 )
+		DltA = 1;
+	else DltA = Clamp(TimeLeft/(ScorePopupDuration*0.4), 0, 1);
+
+	PopupText = "+"$ScorePopupAmount;
+
+	// Native widgets (DigitsCash, CashIcon) scale their pixel offsets by this - match it so the
+	// popup lines up at any resolution.
+	HUDWidgetScale = DigitsCash.TextureScale*HudCanvasScale*ResScaleX*HudScale;
+
+	C.Font = GetFontSizeIndex(C, -1);
+	C.TextSize(PopupText, XL, YL);
+	C.SetDrawColor(255,215,0,DltA*255);
+	C.SetPos(DigitsCash.OffsetX*HUDWidgetScale - XL*0.5, C.ClipY - 55*HUDWidgetScale - ScorePopupRiseOffset*HUDWidgetScale);
+	C.DrawText(PopupText, false);
 }
 
 function CanvasDrawActors( Canvas C, bool bClearedZBuffer )
@@ -991,9 +1318,12 @@ function CanvasDrawActors( Canvas C, bool bClearedZBuffer )
 
 simulated function DrawKFHUDTextElements(Canvas C)
 {
-	local float XL,YL;
+	local float XL,YL,IS;
 	local int NumZombies,Min;
 	local string S;
+
+	// the round icon in the corner: 128 pixels on a screen of 1200 lines
+	IS = HudUnits(51.2);
 
 	// Countdown Text
 	if(!PlayerOwner.GameReplicationInfo.bMatchHasBegun || PlayerOwner.GameReplicationInfo == none)
@@ -1005,7 +1335,7 @@ simulated function DrawKFHUDTextElements(Canvas C)
 	if(!KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).bWaveInProgress)
 	{
 		C.SetDrawColor(255,255,255,KFHUDAlpha);
-		C.Font = LoadFont(7);
+		C.Font = HeightFont(C,7);
 
 		if (KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).TimeToNextWave > 5)
 			C.SetDrawColor(255,255,255,KFHUDAlpha);
@@ -1015,27 +1345,27 @@ simulated function DrawKFHUDTextElements(Canvas C)
 		Min = NumZombies/60;
 		NumZombies-=Min*60;
 		S = Eval((Min>=10),string(Min),"0"$Min)$":"$Eval((NumZombies>=10),string(NumZombies),"0"$NumZombies);
-		C.SetPos(C.ClipX-128,2);
-		C.DrawTile(Material'KFKillMeNow.TimeRemainingIcon',128,128,0,0,256,256);
+		C.SetPos(C.ClipX-IS,IS/64);
+		C.DrawTile(Material'KFKillMeNow.TimeRemainingIcon',IS,IS,0,0,256,256);
 		C.Strlen(S,XL,YL);
-		C.SetPos(C.ClipX-64-(XL/2),66-YL/2);
+		C.SetPos(C.ClipX-IS/2-(XL/2),IS*0.516-YL/2);
 		C.DrawText(S,False);
 	}
 	else
 	{
-		C.Font = LoadFont(1);
+		C.Font = HeightFont(C,1);
 
 		S = string(KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).MaxMonsters);
-		C.SetPos(C.ClipX-128,2);
+		C.SetPos(C.ClipX-IS,IS/64);
 		C.SetDrawColor(255,255,255,KFHUDAlpha);
-		C.DrawTile(Material'KFKillMeNow.SpecRemainingIcon',128,128,0,0,256,256);
+		C.DrawTile(Material'KFKillMeNow.SpecRemainingIcon',IS,IS,0,0,256,256);
 
 		if( KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).MaxMonsters>5 )
 			C.SetDrawColor(255,255,80,KFHUDAlpha);
 		else C.SetDrawColor(255,50,50,KFHUDAlpha);
 
 		C.Strlen(S,XL,YL);
-		C.SetPos(C.ClipX-64-(XL/2),66-YL/2);
+		C.SetPos(C.ClipX-IS/2-(XL/2),IS*0.516-YL/2);
 		C.DrawText(S);
 	}
 }
@@ -1131,7 +1461,7 @@ simulated function DrawModOverlay( Canvas C )
 		*/
 		//Desaturate from 100 to 0 health, darken at 50 health and lower
 		if (PlayerOwner.Pawn != None && PlayerOwner.Pawn.Health > 0)
-			DesaturationFactor = 0.5 + 0.5 * (float(PlayerOwner.Pawn.Health) / PlayerOwner.Pawn.HealthMax);
+			DesaturationFactor = 0.75 + 0.25 * (float(PlayerOwner.Pawn.Health) / PlayerOwner.Pawn.HealthMax);
 		// Dead Players see Red
 		if( PlayerOwner.PlayerReplicationInfo.bOutOfLives || PlayerOwner.PlayerReplicationInfo.bIsSpectator )
 		{
@@ -1616,7 +1946,7 @@ simulated function DrawWeaponName(Canvas C)
 	C.SetDrawColor(255,50,50,KFHUDAlpha);
 	C.Strlen(CurWeaponName,XL,YL);
 	//C.SetPos( (C.ClipX/2) - (XL/2) + C.ClipX / 3 , C.ClipY*0.8-YL + C.ClipY / 8 + 10);
-	C.SetPos(C.ClipX * 0.79, C.ClipY * 0.91);
+	C.SetPos(C.ClipX - HudUnits(134.4), C.ClipY * 0.91);
 	C.DrawText(CurWeaponName);
 }
 
@@ -1801,6 +2131,9 @@ simulated function DrawEndGameHUD( Canvas C, bool bVictory )
 
 defaultproperties
 {
+     ScorePopupDuration=2.5
+     ScorePopupRiseDistance=45.000000
+     ScorePopupRiseTime=0.800000
      KFHUDAlpha=200
      GrainAlpha=200
      HealthBarFullVisDist=700.000000
@@ -1824,7 +2157,7 @@ defaultproperties
      HealthArmourBorderLeft=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=14,Y1=204,X2=254,Y2=249),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=10,OffsetY=-10,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      HealthMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=186,X2=250,Y2=199),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=37,OffsetY=-15,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      ArmourMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=168,X2=250,Y2=181),TextureScale=0.500000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=37,OffsetY=-38,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
-     BatteryMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=150,X2=250,Y2=163),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosY=1.000000,OffsetX=1220,OffsetY=-100,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     BatteryMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=150,X2=250,Y2=163),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-60,OffsetY=-100,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      CashIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=193,X2=255,Y2=63),TextureScale=0.295000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=446,OffsetY=-15,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      DigitsCash=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerLeft,PosY=1.000000,OffsetX=374,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      ToolChargeMeter=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=41,Y1=186,X2=250,Y2=199),TextureScale=0.750000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-6,OffsetY=-6,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
@@ -1837,6 +2170,15 @@ defaultproperties
      LevelActionPositionX=0.500000
      LevelActionPositionY=0.250000
      VeterancyMatScaleFactor=1.500000
+     FontPixels(0)=37
+     FontPixels(1)=29
+     FontPixels(2)=24
+     FontPixels(3)=21
+     FontPixels(4)=17
+     FontPixels(5)=14
+     FontPixels(6)=12
+     FontPixels(7)=9
+     FontPixels(8)=8
      OverlayFadeSpeed=0.024250
      YouveWonTheMatch="Your squad survived! "
      YouveLostTheMatch="Squad eliminated."

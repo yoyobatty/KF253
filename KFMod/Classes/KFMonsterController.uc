@@ -5,7 +5,7 @@ class KFMonsterController extends MonsterController;
 var KFMonster KFM;
 
 var int MoanTime,ThreatTime;
-var bool ItsSet,bUseFreezeHack,bAboutToGetDoor,bTriggeredFirstEvent;
+var bool ItsSet,bUseFreezeHack,bAboutToGetDoor,bTriggeredFirstEvent,bHuntSqueezed;
 var int TimeToSet;
 var int EvaluateTime;
 var float ChargeStart,LastCorpseTime;
@@ -13,6 +13,7 @@ var byte NumAttmpts;
 var byte CorpseBiteCount;
 
 var KFDoorMover TargetDoor;
+var KFBarricadePlank TargetPlank;
 var PlayerDeathMark TargetCorpse;
 var KActor KickTarget;
 
@@ -24,11 +25,51 @@ var Actor LastResult;
 var NavigationPoint BlockedWay,ExtraCostWay;
 var float BlockedWayTime;
 
+var KFSwarm Swarm;		// None when the swarm is switched off
+
+const NOFLOOR = 255;
+var byte MyFloor;
+var bool bLiftPass;
+var float NextFloorCheck,StrandedTime;
+var() float StrandedDelay;
+
 function Restart()
 {
 	KFM = KFMonster(Pawn);
+	if( KFGameType(Level.Game)!=None )
+		Swarm = KFGameType(Level.Game).Swarm;
+	// (the harder the game and the stronger the swarm, the more of them make for their victim at once and not
+	// first for a random place)
+	if( Swarm!=None && FRand()<Swarm.StraightShare*Swarm.Strength )
+		PathFindState = 2;
 	if( !KFM.bStartUpDisabled )
 		Super.Restart();
+}
+
+function bool AdjustAround(Pawn Other)
+{
+	local float speed;
+	local vector VelDir, OtherDir, SideDir;
+
+	speed = VSize(Pawn.Acceleration);
+	if ( speed < Pawn.WalkingPct * Pawn.GroundSpeed )
+		return false;
+
+	VelDir = Pawn.Acceleration/speed;
+	VelDir.Z = 0;
+	OtherDir = Other.Location - Pawn.Location;
+	OtherDir.Z = 0;
+	OtherDir = Normal(OtherDir);
+	if ( (VelDir Dot OtherDir) > 0.8 )
+	{
+		bAdjusting = true;
+		SideDir.X = VelDir.Y;
+		SideDir.Y = -1 * VelDir.X;
+		if ( (SideDir Dot OtherDir) > 0 )
+			SideDir *= -1;
+		AdjustLoc = Pawn.Location + 1.5 * Other.CollisionRadius * (0.5 * VelDir + SideDir);
+		return true;
+	}
 }
 
 event bool NotifyBump(actor Other)
@@ -48,6 +89,9 @@ event bool NotifyBump(actor Other)
 	if ( Enemy == P )
 		return false;
 
+	// one of its own kind in the way: a free place round the victim, or round the one in front
+	if ( Swarm != None && Swarm.bStepRound && KFMonster(P) != None && Swarm.StepRound(Self, P) )
+		return false;
 	if ( !AdjustAround(P) )
 		CancelCampFor(P.Controller);
 	return false;
@@ -120,6 +164,16 @@ function BreakUpDoor( KFDoorMover Other ) // I have came up to a door, break it!
 	GotoState('DoorBashing');
 }
 
+function BreakUpBarricade( KFBarricadePlank Other ) 
+{
+	if( IsInState('BarricadeBashing') && TargetPlank==Other )
+		Return;
+
+	TargetPlank = Other;
+	GoalString = "BARRICADEBASHING";
+	GotoState('BarricadeBashing');
+}
+
 // The Times between each call of the ZombieMoan function ...
 function tick(float DeltaTime)
 {
@@ -134,6 +188,69 @@ function tick(float DeltaTime)
 		if( TargetDoor!=None )
 			BreakUpDoor(TargetDoor);
 	}
+	if( Level.TimeSeconds >= NextFloorCheck )
+		CheckFloor();
+}
+
+function CheckFloor()
+{
+	local KFGameType G;
+	local byte EnemyFloor;
+	local bool bStranded;
+
+	NextFloorCheck = Level.TimeSeconds + 0.9 + 0.2 * FRand();
+	G = KFGameType(Level.Game);
+	if( G==None || G.FloorMap==None || G.FloorMap.NumFloors<2 || Pawn==None || Pawn.Health<=0 )
+		Return;
+	MyFloor = G.FloorMap.FloorAt(Pawn.Location);
+	if( MyFloor==NOFLOOR )
+		Return;
+	EnemyFloor = NOFLOOR;
+	if( Enemy!=None )
+	{
+		EnemyFloor = G.FloorMap.FloorOf(Enemy);
+		if( EnemyFloor==NOFLOOR )
+			Return;
+		bStranded = (EnemyFloor!=MyFloor);
+	}
+	if( !bStranded && (Level.TimeSeconds-Pawn.FindAnchorFailedTime)<1.5 && (Level.TimeSeconds-Pawn.LastValidAnchorTime)>5 )
+	{
+		bStranded = True;
+		EnemyFloor = NOFLOOR;
+	}
+	if( !bStranded )
+	{
+		StrandedTime = 0;
+		bLiftPass = False;
+		Return;
+	}
+	if( StrandedTime==0 )
+		StrandedTime = Level.TimeSeconds;
+	if( (Level.TimeSeconds-StrandedTime)<StrandedDelay || KFElevator(Pawn.Base)!=None )
+		Return;
+	if( !Pawn.PlayerCanSeeMe() && G.CanSpawnOnFloor(EnemyFloor) && G.RecycleMonster(KFM) )
+		Return;
+	bLiftPass = True;
+}
+
+function bool MayUseLift()
+{
+	local KFGameType G;
+
+	G = KFGameType(Level.Game);
+	Return (bLiftPass || G==None || G.FloorMap==None || G.FloorMap.NumFloors<2);
+}
+
+function float EnemyDistance( Pawn Other )
+{
+	local KFGameType G;
+	local float Dist;
+
+	Dist = VSize(Other.Location - Pawn.Location);
+	G = KFGameType(Level.Game);
+	if( G!=None && G.FloorMap!=None && G.FloorMap.OtherFloor(MyFloor,G.FloorMap.FloorOf(Other)) )
+		Dist += 100000.f;
+	Return Dist;
 }
 
 // If we're not dead, and we can see our target, and we still have a head. lets go eat it.
@@ -176,6 +293,10 @@ function bool FindNewEnemy()
 
 	if( KFM.bNoAutoHuntEnemies )
 		Return False;
+
+	if( Enemy!=None && KFHumanPawnZombies(Enemy)!=None && KFHumanPawnZombies(Enemy).bIsDowned )
+		Enemy = None;
+
 	if ( KFM.bCannibal && pawn.Health < (1.0-KFM.FeedThreshold)*pawn.HealthMax || Level.Game.bGameEnded )
 	{
 		for ( PC=Level.ControllerList; PC!=None; PC=PC.NextController )
@@ -183,7 +304,9 @@ function bool FindNewEnemy()
 			C = KFHumanPawn(PC.Pawn);
 			if( C==None || C.Health<=0 )
 				Continue;
-			NewDist = VSize(C.Location - Pawn.Location);
+			if( KFHumanPawnZombies(C)!=None && KFHumanPawnZombies(C).bIsDowned )
+				Continue;
+			NewDist = PreyDistance(C);
 			if ( BestEnemy == None )
 			{
 				BestEnemy = C;
@@ -203,9 +326,10 @@ function bool FindNewEnemy()
 	{
 		for ( PC=Level.ControllerList; PC!=None; PC=PC.NextController )
 		{
-			if ( PC.bIsPlayer && (PC.Pawn!=None) && PC.Pawn.Health>0 )
+			if ( PC.bIsPlayer && (PC.Pawn!=None) && PC.Pawn.Health>0
+			 && (KFHumanPawnZombies(PC.Pawn)==None || !KFHumanPawnZombies(PC.Pawn).bIsDowned) )
 			{
-				NewDist = VSize(PC.Pawn.Location - Pawn.Location);
+				NewDist = PreyDistance(PC.Pawn);
 				if ( BestEnemy == None )
 				{
 					BestEnemy = PC.Pawn;
@@ -262,96 +386,64 @@ function DoCharge()
 
 function DoTacticalMove();
 
-function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
+function bool TestDirection( vector dir, out vector pick )
 {
-	local vector Dummy;
-	local NavigationPoint CrowdedNode;
-	local KFMonster M;
-	local int NearbyZeds, CrowdCost;
+	local int	FearRadius;
+	local vector HitLocation, HitNormal, dist, avoid, flee;
+	local actor HitActor;
 
-	RouteCache[1] = None;
-	if( A==None )
-		Return False; // Shouldn't get to this, but just in case.
-	if ( !bCheckedReach && ActorReachable(A) )
-		MoveTarget = A;
-	else
+	if ( Pawn == None || Pawn.Health < 1 )
+		return false;
+
+	// Actually avoid FearSpots.  (was never implemented)
+	if ( FearSpots[0] != None || FearSpots[1] != None )
 	{
-		// Expire stale blocked node after 5 seconds
-		if( BlockedWay!=None && Level.TimeSeconds - BlockedWayTime > 5.0 )
-			BlockedWay = None;
-
-		if( BlockedWay!=None )
+		if ( FearSpots[1] != None && ( VSize( Pawn.Location - FearSpots[0].Location ) > VSize( Pawn.Location - FearSpots[1].Location ) ) )
 		{
-			BlockedWay.ExtraCost += 10000;
-			MoveTarget = FindPathToward(A);
-			BlockedWay.ExtraCost -= 10000;
+			avoid = FearSpots[1].Location;
+			FearRadius = FearSpots[1].CollisionRadius;
 		}
-		else MoveTarget = FindPathToward(A);
-
-		if( MoveTarget!=None )
+		else
 		{
-			// Stuck detection: same nav point too many times in a row, mark it blocked
-			if( LastResult==MoveTarget && NavigationPoint(MoveTarget)!=None && NumAttmpts > 3 )
-			{
-				BlockedWay = NavigationPoint(MoveTarget);
-				BlockedWayTime = Level.TimeSeconds;
-				LastResult = None;
-				NumAttmpts = 0;
-				return FindBestPathToward(A, True, bAllowDetour);
-			}
-			else if( LastResult==MoveTarget )
-				NumAttmpts++;
-			else NumAttmpts = 0;
-			LastResult = MoveTarget;
-
-			// Horde avoidance: count zombies near the next nav point
-			if( NavigationPoint(MoveTarget)!=None )
-			{
-				NearbyZeds = 0;
-				foreach Pawn.CollidingActors(class'KFMonster', M, 200, MoveTarget.Location)
-				{
-					if( M != Pawn )
-						NearbyZeds++;
-				}
-				if( NearbyZeds > 3 )
-				{
-					CrowdedNode = NavigationPoint(MoveTarget);
-					CrowdCost = NearbyZeds * 500;
-					CrowdedNode.ExtraCost += CrowdCost;
-					MoveTarget = FindPathToward(A);
-					CrowdedNode.ExtraCost -= CrowdCost;
-				}
-			}
+			avoid = FearSpots[0].Location;
+			FearRadius = FearSpots[0].CollisionRadius;
 		}
-	}
-	if ( MoveTarget!=None )
-	{
-		if( RouteCache[1]!=None && ActorReachable(RouteCache[1]) )
-			MoveTarget = RouteCache[1];
-		if( KFM.bCanDistanceAttackDoors )
-		{
-			A = Trace(Dummy,Dummy,MoveTarget.Location,Pawn.Location,False);
-			if( KFDoorMover(A)!=None && KFDoorMover(A).bSealed )
-			{
-				TargetDoor = KFDoorMover(A);
-				bAboutToGetDoor = True;
-			}
-		}
+		// NOTE: Instead of testing random picks for a good destination away from the fearspot,
+		//        assign a destination well out of the fearspot collision radius.
+		flee = Normal( Pawn.Location - avoid );
+		pick = flee * ( Pawn.CollisionRadius + MINSTRAFEDIST + ( MINSTRAFEDIST * FRand() ) );
+		// TODO: Force avoidance maneuver, jump or move to location toward goal but away from spot.
+		Destination = Pawn.Location + pick;
+		FocalPoint = Destination;
 		return true;
 	}
 	else
-	{
-		if ( (A == Enemy) && (A != None) )
-		{
-			FailedHuntTime = Level.TimeSeconds;
-			FailedHuntEnemy = Enemy;
-		}
-		if ( bSoaking && (Physics != PHYS_Falling) )
-			SoakStop("COULDN'T FIND BEST PATH TO "$A);
-	}
-	return false;
-}
+		pick = dir * (MINSTRAFEDIST + 2 * MINSTRAFEDIST * FRand());
 
+	HitActor = Trace( HitLocation, HitNormal, Pawn.Location + pick + 1.5 * Pawn.CollisionRadius * dir , Pawn.Location, false );
+	if ( HitActor != None )
+	{
+		pick = HitLocation + ( HitNormal - dir ) * 2 * Pawn.CollisionRadius;
+		if ( !FastTrace( pick, Pawn.Location ) )
+			return false;
+	}
+	else
+		pick = Pawn.Location + pick;
+
+	// TODO: Use pick itself (z zeroed out) as dist
+	dist = pick - Pawn.Location;
+	if (Pawn.Physics == PHYS_Walking)
+		dist.Z = 0;
+
+	return (VSize(dist) > MINSTRAFEDIST);
+}
+// How far a player seems when a victim is chosen: the swarm spreads itself over the players
+function float PreyDistance( Pawn Other )
+{
+	if( Swarm==None )
+		Return EnemyDistance(Other);
+	Return EnemyDistance(Other) + Swarm.PreyBias(Other,Other==Enemy);
+}
 function FightEnemy(bool bCanCharge)
 {
 	if( KFM.bShotAnim )
@@ -411,18 +503,23 @@ state ZombieHunt extends Hunting
 			ZDif = Pawn.CollisionHeight-44;
 			Pawn.SetCollisionSize(24,44);
 			Pawn.MoveSmooth(vect(0,0,-1)*ZDif);
+			bHuntSqueezed = True;
 		}
 	}
 	function EndState()
 	{
 		local float ZDif;
 
-		if( Pawn != none && Pawn.CollisionRadius!=Pawn.Default.CollisionRadius || Pawn.CollisionHeight!=Pawn.Default.CollisionHeight )
+		// Only what BeginState did is undone. (This used to put any specimen that had squeezed itself for a
+		// crowd back to full width there and then, so into whoever stood next to it; and it took the height
+		// to move by from the radius.)
+		if( bHuntSqueezed && Pawn!=None )
 		{
-			ZDif = Pawn.Default.CollisionRadius-44;
+			ZDif = Pawn.Default.CollisionHeight-Pawn.CollisionHeight;
 			Pawn.MoveSmooth(vect(0,0,1)*ZDif);
 			Pawn.SetCollisionSize(Pawn.Default.CollisionRadius,Pawn.Default.CollisionHeight);
 		}
+		bHuntSqueezed = False;
 	}
 	function Timer()
 	{
@@ -464,9 +561,6 @@ state ZombieHunt extends Hunting
 				Return;
 			else PathFindState = 2;
 		}
-
-		if ( Pawn.JumpZ > 0 )
-			Pawn.bCanJump = true;
 
 		if( KFM.Intelligence==BRAINS_Retarded && FRand()<0.25 )
 		{
@@ -553,20 +647,12 @@ state ZombieHunt extends Hunting
 
 state ZombieCharge extends Charging
 {
-	function SeePlayer( Pawn Seen )
-	{
-		if( KFM.Intelligence==BRAINS_Human )
-			SetEnemy(Seen);
-	}
+ignores SeePlayer, HearNoise;
+
 	function DamageAttitudeTo(Pawn Other, float Damage)
 	{
 		if( KFM.Intelligence>=BRAINS_Mammal && Other!=None && SetEnemy(Other) )
 			SetEnemy(Other);
-	}
-	function HearNoise(float Loudness, Actor NoiseMaker)
-	{
-		if( KFM.Intelligence==BRAINS_Human && NoiseMaker.Instigator!=None && FastTrace(NoiseMaker.Location,Pawn.Location) )
-			SetEnemy(NoiseMaker.Instigator);
 	}
 	function bool StrafeFromDamage(float Damage, class<DamageType> DamageType, bool bFindDest)
 	{
@@ -653,7 +739,6 @@ function bool TeleportBackIn()
     return false;
 }
 
-
 // TODO: zombies commit suicide. Is this right that they do so?
 function bool FindRoamDest()
 {
@@ -669,9 +754,9 @@ function bool FindRoamDest()
 				SoakStop("NO PATH AVAILABLE!!!");
 			else
 			{
-				if ( NumRandomJumps > 5 || PhysicsVolume.bWaterVolume )
+				if ( NumRandomJumps > 10 || PhysicsVolume.bWaterVolume )
 				{
-					if(TeleportBackIn())
+					if(TeleportBackIn() && KFMonster(Pawn).bBoss)
 						return true;
 					else 
 					{
@@ -776,9 +861,6 @@ ignores EnemyNotVisible;
 				return;
 			}
 
-			if ( Pawn.JumpZ > 0 )
-				Pawn.bCanJump = true;
-
 			if ( Enemy!=None && ActorReachable(Enemy) )
 			{
 				Destination = Enemy.Location;
@@ -868,11 +950,6 @@ ignores EnemyNotVisible;
     {
         //MonitoredPawn = None;
         MinHitWall -= 0.15;
-        if ( Pawn != None )
-        {
-            if (Pawn.JumpZ > 0)
-                Pawn.bCanJump = true;
-        }
     }
 
 	function bool FindViewSpot()
@@ -897,7 +974,7 @@ ignores EnemyNotVisible;
 		if ( FRand() < 0.5 )
 			Destination = Pawn.Location - 2.5 * Y * Pawn.CollisionRadius;
 		else
-			Destination = Pawn.Location - 2.5 * Y * Pawn.CollisionRadius;
+			Destination = Pawn.Location + 2.5 * Y * Pawn.CollisionRadius;
 		return true;
 	}
 
@@ -985,6 +1062,77 @@ KeepMoving:
 
 Moving:
 	MoveToward(TargetDoor);
+	WhatToDoNext(17);
+	if ( bSoaking )
+		SoakStop("STUCK IN CHARGING!");
+}
+
+
+state BarricadeBashing extends MoveToGoalNoEnemy
+{
+ignores EnemyNotVisible,SeeMonster;
+
+	function BeginState()
+	{
+		Disable('NotifyBump');
+		Focus = TargetPlank;
+		Pawn.Acceleration = Vect(0,0,0);
+	}
+
+	function Timer()
+	{
+		Disable('NotifyBump');
+	}
+
+	function AttackPlank()
+	{
+		Target = TargetPlank;
+		KFM.DoorAttack(Target);
+	}
+	function SeePlayer( Pawn Seen )
+	{
+		if( KFM.Intelligence==BRAINS_Human && ActorReachable(Seen) && SetEnemy(Seen) )
+			WhatToDoNext(23);
+	}
+	function DamageAttitudeTo(Pawn Other, float Damage)
+	{
+		if( KFM.Intelligence>=BRAINS_Mammal && Other!=None && ActorReachable(Other) && SetEnemy(Other) )
+			WhatToDoNext(32);
+	}
+	function HearNoise(float Loudness, Actor NoiseMaker)
+	{
+		if( KFM.Intelligence==BRAINS_Human && NoiseMaker!=None && NoiseMaker.Instigator!=None
+		 && ActorReachable(NoiseMaker.Instigator) && SetEnemy(NoiseMaker.Instigator) )
+			WhatToDoNext(32);
+	}
+
+Begin:
+	WaitForLanding();
+
+KeepMoving:
+	MoveTarget = None;
+	While( KFM.bShotAnim )
+	{
+		Pawn.Acceleration = Vect(0,0,0);
+		Sleep(0.25);
+	}
+	While( TargetPlank!=none && !TargetPlank.bHidden && !TargetPlank.bDestroyed )
+	{
+		AttackPlank();
+		While( KFM.bShotAnim )
+		{
+			Pawn.Acceleration = Vect(0,0,0);
+			Sleep(0.25);
+		}
+		Pawn.Acceleration = Vect(0,0,0);
+		Sleep(0.1);
+		if( KFM.Intelligence>=BRAINS_Mammal && Enemy!=None && ActorReachable(Enemy) )
+			WhatToDoNext(14);
+	}
+	WhatToDoNext(152);
+
+Moving:
+	MoveToward(TargetPlank);
 	WhatToDoNext(17);
 	if ( bSoaking )
 		SoakStop("STUCK IN CHARGING!");
@@ -1260,6 +1408,8 @@ Begin:
 
 function bool SetEnemy( Pawn NewEnemy, optional bool bHateMonster )
 {
+	if( KFHumanPawnZombies(NewEnemy)!=None && KFHumanPawnZombies(NewEnemy).bIsDowned )
+		Return False; // Ignore downed players waiting on a revive.
 	if( !bHateMonster && KFHumanPawnEnemy(NewEnemy)!=None && KFHumanPawnEnemy(NewEnemy).AttitudeToSpecimen<=ATTITUDE_Ignore )
 		Return False; // In other words, dont attack human pawns as long as they dont damage me or hates me.
 	if( KFM.Intelligence>=BRAINS_Mammal && Enemy!=None && NewEnemy!=None && NewEnemy!=Enemy && NewEnemy.Controller!=None && NewEnemy.Controller.bIsPlayer )
@@ -1332,7 +1482,9 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
-     StrafingAbility=0.000000
-     CombatStyle=1.000000
-     ReactionTime=1.000000
+	StrafingAbility=0.000000
+	CombatStyle=1.000000
+	ReactionTime=1.000000
+	MyFloor=255
+	StrandedDelay=10.000000
 }

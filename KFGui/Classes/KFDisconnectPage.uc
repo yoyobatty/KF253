@@ -15,7 +15,7 @@ function bool InternalOnClick(GUIComponent Sender)
     {
         case b_MainMenu.Caption:
                  C.ViewportOwner.Console.ConsoleCommand( "DISCONNECT" );
-                 C.ViewportOwner.Console.ConsoleCommand("OPEN Menu?Game=unrealgame.cinematicgame");
+                 C.ViewportOwner.Console.ConsoleCommand("OPEN KF-Menu?Game=unrealgame.cinematicgame");
                  return true;
             //UT2K4GUIController(C).ReturnToMainMenu();
 

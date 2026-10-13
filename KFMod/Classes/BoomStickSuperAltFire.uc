@@ -1,10 +1,10 @@
 //=============================================================================
-// BoomStick Fire
+// BoomStick Alt Fire: both barrels at once
 //=============================================================================
-class BoomStickSuperAltFire extends BoomStickAltFire;
+class BoomStickSuperAltFire extends BoomStickSuperFire;
 
 defaultproperties
 {
-    ProjPerFire=2
-    ProjectileClass=Class'KFMod.BoomStickSuperSlug'
+    bBothBarrels=True
+    FireRate=0.500000
 }

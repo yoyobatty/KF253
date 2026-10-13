@@ -15,6 +15,7 @@ function bool RenderPerkIcon(Canvas Canvas, eMenuState MenuState, float left, fl
 {
 	local Material T;
 	local float TX,TY,XL,YL;
+	local int i;
 
 	TX = Canvas.ClipX;
 	TY = Canvas.ClipY;
@@ -44,11 +45,28 @@ function bool RenderPerkIcon(Canvas Canvas, eMenuState MenuState, float left, fl
 		if( MenuState==MSAT_Disabled )
 			Canvas.SetDrawColor(120,120,120,200);
 		else Canvas.SetDrawColor(250,100,100,225);
-		Canvas.Font = Font'jFontSmallText';
-		Canvas.TextSize(Caption,XL,YL);
+		// the biggest of the HUD's fonts that the button has room for, down to the small one it always had
+		for( i=0; i<8; i++ )
+		{
+			Canvas.Font = class'HudBase'.static.LoadFontStatic(i);
+			Canvas.TextSize(Caption,XL,YL);
+			if( YL<=height*0.16 && XL<=width-4 )
+				break;
+		}
+		if( i==8 )
+		{
+			Canvas.Font = Font'jFontSmallText';
+			Canvas.TextSize(Caption,XL,YL);
+		}
+		if( XL>width-4 )
+		{
+			Canvas.FontScaleX = (width-4)/XL;
+			XL = width-4;
+		}
 		Canvas.CurX = Canvas.ClipX/2-XL/2;
 		Canvas.CurY = Canvas.ClipY-YL-1;
 		Canvas.DrawTextClipped(Caption,False);
+		Canvas.FontScaleX = 1.0;
 	}
 	Canvas.OrgX = 0;
 	Canvas.OrgY = 0;

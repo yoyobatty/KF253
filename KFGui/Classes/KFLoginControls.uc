@@ -730,6 +730,8 @@ function InitLists()
         return;
 
     SetupGroups();
+    li_Red.OnDrawItem = OnDrawRedPlayer;
+    li_Red.GetItemHeight = ItemHeight;
     InitializePlayerLists();
 }
 

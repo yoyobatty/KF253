@@ -10,6 +10,7 @@ var () int MaxPenetrations; // Yeah, Hardy har har. It refers in fact to the num
 var () float PenDamageReduction; // how much damage does it lose with each person it passes through?
 var () float PenDamageReductionPerked;
 var() float HeadShotDamageMult;
+var array<Pawn> HurtPawns; // Who this pellet has hurt already. A body and its extra collision are one target.
 
 simulated event PreBeginPlay()
 {
@@ -114,10 +115,15 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
     }
 }
 
+// ProcessTouch lands the hit on every machine, a client's own bodies included, so the stock
+// second hit on a client's body is left out.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
+
 simulated function ProcessTouch (Actor Other, vector HitLocation)
 {
     local vector X;
     local Pawn HitPawn;
+    local int i;
 
     X = Vector(Rotation);
     if ( Other == none || Other == Instigator || Other.Base == Instigator)
@@ -136,6 +142,15 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
     else
         HitPawn = Pawn(Other);
 
+    // Passing through the extra collision and then the body is one hit, not two
+    if (HitPawn != none)
+    {
+        for (i = 0; i < HurtPawns.Length; i++)
+            if (HurtPawns[i] == HitPawn)
+                return;
+        HurtPawns[HurtPawns.Length] = HitPawn;
+    }
+
     if (HitPawn != none && HitPawn.IsHeadShot(HitLocation, X, 1.0))
         HitPawn.TakeDamage(Damage * HeadShotDamageMult, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
     else if (HitPawn != none)
@@ -143,7 +158,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
     else
         Other.TakeDamage(Damage, Instigator, HitLocation, MomentumTransfer * Normal(Velocity), MyDamageType);
 
-    if(KFPawn(Instigator) != none && KFPawn(Instigator).GetVeteran().default.VeterancyName == "Support Specialist")
+    if(KFPawn(Instigator) != none && ClassIsChildOf(KFPawn(Instigator).GetVeteran(),class'KFVetSupportSpec'))
         PenDamageReduction = PenDamageReductionPerked;
     else PenDamageReduction = default.PenDamageReduction;
     Damage *= PenDamageReduction;
@@ -164,7 +179,7 @@ defaultproperties
     bSwitchToZeroCollision=True
     Damage=22.000000
     DamageRadius=4.000000
-    MomentumTransfer=50000.000000
+    MomentumTransfer=8000.000000
     MyDamageType=Class'KFMod.DamTypeShotgun'
     ExplosionDecal=Class'KFMod.ShotgunDecal'
     DrawType=DT_StaticMesh

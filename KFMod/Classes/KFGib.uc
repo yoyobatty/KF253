@@ -59,11 +59,13 @@ simulated event TakeDamage(int Damage, Pawn EventInstigator, vector HitLocation,
     RandSpin(100000);
 }
 
+// Called when the giblet is made, and again once its specimen has said whether it was burning,
+// so each part is only made the first time.
 simulated function SpawnTrail()
 {
     if ( Level.NetMode != NM_DedicatedServer )
     {
-		if ( bFlaming && FRand() < 0.65) //Spawn both!
+		if ( bFlaming && TrailFlame == None && FRand() < 0.65) //Spawn both!
 		{
 			TrailFlame = Spawn(class'KFHitFlame', self,,Location,Rotation);
             TrailFlame.SetPhysics( PHYS_Trailer );
@@ -71,10 +73,13 @@ simulated function SpawnTrail()
 			LifeSpan = TrailFlame.LifeSpan + 4.0;
 			TrailFlame.SetTimer(LifeSpan - 3.0,false);
 		}
-        Trail = Spawn(TrailClass, self,, Location, Rotation);
-        Trail.LifeSpan = 1.8;
-		Trail.SetPhysics( PHYS_Trailer );
-		RandSpin( 64000 );
+		if ( Trail == None && TrailClass != None )
+		{
+			Trail = Spawn(TrailClass, self,, Location, Rotation);
+			Trail.LifeSpan = 1.8;
+			Trail.SetPhysics( PHYS_Trailer );
+			RandSpin( 64000 );
+		}
 	}
 }
 
@@ -84,9 +89,6 @@ defaultproperties
     LifeSpan=12.000000
     Mass=280.000000
     DrawScale=1.100000
-    bCollideActors=True
-    bProjTarget=True
-    CollisionRadius=5.000000
-    CollisionHeight=5.000000
     GibGroupClass=Class'KFMod.KFGibGroup'
+    bUseDynamicLights=True
 }

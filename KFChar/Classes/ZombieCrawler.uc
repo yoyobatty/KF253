@@ -123,6 +123,7 @@ defaultproperties
      WaterSpeed=130.000000
      JumpZ=350.000000
      Health=100
+     GibScale=0.600000
      MenuName="Crawler"
      ControllerClass=Class'KFChar.CrawlerController'
      MovementAnims(0)="ZombieScuttle"

@@ -219,6 +219,7 @@ defaultproperties
      bStasis=False
      bNetInitialRotation=True
      RemoteRole=ROLE_SimulatedProxy
+     bAlwaysRelevant=True
      NetUpdateFrequency=1.000000
      bCollideActors=True
      bCollideWorld=True

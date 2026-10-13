@@ -40,6 +40,7 @@ function RefreshCharacterList(string ExcludedChars, optional string Race)
                 Playerlist[i].DefaultName == "Hazmat"  ||
                 Playerlist[i].DefaultName == "Soldier_Kara"   ||
                 Playerlist[i].DefaultName == "Soldier_Powers" ||
+                Playerlist[i].DefaultName == "Soldier_Quick" ||
                 Playerlist[i].DefaultName == "Stalker" ||
                 Playerlist[i].DefaultName == "Soldier_Masterson")
             {

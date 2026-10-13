@@ -382,6 +382,8 @@ Ignores SeePlayer,HearNoise,DamageAttitudeTo,Timer,NotifyPhysicsVolumeChange,Not
 		Pawn.StopAnimating();
 		if( KFM.MyExtCollision!=None )
 			KFM.MyExtCollision.SetCollision(false);
+		if( KFM.MyHeadCollision!=None )
+			KFM.MyHeadCollision.SetCollision(false);
 	}
 	function EndState()
 	{
@@ -395,6 +397,8 @@ Ignores SeePlayer,HearNoise,DamageAttitudeTo,Timer,NotifyPhysicsVolumeChange,Not
 			Pawn.SetCollision(true);
 			if( KFM.MyExtCollision!=None )
 				KFM.MyExtCollision.SetCollision(true);
+			if( KFM.MyHeadCollision!=None )
+				KFM.MyHeadCollision.SetCollision(true);
 		}
 	}
 Begin:

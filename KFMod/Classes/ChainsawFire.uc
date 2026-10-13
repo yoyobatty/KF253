@@ -20,6 +20,7 @@ function PlayFiring()
 
 defaultproperties
 {
+	bSweep=False
 	WeaponRange=150.000000
 	maxAdditionalDamage=50
 	hitDamageClass=Class'KFMod.DamTypeChainsaw'

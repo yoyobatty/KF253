@@ -25,6 +25,34 @@ var float ChaingunFireInterval, ChaingunMinInterval, ChaingunRampStep, ChaingunC
 var int ChaingunDmg, ChaingunDmgRand;
 var int MissileDamage, MissileRadius;
 
+var bool bHealPending,bMissileWindup;
+var float NextAttackDecisionTime,NextDriveByTime,NextChargeTime,NextFearTime,MissileWindupEndTime,FlankEndTime;
+
+var() float AttackDecisionInterval;
+var() float SneakWeight,DriveByWeight,ChargeWeight,MissileWeight,ChaingunWeight,IdleWeight,ChaingunCloseScale;
+var() float SneakMinDist,FlankTimeout,StalkDuration;
+var() float MissileInterval,MissileWindupTimeout;
+var() float ImpaleHealthPct;
+
+var bool bHealing,bSkipFlank,bWasShotAnim,bEnemyUnreachable;
+var float ShotAnimStartTime,LastSawTargetTime,NextRetargetTime,NextThreatCheckTime,NextTargetCheckTime;
+var float LastReachTime,ChargeBreakDist,NextTauntTime,CloakFlickerEndTime,NextFlickerTime,NextTargetSwitchTime;
+var int KiteDamage;
+
+var() float ShotAnimTimeout,KnockDownTimeout;
+var bool bHealSyringeDone,bHealApplied;
+var float HealStartTime,EscapeStartTime,EscapeCheckTime;
+var vector EscapeCheckPos;
+var() float HealSyringeTime,HealApplyTime,HealDuration;
+var() float EscapeStuckDist,EscapeStuckTime,EscapeMaxTime;
+var() float ChaingunBackoffDist,ChaingunHoldDist,ChaingunLostSightTime,ChaingunRetargetTime,CoverRocketChance,CoverRocketMinDist;
+var() float TargetCheckInterval,TargetMinHoldTime,TargetSwitchRatio,TargetVisibleBonus,TargetBusyBonus,TargetIsolatedBonus,TargetWeakBonus,TargetUnreachableScale,UnreachableRangedScale;
+var() float SplashOffsets[4];
+var() int BarrageClusterCount,BarrageExtra,BarrageMax;
+var() float KiteGraceTime,KiteRampTime,KiteDamagePct,KiteWeightScale,KiteChargeRange;
+var() float TauntInterval;
+var() float CloakFlickerTime,CloakFlickerCooldown;
+
 replication
 {
 	reliable if( Role==ROLE_Authority )
@@ -34,8 +62,13 @@ replication
 simulated function Tick(float DeltaTime)
 {
     local PlayerController PC;
+	local bool bWasSpotted;
 
 	Super.Tick(DeltaTime);
+
+	if( Role==ROLE_Authority )
+		ServerUpkeep();
+
 	if( Level.NetMode==NM_DedicatedServer )
 		Return; // Servers aren't intrested in this info.
 
@@ -47,25 +80,15 @@ simulated function Tick(float DeltaTime)
         if( PC != None && PC.Pawn != None )
             LocalKFHumanPawn = KFHumanPawn(PC.Pawn);
     }
-  
+
 	if( bCloaked && Level.TimeSeconds>LastCheckTimes )
 	{
 		LastCheckTimes = Level.TimeSeconds+0.5;
-        if( LocalKFHumanPawn != none && LocalKFHumanPawn.Health > 0 && LocalKFHumanPawn.ShowStalkers() &&
-            VSize(Location - LocalKFHumanPawn.Location) < 800.f ) 
-        {
-			bSpotted = True;
-		}
-		else
-		{
-			bSpotted = false;
-		}
-		// If he's a commando, we've been spotted.
-		if( bSpotted )
-		{
-			// Player requested to see stalkers — make visible / glow
+		bWasSpotted = bSpotted;
+		bSpotted = ( LocalKFHumanPawn != none && LocalKFHumanPawn.Health > 0 && LocalKFHumanPawn.ShowStalkers()
+			&& VSize(Location - LocalKFHumanPawn.Location) < 800.f );
+		if( bSpotted!=bWasSpotted )
 			CloakBoss();
-		}
 	}
 }
 
@@ -91,6 +114,7 @@ simulated function CloakBoss()
 
 	Visibility = 1;
 	bCloaked = true;
+	bUnlit = false;
 	if( Level.NetMode!=NM_Client )
 	{
 		For( C=Level.ControllerList; C!=None; C=C.NextController )
@@ -164,6 +188,7 @@ simulated function PostBeginPlay()
 	HealingLevels[1] = Health/2.f; 
 	HealingLevels[2] = Health/3.5; 
 	HealingAmount = Health/3; 
+	LastReachTime = Level.TimeSeconds;
 }
 
 function bool MakeGrandEntry()
@@ -249,105 +274,445 @@ function bool IsCloseEnuf( Actor A )
 	Return (VSize(V)<(CollisionRadius+A.CollisionRadius+25));
 }
 
+function bool NeedsHeal()
+{
+	Return Health>0 && !bHealing && SyringeCount<3 && Health<HealingLevels[SyringeCount];
+}
+
+function bool IsHealRetreating()
+{
+	Return IsInState('Escaping') && !IsInState('SneakAround');
+}
+
+function StartHealEscape()
+{
+	bHealPending = false;
+	bHealing = false;
+	ResetKite();
+	bShotAnim = true;
+	Acceleration = vect(0,0,0);
+	SetAnimAction('KnockDown');
+	Controller.GoToState('WaitForAnim');
+	Taunt(2);
+	GoToState('Escaping');
+}
+
+function ServerUpkeep()
+{
+	if( Health<=0 || bIsBossView )
+		Return;
+
+	if( bShotAnim )
+	{
+		if( !bWasShotAnim )
+			ShotAnimStartTime = Level.TimeSeconds;
+		else if( !bHealing && !IsInState('FireMissile') && ((IsHealRetreating() && Level.TimeSeconds-ShotAnimStartTime>KnockDownTimeout)
+			|| Level.TimeSeconds-ShotAnimStartTime>ShotAnimTimeout) )
+		{
+			bShotAnim = false;
+			bWaitForAnim = false;
+			if( Controller!=None )
+			{
+				Controller.bPreparingMove = false;
+				if( Controller.IsInState('WaitForAnim') )
+					MonsterController(Controller).WhatToDoNext(99);
+			}
+		}
+	}
+	bWasShotAnim = bShotAnim;
+
+	if( bHealing )
+	{
+		bShotAnim = true;
+		bPhysicsAnimUpdate = false;
+		Acceleration = vect(0,0,0);
+		if( Level.TimeSeconds-HealStartTime>=HealSyringeTime )
+			CountSyringe();
+		if( Level.TimeSeconds-HealStartTime>=HealApplyTime )
+			ApplyHeal();
+		if( Level.TimeSeconds-HealStartTime>=HealDuration )
+			FinishHeal();
+	}
+
+	if( bHealPending && !bShotAnim )
+	{
+		bHealPending = false;
+		if( NeedsHeal() && !IsHealRetreating() )
+			StartHealEscape();
+	}
+
+	if( CloakFlickerEndTime>0 && Level.TimeSeconds>=CloakFlickerEndTime )
+	{
+		CloakFlickerEndTime = 0;
+		if( !bCloaked && !bShotAnim && WantsCloak() )
+			CloakBoss();
+	}
+
+	if( Level.TimeSeconds>=NextTargetCheckTime )
+	{
+		NextTargetCheckTime = Level.TimeSeconds+TargetCheckInterval;
+		if( Controller!=None && Health>0 && !bShotAnim && GetStateName()==Class.Name )
+			ChooseTarget();
+	}
+}
+
+function CountSyringe()
+{
+	if( bHealSyringeDone )
+		Return;
+	bHealSyringeDone = true;
+	if( SyringeCount<3 )
+		SyringeCount++;
+	if( Level.NetMode!=NM_DedicatedServer )
+		PostNetReceive();
+}
+
+function ApplyHeal()
+{
+	if( bHealApplied )
+		Return;
+	bHealApplied = true;
+	Health += HealingAmount;
+}
+
+function FinishHeal()
+{
+	bHealing = false;
+	bShotAnim = false;
+	bWaitForAnim = false;
+	bPhysicsAnimUpdate = Default.bPhysicsAnimUpdate;
+	if( Controller!=None )
+	{
+		Controller.bPreparingMove = false;
+		if( Controller.IsInState('WaitForAnim') )
+			MonsterController(Controller).WhatToDoNext(99);
+	}
+}
+
+function bool WantsCloak()
+{
+	Return IsInState('Escaping') || IsInState('StalkingEntry') || IsInState('DriveByRetreat');
+}
+
+function Taunt( int i )
+{
+	if( Health<=0 || Level.TimeSeconds<NextTauntTime || i>=MoanVoice.Length || MoanVoice[i]==None )
+		Return;
+	NextTauntTime = Level.TimeSeconds+TauntInterval;
+	PlaySound(MoanVoice[i], SLOT_Talk, 2*TransientSoundVolume,, 1200);
+}
+
+function CheckKill( Actor A )
+{
+	if( KFHumanPawn(A)!=None && Pawn(A).Health<=0 )
+		Taunt(3);
+}
+
+function int CountLivingHumans()
+{
+	local Controller C;
+	local int n;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.bIsPlayer && KFHumanPawn(C.Pawn)!=None && C.Pawn.Health>0 )
+			n++;
+	}
+	Return n;
+}
+
+function ResetKite()
+{
+	LastReachTime = Level.TimeSeconds;
+	KiteDamage = 0;
+}
+
+function float KitePressure()
+{
+	Return FClamp((Level.TimeSeconds-LastReachTime-KiteGraceTime)/KiteRampTime, 0.0, 1.0)
+		* FClamp(float(KiteDamage)/(HealthMax*KiteDamagePct), 0.0, 1.0);
+}
+
+function bool IsIsolated( Pawn P )
+{
+	local Controller C;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.bIsPlayer && C.Pawn!=None && C.Pawn!=P && C.Pawn.Health>0 && KFHumanPawn(C.Pawn)!=None && VSize(C.Pawn.Location-P.Location)<500 )
+			Return False;
+	}
+	Return True;
+}
+
+function float RateTarget( KFHumanPawn P )
+{
+	local float S;
+
+	S = FClamp(1500.f/FMax(VSize(P.Location-Location),1.f), 0.4, 3.0);
+	if( Controller.LineOfSightTo(P) )
+		S *= TargetVisibleBonus;
+	if( (KFWeapon(P.Weapon)!=None && KFWeapon(P.Weapon).bIsReloading) || Syringe(P.Weapon)!=None || Welder(P.Weapon)!=None )
+		S *= TargetBusyBonus;
+	if( P.Health<50 )
+		S *= TargetWeakBonus;
+	if( IsIsolated(P) )
+		S *= TargetIsolatedBonus;
+	Return S;
+}
+
+function bool CanReach( Pawn P )
+{
+	Return Controller.ActorReachable(P) || Controller.FindPathToward(P)!=None;
+}
+
+function ChooseTarget()
+{
+	local Controller C;
+	local KFHumanPawn P,Best;
+	local float S,BestS,CurS;
+	local bool bBestUnreachable;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		P = KFHumanPawn(C.Pawn);
+		if( !C.bIsPlayer || P==None || P.Health<=0 || P.bIsDowned )
+			continue;
+		if( P!=Controller.Enemy && !Controller.LineOfSightTo(P) )
+			continue;
+		S = RateTarget(P);
+		if( P==Controller.Enemy )
+			CurS = S;
+		if( Best==None || S>BestS )
+		{
+			Best = P;
+			BestS = S;
+		}
+	}
+	if( Best==None )
+		Return;
+
+	if( KFHumanPawn(Controller.Enemy)!=None && Controller.Enemy.Health>0 )
+	{
+		bEnemyUnreachable = !CanReach(Controller.Enemy);
+		if( bEnemyUnreachable )
+			CurS *= TargetUnreachableScale;
+	}
+	else CurS = 0;
+	if( Best==Controller.Enemy || (CurS>0 && Level.TimeSeconds<NextTargetSwitchTime) )
+		Return;
+
+	bBestUnreachable = !CanReach(Best);
+	if( bBestUnreachable )
+		BestS *= TargetUnreachableScale;
+	if( BestS>CurS*TargetSwitchRatio )
+	{
+		MonsterController(Controller).ChangeEnemy(Best, Controller.CanSee(Best));
+		bEnemyUnreachable = bBestUnreachable;
+		NextTargetSwitchTime = Level.TimeSeconds+TargetMinHoldTime;
+	}
+}
+
+function Pawn FindMeleeThreat()
+{
+	local Controller C;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.bIsPlayer && KFHumanPawn(C.Pawn)!=None && C.Pawn.Health>0 && !KFHumanPawn(C.Pawn).bIsDowned && IsCloseEnuf(C.Pawn) )
+			Return C.Pawn;
+	}
+	Return None;
+}
+
+function int CountClustered( Actor Centre )
+{
+	local Controller C;
+	local int n;
+
+	if( Centre==None )
+		Return 0;
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.bIsPlayer && KFHumanPawn(C.Pawn)!=None && C.Pawn.Health>0 && VSize(C.Pawn.Location-Centre.Location)<MissileRadius )
+			n++;
+	}
+	Return n;
+}
+
+function bool FindSplashPoint( Pawn T, vector Start, out vector P )
+{
+	local vector Lead,Feet,Side,C,HL,HN;
+	local int i;
+
+	if( FastTrace(T.Location, Start) )
+	{
+		if( T.Physics!=PHYS_Walking )
+			Return False;
+		Lead = T.Location + T.Velocity*FMin(VSize(T.Location-Start)/class'BossLAWProj'.default.Speed, 1.0);
+		Feet = Lead - vect(0,0,1)*T.CollisionHeight;
+		if( !FastTrace(Feet, Start) )
+			Return False;
+		P = Feet;
+		Return True;
+	}
+
+	Side = Normal((T.Location-Start) Cross vect(0,0,1));
+	for( i=0; i<ArrayCount(SplashOffsets); i++ )
+	{
+		C = T.Location + Side*SplashOffsets[i];
+		if( Trace(HL,HN,C-vect(0,0,300),C,false)==None )
+			continue;
+		HL.Z += 8;
+		if( VSize(HL-T.Location)<MissileRadius*0.8 && FastTrace(HL, Start) && FastTrace(T.Location, HL) )
+		{
+			P = HL;
+			Return True;
+		}
+	}
+	Return False;
+}
+
+function SetMissileCooldown()
+{
+	LastMissileTime = Level.TimeSeconds + (10 + FRand() * 10)
+		* FClamp(1.0 - Level.Game.GameDifficulty * 0.06 - FMax(Level.Game.NumPlayers - 1, 0) * 0.04, 0.3, 1.0);
+}
+
+function StartMissileAttack()
+{
+	bShotAnim = true;
+	Acceleration = vect(0,0,0);
+	SetAnimAction('PreFireMG');
+	Controller.GoToState('WaitForAnim');
+	Taunt(0);
+	GoToState('FireMissile');
+}
+
+function SpawnChaingunFear( vector HL )
+{
+	local AvoidMarker Fear;
+
+	if( Level.TimeSeconds<NextFearTime )
+		Return;
+	NextFearTime = Level.TimeSeconds+0.25;
+	Fear = Spawn(class'AvoidMarker',,, HL);
+	if( Fear==None )
+		Return;
+	Fear.SetCollisionSize(60, 60);
+	Fear.StartleBots();
+	Fear.LifeSpan = 2.f;
+}
+
 function RangedAttack(Actor A)
 {
-	local float D;
-	local bool bOnlyE;
-    local bool bDesireChainGun;
-    local float MissileChance, MissileCooldown;
-
-    // Randomly make him want to chaingun more
-    if( Controller.LineOfSightTo(A) && FRand() < 0.15 && LastChainGunTime<Level.TimeSeconds )
-    {
-        bDesireChainGun = true;
-    }
+	local float D,Total,Pick,Pressure;
+	local float W[5];
+	local bool bOnlyE,bLOS;
+	local int i;
 
 	if ( bShotAnim )
 		return;
 	D = VSize(A.Location-Location);
-	bOnlyE = (Pawn(A)!=None && OnlyEnemyAround(Pawn(A)));
 	if ( IsCloseEnuf(A) )
 	{
+		LastReachTime = Level.TimeSeconds;
 		bShotAnim = true;
 		Acceleration = (A.Location-Location);
 		Controller.MoveTarget = A;
 		Controller.MoveTimer = 0.8;
-		if( Health>1500 && Pawn(A)!=None && OnlyEnemyAround(Pawn(A)) && FRand()<0.85 )
+		if( Health>HealthMax*ImpaleHealthPct && Pawn(A)!=None && OnlyEnemyAround(Pawn(A)) && FRand()<0.85 )
 			SetAnimAction('MeleeImpale');
 		else
 		{
 			SetAnimAction('MeleeClaw');
 			PlaySound(sound'Claw2s', SLOT_None);
 		}
+		return;
 	}
-	else if( LastSneakedTime<Level.TimeSeconds )
+
+	if( Level.TimeSeconds<NextAttackDecisionTime )
+		return;
+	NextAttackDecisionTime = Level.TimeSeconds+AttackDecisionInterval;
+
+	bOnlyE = (Pawn(A)!=None && OnlyEnemyAround(Pawn(A)));
+	if( bChargingPlayer && (bOnlyE || D<200) )
+		return;
+	bLOS = Controller.LineOfSightTo(A);
+	Pressure = KitePressure();
+
+	if( LastSneakedTime<Level.TimeSeconds && D>=SneakMinDist )
+		W[0] = SneakWeight;
+	if( !bChargingPlayer && D>500 && D<1500 && NextDriveByTime<Level.TimeSeconds )
+		W[1] = DriveByWeight*(1.0+Pressure*KiteWeightScale);
+	if( !bChargingPlayer && !bEnemyUnreachable && NextChargeTime<Level.TimeSeconds
+	 && (D<300 || (D<700 && bOnlyE) || (Pressure>=1.0 && D<KiteChargeRange && bLOS)) )
+		W[2] = ChargeWeight*(1.0+Pressure*KiteWeightScale);
+	if( LastMissileTime<Level.TimeSeconds && D>500 && bLOS )
+		W[3] = MissileWeight*FClamp(0.25 + Level.Game.GameDifficulty * 0.05 + FMax(Level.Game.NumPlayers - 1, 0) * 0.05, 0.25, 0.85);
+	if( LastChainGunTime<Level.TimeSeconds && bLOS )
 	{
-		if( FRand()<0.1 )
-		{
-			LastSneakedTime = Level.TimeSeconds+FRand()*120;
-			Return;
-		}
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('BossHitF');
-		GoToState('SneakAround');
-		Controller.GoToState('WaitForAnim');
+		W[4] = ChaingunWeight;
+		if( W[2]>0 )
+			W[4] *= ChaingunCloseScale;
 	}
-    else if( !bChargingPlayer && D>500 && D<1500 &&
-        (Level.TimeSeconds - LastDriveByTime > (15.0 + 7.0 * FRand())) && FRand() < 0.2 )
-    {
-        bShotAnim = true;
-        Acceleration = vect(0,0,0);
-        SetAnimAction('PreFireMG');
-        if( Level.NetMode != NM_DedicatedServer )
-            Controller.GoToState('WaitForAnim');
-        GoToState('DriveByAttack');
-    }
-	else if( bChargingPlayer && (bOnlyE || D<200) )
-		Return;
-	else if( !bDesireChainGun && !bChargingPlayer && (D<300 || (D<700 && bOnlyE)) &&
-        (Level.TimeSeconds - LastChargeTime > (5.0 + 5.0 * FRand())) )  // Don't charge again for a few seconds
+	if( bEnemyUnreachable )
 	{
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('BossHitF');
-		GoToState('Charging');
-		Controller.GoToState('WaitForAnim');
+		W[3] *= UnreachableRangedScale;
+		W[4] *= UnreachableRangedScale;
 	}
-	else if( LastMissileTime<Level.TimeSeconds && D > 500 )
+
+	Total = IdleWeight;
+	for( i=0; i<ArrayCount(W); i++ )
+		Total += W[i];
+	Pick = FRand()*Total;
+	for( i=0; i<ArrayCount(W); i++ )
 	{
-		MissileChance = 0.25 + Level.Game.GameDifficulty * 0.05 + FMax(Level.Game.NumPlayers - 1, 0) * 0.05;
-		if( !Controller.LineOfSightTo(A) || FRand() > FClamp(MissileChance, 0.25, 0.85) )
-		{
-			LastMissileTime = Level.TimeSeconds+FRand()*3;
-			Return;
-		}
-		MissileCooldown = FClamp(1.0 - Level.Game.GameDifficulty * 0.06 - FMax(Level.Game.NumPlayers - 1, 0) * 0.04, 0.3, 1.0);
-		LastMissileTime = Level.TimeSeconds + (10 + FRand() * 10) * MissileCooldown;
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('PreFireMG');
-        // Avoid waiting for anim on dedicated server (no anim notifies there)
-        if( Level.NetMode != NM_DedicatedServer )
-            Controller.GoToState('WaitForAnim');
-		GoToState('FireMissile');
+		if( Pick<W[i] )
+			break;
+		Pick -= W[i];
 	}
-	else if ( !bWaitForAnim && !bShotAnim && LastChainGunTime<Level.TimeSeconds )
+
+	switch( i )
 	{
-		if( !Controller.LineOfSightTo(A) || FRand()>0.45 )
-		{
-			LastChainGunTime = Level.TimeSeconds+FRand()*3;
-			Return;
-		}
-		LastChainGunTime = Level.TimeSeconds+10+FRand()*8;
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('PreFireMG');
-        // Avoid waiting for anim on dedicated server (no anim notifies there)
-        if( Level.NetMode != NM_DedicatedServer )
-            Controller.GoToState('WaitForAnim');
-		MGFireCounter = Rand(20);
-		GoToState('FireChaingun');
+		case 0:
+			bShotAnim = true;
+			Acceleration = vect(0,0,0);
+			SetAnimAction('BossHitF');
+			GoToState('SneakAround');
+			Controller.GoToState('WaitForAnim');
+			break;
+		case 1:
+			ResetKite();
+			bShotAnim = true;
+			Acceleration = vect(0,0,0);
+			SetAnimAction('PreFireMG');
+			Controller.GoToState('WaitForAnim');
+			GoToState('DriveByAttack');
+			break;
+		case 2:
+			ResetKite();
+			ChargeBreakDist = FMax(800.f, D+300.f);
+			bShotAnim = true;
+			Acceleration = vect(0,0,0);
+			SetAnimAction('BossHitF');
+			Taunt(1);
+			GoToState('Charging');
+			Controller.GoToState('WaitForAnim');
+			break;
+		case 3:
+			SetMissileCooldown();
+			StartMissileAttack();
+			break;
+		case 4:
+			LastChainGunTime = Level.TimeSeconds+10+FRand()*8;
+			bShotAnim = true;
+			Acceleration = vect(0,0,0);
+			SetAnimAction('PreFireMG');
+			Controller.GoToState('WaitForAnim');
+			MGFireCounter = Rand(20);
+			GoToState('FireChaingun');
+			break;
 	}
 }
 
@@ -457,6 +822,7 @@ State StalkingEntry
     {
         // Prevent immediate re-sneaking after initial stalk
         LastSneakedTime = Level.TimeSeconds + 20.0 + FRand() * 30.0;
+        ResetKite();
     }
     function Tick(float Delta)
     {
@@ -467,9 +833,9 @@ Begin:
     // Wait for entrance animation to finish
     While( bShotAnim )
         Sleep(0.25);
+Stalk:
     CloakBoss();
-    // Stalk cloaked for up to 20 seconds
-    Sleep(20);
+    Sleep(StalkDuration);
     // Timeout - uncloak and fight normally
     UnCloakBoss();
     GoToState('');
@@ -482,8 +848,9 @@ State FireChaingun
 	}
 	function RangedAttack(Actor A)
 	{
-		Controller.Target = A;
-		Controller.Focus = A;
+		if( Pawn(Controller.Target)==None || Pawn(Controller.Target).Health<=0 )
+			Controller.Target = A;
+		Controller.Focus = Controller.Target;
 	}
 	function EndState()
 	{
@@ -491,6 +858,7 @@ State FireChaingun
 		TraceHitPos = vect(0,0,0);
 		bMinigunning = False;
 		bCanMoveChaingunning = False;
+		bFireAtWill = False;
 		ChaingunCurrentInterval = ChaingunFireInterval;
 		bCanStrafe = false;
 	}
@@ -501,15 +869,22 @@ State FireChaingun
 		Acceleration = vect(0,0,0);
 		bMinigunning = True;
 		bCanStrafe = true;
-		SavedFireProperties.bInitialized = false; // Reset saved properties 
+		SavedFireProperties.bInitialized = false; // Reset saved properties
 		if(SyringeCount >= 1)
 			bCanMoveChaingunning = true;
         ChaingunCurrentInterval = ChaingunFireInterval;
-		
+		LastSawTargetTime = Level.TimeSeconds;
+		NextRetargetTime = Level.TimeSeconds+ChaingunRetargetTime;
+		MissileWindupEndTime = Level.TimeSeconds+MissileWindupTimeout;
 	}
 	function Tick( float Delta )
 	{
+		local vector Away,HL,HN;
+		local float D;
+
 		Super(KFMonster).Tick(Delta);
+		if( !bFireAtWill || !bCanMoveChaingunning )
+			Acceleration = vect(0,0,0);
 		if( bChargingPlayer ) //Run for it!
 			SetGroundSpeed(OriginalGroundSpeed * 2.1);
 		else SetGroundSpeed(OriginalGroundSpeed * 1.15);
@@ -518,10 +893,34 @@ State FireChaingun
 			ChaingunCurrentInterval -= ChaingunRampStep * (Delta / 0.01667);
 			if (ChaingunCurrentInterval < ChaingunMinInterval)
 				ChaingunCurrentInterval = ChaingunMinInterval;
+			if( Controller.Target!=None )
+				Controller.Focus = Controller.Target;
+			if( bCanMoveChaingunning && !bChargingPlayer && Controller.Enemy!=None )
+			{
+				Away = Location-Controller.Enemy.Location;
+				Away.Z = 0;
+				D = VSize(Away);
+				if( D<ChaingunBackoffDist )
+				{
+					Away = Normal(Away);
+					if( Trace(HL,HN,Location+Away*80-vect(0,0,1)*(CollisionHeight+60),Location+Away*80,false)!=None )
+						Acceleration = Away*AccelRate;
+					else Acceleration = vect(0,0,0);
+				}
+				else if( D<ChaingunHoldDist )
+					Acceleration = vect(0,0,0);
+			}
 		}
 	}
 	function AnimEnd( int Channel )
 	{
+		if( bFireAtWill && bCanMoveChaingunning )
+		{
+			if( Channel!=1 )
+				return;
+		}
+		else if( Channel!=0 )
+			return;
 		MGFireCounter++;
 		if( MGFireCounter>=30 )
 		{
@@ -545,6 +944,7 @@ State FireChaingun
 				bShotAnim = false;
 				bWaitForAnim = false;
 				bFireAtWill = True;
+				LastSawTargetTime = Level.TimeSeconds;
 				if( Controller.Target != None )
 					Controller.Focus = Controller.Target;
 				bPhysicsAnimUpdate = Default.bPhysicsAnimUpdate;
@@ -555,20 +955,9 @@ State FireChaingun
 		}
 		else
 		{
-			if ( Controller.Enemy != none )
-			{
-				if ( Controller.LineOfSightTo(Controller.Enemy) && FastTrace(GetBoneCoords('tip').Origin,Controller.Enemy.Location))
-				{
-					Controller.Focus = Controller.Enemy;
-					Controller.FocalPoint = Controller.Enemy.Location;
-				}
-				else
-					Controller.Focus = None;
-				Controller.Target = Controller.Enemy;
-			}
-			else
-				Controller.Focus = None;
 			// Stationary firing (original behavior)
+			if( !bFireAtWill )
+				LastSawTargetTime = Level.TimeSeconds;
 			bFireAtWill = True;
 			bShotAnim = true;
 			Acceleration = vect(0,0,0);
@@ -576,9 +965,85 @@ State FireChaingun
 			bWaitForAnim = true;
 		}
 	}
+	function PickChaingunTarget()
+	{
+		local Controller C;
+		local KFHumanPawn P,Best;
+		local vector Start;
+		local float S,BestS;
+
+		Start = GetBoneCoords('tip').Origin;
+		For( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			P = KFHumanPawn(C.Pawn);
+			if( !C.bIsPlayer || P==None || P.Health<=0 || P.bIsDowned || P==Controller.Target || !FastTrace(P.Location,Start) )
+				continue;
+			S = RateTarget(P)*(0.5+FRand());
+			if( Best==None || S>BestS )
+			{
+				Best = P;
+				BestS = S;
+			}
+		}
+		if( Best!=None )
+		{
+			Controller.Target = Best;
+			Controller.Focus = Best;
+			LastSawTargetTime = Level.TimeSeconds;
+		}
+	}
+	function bool ChaingunThink()
+	{
+		local Pawn T,Threat;
+
+		if( Level.TimeSeconds>=NextThreatCheckTime )
+		{
+			NextThreatCheckTime = Level.TimeSeconds+0.2;
+			Threat = FindMeleeThreat();
+			if( Threat!=None )
+			{
+				bShotAnim = false;
+				bWaitForAnim = false;
+				GoToState('');
+				MonsterController(Controller).ChangeEnemy(Threat, true);
+				Controller.Target = Threat;
+				Controller.Focus = Threat;
+				if( Controller.IsInState('WaitForAnim') )
+					MonsterController(Controller).WhatToDoNext(99);
+				RangedAttack(Threat);
+				Return False;
+			}
+		}
+
+		T = Pawn(Controller.Target);
+		if( T!=None && T.Health>0 && FastTrace(T.Location, GetBoneCoords('tip').Origin) )
+			LastSawTargetTime = Level.TimeSeconds;
+		if( Level.TimeSeconds>=NextRetargetTime || T==None || T.Health<=0 || Level.TimeSeconds-LastSawTargetTime>0.4 )
+		{
+			NextRetargetTime = Level.TimeSeconds+ChaingunRetargetTime;
+			PickChaingunTarget();
+		}
+
+		if( Level.TimeSeconds-LastSawTargetTime>ChaingunLostSightTime )
+		{
+			if( FRand()<CoverRocketChance && Controller.Target!=None && VSize(Controller.Target.Location-Location)>CoverRocketMinDist )
+			{
+				SetMissileCooldown();
+				StartMissileAttack();
+			}
+			else
+			{
+				bShotAnim = true;
+				Acceleration = vect(0,0,0);
+				SetAnimAction('FireEndMG');
+				GoToState('');
+			}
+			Return False;
+		}
+		Return True;
+	}
 	function FireMGShot()
 	{
-		local AvoidMarker ChaingunFear;
 		local vector Start, End, HL, HN, Dir;
 		local rotator Aim;
 		local Actor A;
@@ -610,12 +1075,12 @@ State FireChaingun
 
 		Dir.Z = 0.0;
 		if ( A != Level )
-			A.TakeDamage(ChaingunDmg + Rand(ChaingunDmgRand), Self, HL, Dir * 500, Class'DamageType');
+		{
+			A.TakeDamage(ChaingunDmg + Rand(ChaingunDmgRand), Self, HL, Dir * 500, Class'DamTypeBossChaingun');
+			CheckKill(A);
+		}
 
-		ChaingunFear = spawn(class'AvoidMarker',,, HL);
-		ChaingunFear.SetCollisionSize(60, 60);
-		ChaingunFear.StartleBots();
-		ChaingunFear.LifeSpan = 2.f;
+		SpawnChaingunFear(HL);
 	}
 	function bool NeedToTurnFor( rotator targ )
 	{
@@ -630,37 +1095,34 @@ Begin:
     {
         if(!bCanMoveChaingunning)
             Acceleration = vect(0,0,0);
-		/* 
-        else if( Controller.Enemy != None )
-        {
-            // Maintain minimum distance — don't walk into the player
-            if( VSize(Controller.Enemy.Location - Location) < 400 )
-                Acceleration = Normal(Location - Controller.Enemy.Location) * AccelRate * 0.6;
-            else if( VSize(Controller.Enemy.Location - Location) < 600 )
-                Acceleration = vect(0,0,0);
-            else
-                Acceleration = Normal(Controller.Enemy.Location - Location) * AccelRate;
-        }
-		*/
-        if( bFireAtWill )
-        {
+        if( !bFireAtWill && Level.TimeSeconds>MissileWindupEndTime )
+            AnimEnd(0);
+        if( bFireAtWill && ChaingunThink() )
             FireMGShot();
-        }
         Sleep(ChaingunCurrentInterval);
     }
 }
 
 State FireMissile
 {
+	function Tick( float Delta )
+	{
+		Global.Tick(Delta);
+		Acceleration = vect(0,0,0);
+	}
 	function BeginState()
 	{
 		Acceleration = vect(0,0,0);
 		if(SyringeCount>=2)
 			MissilesLeft = 3 + int(Level.Game.NumPlayers > 4);
 		else if(Level.Game.GameDifficulty >= 5.0 || Level.Game.NumPlayers >= 4)
-			MissilesLeft = RandRange(2,3);
-		else MissilesLeft = RandRange(1,2);
-		SavedFireProperties.bInitialized = false; // Reset saved properties 
+			MissilesLeft = 2 + Rand(2);
+		else MissilesLeft = 1 + Rand(2);
+		if( CountClustered(Controller.Target)>=BarrageClusterCount )
+			MissilesLeft = Min(MissilesLeft+BarrageExtra, BarrageMax);
+		bMissileWindup = true;
+		MissileWindupEndTime = Level.TimeSeconds+MissileWindupTimeout;
+		SavedFireProperties.bInitialized = false; // Reset saved properties
 	}
 	function RangedAttack(Actor A)
 	{
@@ -672,10 +1134,16 @@ State FireMissile
 	}
 	function AnimEnd( int Channel )
 	{
-		local Vector Start;
+		if( bMissileWindup && Channel==0 )
+			FireMissileNow();
+	}
+	function FireMissileNow()
+	{
+		local Vector Start,Splash;
 		local Rotator R;
 		local Projectile P;
 
+		bMissileWindup = false;
 		Start = GetBoneCoords('tip').Origin;
 		if ( !SavedFireProperties.bInitialized )
 		{
@@ -688,6 +1156,8 @@ State FireMissile
 			SavedFireProperties.bInitialized = true;
 		}
 		R = AdjustAim(SavedFireProperties,Start,80);
+		if( Pawn(Controller.Target)!=None && FindSplashPoint(Pawn(Controller.Target), Start, Splash) )
+			R = rotator(Splash-Start);
 		PlaySound(Sound'KFWeaponSound.LAWFire', SLOT_Interact);
 		P = Spawn(SavedFireProperties.ProjectileClass,,,Start,R);
 		if( P != None )
@@ -698,7 +1168,7 @@ State FireMissile
 		bShotAnim = true;
 		Acceleration = vect(0,0,0);
 		SetAnimAction('FireEndMG');
-		if( --MissilesLeft==0 )
+		if( --MissilesLeft<=0 )
 			GoToState('');
 		else GoToState(,'FireMore');
 	}
@@ -707,22 +1177,33 @@ Begin:
 	{
 		Acceleration = vect(0,0,0);
 		Sleep(0.1);
+		if( bMissileWindup && Level.TimeSeconds>MissileWindupEndTime )
+			FireMissileNow();
 	}
 FireMore:
 	Acceleration = vect(0,0,0);
-	Sleep(1.5);
-	AnimEnd(0);
+	Sleep(MissileInterval);
+	FireMissileNow();
 }
 
 function bool MeleeDamageTarget(int hitdamage, vector pushdir)
 {
 	local bool RetVal;
 
+	if( Controller==None )
+		Return False;
 	MeleeRange*=7;    //MeleeRange*=7;
 	if( Controller.Target!=None && Controller.Target.IsA('NetKActor') )
 		pushdir = Normal(Controller.Target.Location-Location)*100000; // Fly bitch!
+	if( CurrentDamtype==None )
+		CurrentDamtype = ZombieDamType[0];
 	RetVal = Super.MeleeDamageTarget(hitdamage, pushdir);
 	MeleeRange = Default.MeleeRange;
+	if( RetVal )
+	{
+		ResetKite();
+		CheckKill(Controller.Target);
+	}
 	return RetVal;
 }
 
@@ -745,7 +1226,7 @@ State Charging
 		bChargingPlayer = False;
 		if( Level.NetMode!=NM_DedicatedServer )
 			PostNetReceive();
-		LastChargeTime = Level.TimeSeconds;
+		NextChargeTime = Level.TimeSeconds+5.0+5.0*FRand();
 	}
 	function Tick( float Delta )
 	{
@@ -763,7 +1244,7 @@ State Charging
 	}
 	function RangedAttack(Actor A)
 	{
-		if( VSize(A.Location-Location)>800 )
+		if( VSize(A.Location-Location)>ChargeBreakDist )
 			GoToState('');
 		Global.RangedAttack(A);
 	}
@@ -787,6 +1268,11 @@ State Escaping extends Charging // Got hurt and running away...
 	}
 	function BeginHealing()
 	{
+		bHealing = true;
+		bSkipFlank = true;
+		bHealSyringeDone = false;
+		bHealApplied = false;
+		HealStartTime = Level.TimeSeconds;
 		bShotAnim = true;
 		Acceleration = vect(0,0,0);
 		SetAnimAction('Heal');
@@ -800,7 +1286,7 @@ State Escaping extends Charging // Got hurt and running away...
         local vector PushDir;
 
         P = Pawn(Other);
-        if ( P != None && P.Health > 0 )
+        if ( P != None && P.Health > 0 && Velocity dot (P.Location - Location) > 0 ) // Only push if running toward them
         {
             PushDir = P.Location - Location;
             PushDir.Z = 0;
@@ -843,17 +1329,34 @@ State Escaping extends Charging // Got hurt and running away...
 	}
 Begin:
 	CloakBoss();
+	EscapeStartTime = Level.TimeSeconds;
+	EscapeCheckTime = Level.TimeSeconds;
+	EscapeCheckPos = Location;
 	While( True )
 	{
 		Sleep(0.5);
-		if( !bCloaked && !bShotAnim )
+		if( !bCloaked && !bShotAnim && CloakFlickerEndTime==0 )
 			CloakBoss();
 		if( !Controller.IsInState('SyrRetreat') )
 			Controller.GoToState('SyrRetreat');
+		if( !bShotAnim )
+		{
+			if( VSize(Location-EscapeCheckPos)>EscapeStuckDist )
+			{
+				EscapeCheckPos = Location;
+				EscapeCheckTime = Level.TimeSeconds;
+			}
+			if( Level.TimeSeconds-EscapeCheckTime>EscapeStuckTime || Level.TimeSeconds-EscapeStartTime>EscapeMaxTime )
+				BeginHealing();
+		}
 	}
 }
 State SneakAround extends Escaping // Attempt to sneak around.
 {
+	function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
+	{
+		Global.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
+	}
 	function BeginHealing()
 	{
 		MonsterController(Controller).WhatToDoNext(56);
@@ -868,21 +1371,23 @@ State SneakAround extends Escaping // Attempt to sneak around.
 	}
 Begin:
     // Wait for heal animation to finish before sneaking
-    While( bShotAnim )
+    While( bShotAnim || bHealing )
         Sleep(0.25);
     CloakBoss();
+    if( bSkipFlank )
+    {
+        bSkipFlank = false;
+        GoToState('StalkingEntry','Stalk');
+    }
     BossZombieController(Controller).FindPathAround();
-    While( True )
+    FlankEndTime = Level.TimeSeconds+FlankTimeout;
+    While( Controller.IsInState('PatFindWay') && Level.TimeSeconds<FlankEndTime )
     {
 		Sleep(0.5);
 		if( !bCloaked && !bShotAnim )
 			CloakBoss();
-		if (!Controller.IsInState('PatFindWay'))
-        {
-			if( !Controller.IsInState('RunSomewhere') )
-				Controller.GoToState('RunSomewhere');
-		}
 	}
+    GoToState('StalkingEntry','Stalk');
 }
 
 State DriveByAttack
@@ -915,11 +1420,13 @@ State DriveByAttack
             PostNetReceive();
         if( bCloaked )
             UnCloakBoss();
-        LastDriveByTime = Level.TimeSeconds;
+        NextDriveByTime = Level.TimeSeconds+15.0+7.0*FRand();
     }
     function Tick( float Delta )
     {
         Super(KFMonster).Tick(Delta);
+        if( bShotAnim && !bFireAtWill )
+            Acceleration = vect(0,0,0);
         SetGroundSpeed(OriginalGroundSpeed * 2.5);
     }
     function RangedAttack(Actor A)
@@ -949,7 +1456,6 @@ State DriveByAttack
     }
     function FireDriveByShot()
     {
-        local AvoidMarker ChaingunFear;
         local vector Start, End, HL, HN, Dir;
         local rotator Aim;
         local Actor A;
@@ -977,13 +1483,20 @@ State DriveByAttack
             AddTraceHitFX(HL);
         Dir.Z = 0.0;
         if ( A != Level )
-            A.TakeDamage(ChaingunDmg + Rand(ChaingunDmgRand), Self, HL, Dir * 500, Class'DamageType');
-        ChaingunFear = spawn(class'AvoidMarker',,, HL);
-        ChaingunFear.SetCollisionSize(60, 60);
-        ChaingunFear.StartleBots();
-        ChaingunFear.LifeSpan = 2.f;
+        {
+            A.TakeDamage(ChaingunDmg + Rand(ChaingunDmgRand), Self, HL, Dir * 500, Class'DamTypeBossChaingun');
+            CheckKill(A);
+        }
+        SpawnChaingunFear(HL);
     }
 Begin:
+    if( Controller.Enemy == None )
+    {
+        bShotAnim = true;
+        SetAnimAction('FireEndMG');
+        Sleep(0.3);
+        GoToState('');
+    }
     // Approach phase — sprint toward enemy until close enough or have LOS
     While( Controller.Enemy != None &&
            (VSize(Controller.Enemy.Location - Location) > 800 || !Controller.LineOfSightTo(Controller.Enemy)) )
@@ -1043,7 +1556,7 @@ State DriveByRetreat
             PostNetReceive();
         if( bCloaked )
             UnCloakBoss();
-        LastDriveByTime = Level.TimeSeconds;
+        NextDriveByTime = Level.TimeSeconds+15.0+7.0*FRand();
         if( Controller!=None && Controller.IsInState('RunSomewhere') )
             Controller.GoToState('ZombieHunt');
     }
@@ -1078,12 +1591,7 @@ simulated function DropNeedle()
 simulated function NotifySyringeA()
 {
 	if( Level.NetMode!=NM_Client )
-	{
-		if( SyringeCount<3 )
-			SyringeCount++;
-		if( Level.NetMode!=NM_DedicatedServer )
-			PostNetReceive();
-	}
+		CountSyringe();
 	if( Level.NetMode!=NM_DedicatedServer )
 	{
 		DropNeedle();
@@ -1094,7 +1602,7 @@ simulated function NotifySyringeA()
 function NotifySyringeB()
 {
 	if( Level.NetMode!=NM_Client )
-		Health+=HealingAmount;
+		ApplyHeal();
 }
 simulated function NotifySyringeC()
 {
@@ -1223,16 +1731,21 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 	if( ZombieBoss(InstigatedBy)==None ) // ignore damage from other patriarch and own rockets
 		Super.TakeDamage(Damage,instigatedBy,hitlocation,vect(0,0,0),damageType);
-	if( Health<=0 || SyringeCount==3 || IsInState('Escaping') || bShotAnim )
+	if( Health<=0 )
 		Return;
-	if( (SyringeCount==0 && Health<HealingLevels[0]) || (SyringeCount==1 && Health<HealingLevels[1]) || (SyringeCount==2 && Health<HealingLevels[2]) )
+	if( KFHumanPawn(instigatedBy)!=None )
+		KiteDamage += Damage;
+	if( bCloaked && Damage>0 && Level.TimeSeconds>=NextFlickerTime )
 	{
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('KnockDown');
-		Controller.GoToState('WaitForAnim');
-		GoToState('Escaping');
+		NextFlickerTime = Level.TimeSeconds+CloakFlickerTime+CloakFlickerCooldown;
+		CloakFlickerEndTime = Level.TimeSeconds+CloakFlickerTime;
+		UnCloakBoss();
 	}
+	if( IsHealRetreating() || !NeedsHeal() )
+		Return;
+	if( bShotAnim && !IsInState('FireChaingun') && !IsInState('FireMissile') && !IsInState('DriveByAttack') )
+		bHealPending = true;
+	else StartHealEscape();
 }
 function DoorAttack(Actor A)
 {
@@ -1241,13 +1754,7 @@ function DoorAttack(Actor A)
 	else if ( A!=None )
 	{
 		Controller.Target = A;
-		bShotAnim = true;
-		Acceleration = vect(0,0,0);
-		SetAnimAction('PreFireMG');
-        // Avoid waiting for anim on dedicated server (no anim notifies there)
-        if( Level.NetMode != NM_DedicatedServer )
-            Controller.GoToState('WaitForAnim');
-		GoToState('FireMissile');
+		StartMissileAttack();
 	}
 }
 function RemoveHead();
@@ -1314,6 +1821,58 @@ function Died(Controller Killer, class<DamageType> damageType, vector HitLocatio
 
 defaultproperties
 {
+	AttackDecisionInterval=0.400000
+	SneakWeight=1.000000
+	DriveByWeight=2.000000
+	ChargeWeight=6.000000
+	MissileWeight=5.000000
+	ChaingunWeight=3.000000
+	IdleWeight=10.000000
+	ChaingunCloseScale=0.350000
+	SneakMinDist=700.000000
+	StalkDuration=20.000000
+	MissileInterval=1.500000
+	MissileWindupTimeout=3.000000
+	ImpaleHealthPct=0.190000
+	FlankTimeout=10.000000
+	ShotAnimTimeout=7.000000
+	KnockDownTimeout=2.000000
+	HealSyringeTime=2.300000
+	HealApplyTime=3.600000
+	HealDuration=5.100000
+	EscapeStuckDist=100.000000
+	EscapeStuckTime=3.000000
+	EscapeMaxTime=12.000000
+	ChaingunBackoffDist=300.000000
+	ChaingunHoldDist=550.000000
+	ChaingunLostSightTime=1.500000
+	ChaingunRetargetTime=1.500000
+	CoverRocketChance=0.600000
+	CoverRocketMinDist=400.000000
+	TargetCheckInterval=2.000000
+	TargetMinHoldTime=5.000000
+	TargetSwitchRatio=1.500000
+	TargetVisibleBonus=1.500000
+	TargetBusyBonus=1.600000
+	TargetIsolatedBonus=1.400000
+	TargetWeakBonus=1.300000
+	TargetUnreachableScale=0.300000
+	UnreachableRangedScale=2.000000
+	SplashOffsets(0)=160.000000
+	SplashOffsets(1)=-160.000000
+	SplashOffsets(2)=260.000000
+	SplashOffsets(3)=-260.000000
+	BarrageClusterCount=3
+	BarrageExtra=2
+	BarrageMax=5
+	KiteGraceTime=8.000000
+	KiteRampTime=10.000000
+	KiteDamagePct=0.080000
+	KiteWeightScale=3.000000
+	KiteChargeRange=1200.000000
+	TauntInterval=6.000000
+	CloakFlickerTime=0.500000
+	CloakFlickerCooldown=2.500000
 	ChargingAnim="RunF"
 	HealingLevels(0)=5600
 	HealingLevels(1)=3500
@@ -1350,6 +1909,7 @@ defaultproperties
 	GroundSpeed=130.000000
 	WaterSpeed=130.000000
 	HealthMax=8000.000000
+	GibScale=1.400000
 	Health=8000
 	HeadHealth=8000
 	ChaingunFireInterval=0.20

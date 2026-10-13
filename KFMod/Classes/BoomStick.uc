@@ -1,110 +1,253 @@
 //=============================================================================
 // BoomStick Inventory class
+// Primary fires one barrel, alt fire both. The switch key reloads the gun
+// with the other shell type (buckshot or slugs).
 //=============================================================================
 class BoomStick extends KFWeaponShotgun;
 
-var() bool bAltFire;
-var() int SlugsPerFire;
+// Shells
+var bool bSlugsLoaded;            // the shells in the gun are slugs
+var bool bWantSlugs;              // shell type the next reload puts in
+var bool bSwapReload;             // the running reload is changing shell type
+var() int SlugsPerFire;           // slugs thrown by one shell
+
+// Reload
+var() name ReloadSingleAnim;      // replaces only the fired shell
+var() float SingleReloadSpeed;    // the one-shell reload runs this much faster
+
+// Bots
+var() float BotBothRange;         // both barrels at an enemy closer than this
+var() int BotBothHealth;          // or at one with more health than this
+var() float BotSlugRange;         // an empty gun is loaded with slugs for an enemy beyond this
+var() float BotSwapRange;         // buckshot is swapped out for slugs for an enemy beyond this
 
 #EXEC OBJ LOAD FILE=KillingFloorHUD.utx
 
 replication
 {
 	reliable if(Role < ROLE_Authority)
-		ServerChangeFireMode;
+		ServerSwitchShells;
 
-    reliable if (Role == ROLE_Authority)
-        bAltFire;
+	reliable if (Role == ROLE_Authority)
+		bSlugsLoaded, ClientReloadShells;
 }
 
+// Two barrels, whatever a perk does to magazines.
+simulated function UpdateMagCapacity(PlayerReplicationInfo PRI)
+{
+	ClipCount = default.ClipCount;
+}
+
+// Bots stay on primary fire; BotWantsBoth decides how many barrels it lets off.
 function byte BestMode()
 {
-	local Bot B;
-	local float Dist;
-	local Vector Dir;
-
-	B = Bot(Instigator.Controller);
-	if ( (B == None) || (B.Enemy == None) )
-		return 0;
-
-	Dir = Instigator.Location - B.Enemy.Location;
-	Dist = VSize(Dir);
-
-	if (Dist > 600.f)
-		return 1;
-	else return 0;
+	return 0;
 }
 
-// Toggle semi/auto fire
+// The reload is short, so an empty gun is no reason for a bot to put it away.
+function float GetAIRating()
+{
+	return AIRating;
+}
+
+function float BotEnemyDist()
+{
+	local Controller C;
+
+	C = Instigator.Controller;
+	if ( C == None || C.Enemy == None )
+		return -1;
+	return VSize(C.Enemy.Location - Instigator.Location);
+}
+
+function bool BotWantsBoth()
+{
+	local float Dist;
+
+	if ( Instigator == None || Instigator.IsHumanControlled() )
+		return false;
+	Dist = BotEnemyDist();
+	if ( Dist < 0 )
+		return false;
+	return Dist < BotBothRange || Instigator.Controller.Enemy.Health > BotBothHealth;
+}
+
+// Switch between buckshot and slugs: the gun is reloaded with the other kind.
 simulated function DoToggle ()
 {
 	local PlayerController Player;
 
-	if( IsFiring() )
+	if( IsFiring() || bIsReloading )
 	   return;
 
+	bWantSlugs = !bWantSlugs;
 	Player = Level.GetLocalPlayerController();
 	if ( Player!=None )
 	{
-		//PlayOwnedSound(sound'Inf_Weapons_Foley.stg44_firemodeswitch01',SLOT_None,2.0,,,,false);
-		bAltFire = !bAltFire;
-		ApplyFireMode(bAltFire);
-		if ( bAltFire )
+		if ( bWantSlugs )
 			Player.ReceiveLocalizedMessage(class'KFmod.BoomStickSwitchMessage',0);
 		else
 			Player.ReceiveLocalizedMessage(class'KFmod.BoomStickSwitchMessage',1);
 	}
-	//log(Owner.GetHumanReadableName()$" changed firemode on " $GetHumanReadableName());
 	Super.DoToggle();
-	ServerChangeFireMode(bAltFire);
+	ServerSwitchShells(bWantSlugs);
 }
 
-simulated function ApplyFireMode(bool bSlugMode)
+// WeaponTick starts the reload as soon as one is allowed
+function ServerSwitchShells(bool bSlugs)
 {
-    if ( bSlugMode )
-    {
-        FireMode[0].ProjectileClass = FireMode[1].ProjectileClass;
-        BoomStickFire(FireMode[0]).ProjPerFire = SlugsPerFire;
-        FireMode[0].Spread = 0.010000;
-        FireMode[0].SpreadStyle = SS_Line;
-    }
-    else
-    {
-        FireMode[0].ProjectileClass = FireMode[0].default.ProjectileClass;
-        BoomStickFire(FireMode[0]).ProjPerFire = BoomStickFire(FireMode[0]).default.ProjPerFire;
-        FireMode[0].Spread = FireMode[0].default.Spread;
-        FireMode[0].SpreadStyle = FireMode[0].default.SpreadStyle;
-    }
-}
-
-// Set the new fire mode on the server
-function ServerChangeFireMode(bool bNewAltFire)
-{
-    bAltFire = bNewAltFire;
-    ApplyFireMode(bAltFire);
+	bWantSlugs = bSlugs;
 }
 
 exec simulated function SwitchModes()
 {
-    DoToggle();
+	DoToggle();
+}
+
+function SetShells(bool bSlugs)
+{
+	bSlugsLoaded = bSlugs;
+	if ( BoomStickFire(FireMode[0]) != None )
+		BoomStickFire(FireMode[0]).SetShells(bSlugs, SlugsPerFire);
+	if ( BoomStickFire(FireMode[1]) != None )
+		BoomStickFire(FireMode[1]).SetShells(bSlugs, SlugsPerFire);
+}
+
+function bool AllowReload()
+{
+	if ( bIsReloading || AmmoAmount(0) < 1 || ClientState != WS_ReadyToFire )
+		return false;
+	// let the last shot's animation finish
+	if ( FireMode[0].NextFireTime > Level.TimeSeconds || FireMode[1].NextFireTime > Level.TimeSeconds )
+		return false;
+	// a trigger pulled this tick fires before any reload starts
+	if ( ClipLeft > 0 && ((FireMode[0].bIsFiring && !FireMode[0].bNowWaiting) || (FireMode[1].bIsFiring && !FireMode[1].bNowWaiting)) )
+		return false;
+	if ( bWantSlugs != bSlugsLoaded )
+		return true;
+	return ClipLeft < ClipCount && AmmoAmount(0) > ClipLeft;
+}
+
+exec function ReloadMeNow()
+{
+	local float ReloadMulti;
+	local bool bSingle;
+
+	if ( !AllowReload() )
+		return;
+
+	// a bot filling an empty gun picks the shells for the enemy in front of it
+	if ( !Instigator.IsHumanControlled() && ClipLeft < 1 )
+		bWantSlugs = BotEnemyDist() > BotSlugRange;
+
+	ReloadMulti = 1;
+	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
+	if( KFPawn(Instigator)!=None )
+		ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
+
+	// changing shell type empties both barrels; otherwise a live shell stays where it is
+	bSwapReload = (bWantSlugs != bSlugsLoaded);
+	bSingle = !bSwapReload && Min(ClipCount, AmmoAmount(0)) - ClipLeft == 1;
+
+	bIsReloading = true;
+	ReloadTimer = Level.TimeSeconds;
+	ReloadRate = Default.ReloadRate/ReloadMulti;
+	if ( bSingle )
+		ReloadRate /= SingleReloadSpeed;
+	PlaySound(ReloadBeginSound, SLOT_Misc, TransientSoundVolume,,TransientSoundRadius,ReloadMulti,false);
+	ClientReloadShells(bSingle);
+	Instigator.SetAnimAction(WeaponReloadAnim);
+
+	ZoomLevel=0.0;
+	if(PlayerController(Instigator.Controller)!=none)
+		PlayerController(Instigator.Controller).StopZoom();
+}
+
+simulated function ClientReloadShells(bool bSingle)
+{
+	local float Rate;
+
+	Rate = ReloadAnimRate;
+	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+		Rate *= KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
+	if( KFPawn(Instigator)!=None )
+		Rate *= KFPawn(Instigator).GetReloadSpeedScale();
+
+	bIsReloading = true;
+	if ( bSingle )
+		PlayAnim(ReloadSingleAnim, Rate*SingleReloadSpeed, 0.05);
+	else
+		PlayAnim(ReloadAnim, Rate, 0.05);
+}
+
+// The gun is open with the shells out, so a reload runs to its end.
+simulated function bool InterruptReload()
+{
+	return false;
+}
+
+exec function FinishReloading()
+{
+}
+
+// A bot does not put the gun away empty; it would meet its next enemy with nothing loaded.
+simulated function bool PutDown()
+{
+	if ( Instigator != None && !Instigator.IsHumanControlled() && ClipLeft < 1 && AmmoAmount(0) > 0 )
+		return false;
+	return Super.PutDown();
+}
+
+simulated function InsertBullet()
+{
+	if ( bSwapReload )
+		SetShells(bWantSlugs);
+	bSwapReload = false;
+	ClipLeft = Min(ClipCount, AmmoAmount(0));
+	ClientForceKFAmmoUpdate(ClipLeft,AmmoAmount(0));
+}
+
+// A shot can empty one barrel or both.
+simulated function bool ConsumeAmmo( int Mode, float Load, optional bool bAmountNeededIsMax )
+{
+	if( Super(Weapon).ConsumeAmmo(Mode, Load, bAmountNeededIsMax) )
+	{
+		ClipLeft = Max(0, ClipLeft - int(Load));
+		return true;
+	}
+	return false;
 }
 
 simulated event WeaponTick(float dt)
 {
-	if(AmmoAmount(0) <= 1)
-		Clipleft = 0;
-	if(Clipleft == 1)
-		Clipleft = 2;
-	super.Weapontick(dt);
+	Super.WeaponTick(dt);
+
+	if ( Role < ROLE_Authority || Instigator == None || bIsReloading )
+		return;
+
+	if ( !Instigator.IsHumanControlled() && !bSlugsLoaded && BotEnemyDist() > BotSwapRange )
+		bWantSlugs = true;
+
+	if ( bWantSlugs != bSlugsLoaded && AmmoAmount(0) < 1 )
+		SetShells(bWantSlugs);     // nothing to load, just keep the choice
+	else if ( (ClipLeft < 1 || bWantSlugs != bSlugsLoaded) && Instigator.PendingWeapon == None && AllowReload() )
+		ReloadMeNow();             // an empty gun reloads itself, as the old one-piece animation did
 }
 
 defaultproperties
 {
 	SlugsPerFire=1
-	ClipCount=1
-	ReloadRate=0.010000
+	ReloadSingleAnim="ReloadSingle"
+	SingleReloadSpeed=1.150000
+	BotBothRange=400.000000
+	BotBothHealth=500
+	BotSlugRange=600.000000
+	BotSwapRange=1200.000000
+	ClipCount=2
+	ReloadRate=2.050000
 	ReloadAnim="Reload"
-	ReloadAnimRate=0.900000
+	ReloadAnimRate=1.000000
 	UpKick=2500
 	FireModeClass(0)=Class'KFMod.BoomStickFire'
 	FireModeClass(1)=Class'KFMod.BoomStickAltFire'
@@ -134,5 +277,4 @@ defaultproperties
 	bUseDynamicLights=True
 	Mesh=SkeletalMesh'KFWeaponModels.BoomStick'
 	TransientSoundVolume=1.000000
-	bModeZeroCanDryFire=false
 }

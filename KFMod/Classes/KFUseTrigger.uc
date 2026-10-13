@@ -30,6 +30,17 @@ var private bool bClientBoobyTrapped; // Client-side tracking for PostNetReceive
 
 var() float BotTriggerRadius; // Hack for bots
 
+// Zombies mode: pay points to open this door.
+var() bool bBuyableDoor;
+var() int DoorCost;
+var bool bDoorPurchased;
+var() string NotEnoughPointsMessage, DoorPurchasedMessage;
+var() sound DoorPurchaseSound;
+
+// Zombies mode: opening this (buyable) door toggles zombie spawn volumes elsewhere in the map.
+var() name ActivateVolumesTag, DeactivateVolumesTag;
+var array<KFZombieSpawnVolume> VolumesToActivate, VolumesToDeactivate;
+
 replication
 {
 	reliable if( ROLE==ROLE_Authority )
@@ -52,14 +63,133 @@ function bool SelfTriggered()
 
 simulated function PostBeginPlay()
 {
+	local KFZombieSpawnVolume ZV;
+
 	Super.PostBeginPlay();
-	SetTimer(2.0, true);
+	if( bBuyableDoor )
+		SetTimer(0.4, true);
+	else
+		SetTimer(2.0, true);
+
+	if( bBuyableDoor && (ActivateVolumesTag!='' || DeactivateVolumesTag!='') )
+	{
+		foreach DynamicActors(class'KFZombieSpawnVolume', ZV)
+		{
+			if( ActivateVolumesTag!='' && ZV.Tag==ActivateVolumesTag )
+				VolumesToActivate[VolumesToActivate.Length] = ZV;
+			if( DeactivateVolumesTag!='' && ZV.Tag==DeactivateVolumesTag )
+				VolumesToDeactivate[VolumesToDeactivate.Length] = ZV;
+		}
+	}
+}
+
+function int GetBotPoints()
+{
+	local Controller C;
+	local int Total;
+
+	For( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( Bot(C)!=None && C.PlayerReplicationInfo!=None && C.Pawn!=None && C.Pawn.Health>0 )
+			Total += Max(0, int(C.PlayerReplicationInfo.Score));
+	}
+	Return Total;
+}
+
+function TakeBotPoints( int Needed )
+{
+	local Controller C;
+	local int Take;
+
+	For( C=Level.ControllerList; C!=None && Needed>0; C=C.NextController )
+	{
+		if( Bot(C)!=None && C.PlayerReplicationInfo!=None && C.Pawn!=None && C.Pawn.Health>0 )
+		{
+			Take = Min(Needed, Max(0, int(C.PlayerReplicationInfo.Score)));
+			C.PlayerReplicationInfo.Score -= Take;
+			Needed -= Take;
+		}
+	}
+}
+
+function bool TryPurchaseDoor(Pawn user)
+{
+	local PlayerController PC;
+	local int i, Needed;
+
+	if( !bBuyableDoor || bDoorPurchased )
+		Return false;
+
+	PC = PlayerController(user.Controller);
+	if( PC==None || PC.PlayerReplicationInfo==None || user.Health<=0 )
+		Return false;
+	if( KFHumanPawn(user)!=None && KFHumanPawn(user).bIsDowned )
+		Return false;
+
+	Needed = DoorCost - int(PC.PlayerReplicationInfo.Score);
+	if( Needed>0 && Needed>GetBotPoints() )
+	{
+		PC.ClientMessage(NotEnoughPointsMessage, 'CriticalEvent');
+		Return false;
+	}
+
+	if( Needed>0 )
+	{
+		PC.PlayerReplicationInfo.Score -= DoorCost-Needed;
+		TakeBotPoints(Needed);
+	}
+	else
+		PC.PlayerReplicationInfo.Score -= DoorCost;
+	bDoorPurchased = true;
+
+	For( i=0; i<DoorOwners.Length; i++ )
+		DoorOwners[i].UnsealForPurchase();
+
+	if( DoorPurchaseSound!=None )
+		PlaySound(DoorPurchaseSound,,255,,100);
+	if( PC!=None && DoorPurchasedMessage!="" )
+		PC.ClientMessage(DoorPurchasedMessage, 'CriticalEvent');
+
+	For( i=0; i<VolumesToActivate.Length; i++ )
+		VolumesToActivate[i].Activate();
+	For( i=0; i<VolumesToDeactivate.Length; i++ )
+		VolumesToDeactivate[i].Deactivate();
+
+	Return true;
+}
+
+function ShowBuyPrompt( Pawn P )
+{
+	if( bDoorPurchased || P.Health<=0 || PlayerController(P.Controller)==None )
+		Return;
+
+	if( KFHumanPawnZombies(P)!=None )
+	{
+		if( !KFHumanPawnZombies(P).bIsDowned )
+			KFHumanPawnZombies(P).SetUsePrompt("[USE] Open Door -" @ DoorCost);
+	}
+	else if( LastMessageTimer<Level.TimeSeconds )
+	{
+		LastMessageTimer = Level.TimeSeconds+0.6;
+		PlayerController(P.Controller).ClientMessage("[USE] Open Door - " $ DoorCost, 'CriticalEvent');
+	}
 }
 
 function Timer()
 {
 	local Pawn P;
 	local float ScanRadius;
+	local KFHumanPawnZombies ZP;
+
+	if( bBuyableDoor )
+	{
+		if( !bDoorPurchased )
+		{
+			ForEach TouchingActors(class'KFHumanPawnZombies', ZP)
+				ShowBuyPrompt(ZP);
+		}
+		Return;
+	}
 
 	if (BotTriggerRadius > 0)
 		ScanRadius = BotTriggerRadius;
@@ -196,6 +326,7 @@ simulated event PostNetReceive()
 function DetonateBoobyTrap(Pawn TriggeredBy)
 {
     local int i;
+    local Actor FX;
 
     if (!bBoobyTrapped)
         return;
@@ -204,7 +335,11 @@ function DetonateBoobyTrap(Pawn TriggeredBy)
     NetUpdateTime = Level.TimeSeconds - 1;
 
     if( Level.NetMode!=NM_DedicatedServer )
-        Spawn(class'KFNadeExplosion',,, Location);
+    {
+        FX = Spawn(class'KFNadeExplosion',,, Location);
+        if( FX!=None )
+            FX.RemoteRole = ROLE_None;
+    }
     for (i = 0; i < DoorOwners.Length; i++)
     {
         if (!DoorOwners[i].bHidden)
@@ -269,12 +404,23 @@ function UsedBy( Pawn user )
 	if( (Level.TimeSeconds-LastAttempt)<RefireDelay || User.IsA('KFMonster') )
 		Return;
 
+	if( bBuyableDoor )
+	{
+		// Buyable doors never toggle shut again once bought - once purchased,
+		// this trigger is done, so don't fall through to the normal
+		// open/close toggle logic below.
+		if( !bDoorPurchased )
+			TryPurchaseDoor(user);
+		LastAttempt = Level.TimeSeconds;
+		Return;
+	}
+
     // If player is crouching and door is closed, attempt to set a booby trap
     if (user.bIsCrouched && PlayerController(user.Controller) != None)
     {
         for (i = 0; i < DoorOwners.Length; i++)
         {
-            if (DoorOwners[i].bClosed && !DoorOwners[i].bHidden && !DoorOwners[i].bKeyLocked)
+            if (DoorOwners[i].bClosed && !DoorOwners[i].bHidden && !DoorOwners[i].bKeyLocked && !bBuyableDoor)
             {
                 SetBoobyTrap(user);
                 LastAttempt = Level.TimeSeconds;
@@ -322,6 +468,12 @@ function Touch( Actor Other )
 
 	if( Pawn(Other)==None || Pawn(Other).Health<=0 )
 		Return;
+
+	if( bBuyableDoor )
+	{
+		ShowBuyPrompt(Pawn(Other));
+		Return;
+	}
 
 	For( i=0; i<DoorOwners.Length; i++ )
 	{
@@ -461,6 +613,8 @@ defaultproperties
 	BoobyTrapSetMessage="You rigged the door with a grenade. Stand clear!"
 	BoobyTrapAlreadySetMessage="This door is already booby trapped."
 	BoobyTrapNeedGrenadeMessage="You need a grenade to booby trap this door."
+	NotEnoughPointsMessage="Not enough dosh."
+	//DoorPurchasedMessage="Door opened!"
 	RemoteRole=ROLE_SimulatedProxy
 	bAlwaysRelevant=True
 	bNetNotify=True

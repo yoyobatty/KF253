@@ -93,7 +93,6 @@ function DrawBuyItem(Canvas c, int Item, float X, float Y, float W, float HT, bo
 	local string tString;
 	local float Iheight,Itop,Ileft,Iwidth;
 	local eMenuState drawState;
-	local int AdjustedValue;
 	local float GameDifficulty;
 
        if (PlayerOwner().Level.Game != none)
@@ -130,11 +129,14 @@ function DrawBuyItem(Canvas c, int Item, float X, float Y, float W, float HT, bo
        //	tString = "Cost:"@AdjustedValue;
        //else
        // tString = "Sale Value:"@AdjustedValue;
-		tString = "Cost:"@Elements[Item].cost;
+		// what is already the player's can only be sold
+		if( GUIBuyMenu(PageOwner)!=None && GUIBuyMenu(PageOwner).myCategories.Index==0 )
+			tString = "Sells for:"@int(Elements[Item].sellValue);
+		else tString = "Cost:"@int(Elements[Item].cost);
        	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,(Iheight),TXTA_Center,tString,FNS_small);
 
 		//Draw Weight string
-	tString = "Weight:"@Elements[item].weight;
+	tString = "Weight:"@int(Elements[item].weight);
 	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,(Iheight+(Iheight /2)),TXTA_Center,tString,FNS_small);
 
 }

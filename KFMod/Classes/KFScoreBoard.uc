@@ -46,7 +46,8 @@ function DrawTitle(Canvas Canvas, float HeaderOffsetY, float PlayerAreaY, float 
 	Canvas.DrawText(ScoreInfoString,true);
 }
 
-// Adjust for Kills, instead of cash.
+// By kills, then cash, then name. (It used to go by ThreeSecondScore, the running total behind the cash popup:
+// that is cleared every three seconds for a player and never for a bot.)
 simulated function bool InOrder( PlayerReplicationInfo P1, PlayerReplicationInfo P2 )
 {
 	local KFPlayerReplicationInfo P11,P22;
@@ -65,9 +66,9 @@ simulated function bool InOrder( PlayerReplicationInfo P1, PlayerReplicationInfo
 	else if ( P2.bOnlySpectator )
 		return true;
 
-	if( P11.ThreeSecondScore < P22.ThreeSecondScore )
+	if( P11.RepKills < P22.RepKills )
 		return false;
-	else if( P11.ThreeSecondScore==P22.ThreeSecondScore )
+	else if( P11.RepKills==P22.RepKills )
 	{
 		// Kills is equal, go for cash.
 		if( P11.Score < P22.Score )
@@ -87,6 +88,8 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 	local float deathsXL, scoreXL,KillsXL, netXL,HealthXL, MaxNamePos;
 	local bool bNameFontReduction;
 	local Material VeterancyBox;
+	local string KillsLine;
+	local float NameRight, ColGap, Pos;
 
 	OwnerPRI = KFPlayerController(Owner).PlayerReplicationInfo;
 	OwnerOffset = -1;
@@ -163,10 +166,22 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 	BoxXPos = 0.5 * (Canvas.ClipX - BoxWidth);
 	BoxWidth = Canvas.ClipX - 2*BoxXPos;
 	NameXPos = BoxXPos + 0.0625 * BoxWidth;
-	KillsXPos = BoxXPos + 0.3 * BoxWidth;
-	ScoreXPos = BoxXPos + 0.45 * BoxWidth;
-	HealthXpos = BoxXPos + 0.65 * BoxWidth;
 	NetXPos = BoxXPos + 0.8625 * BoxWidth;
+	// From the right, each column where it likes to be, or as far left as its own widest text needs (the font is
+	// wider for the box on a 4:3 screen than on a wide one). KillsXPos is the middle of the kills column: its header
+	// and its figures are both centred on it.
+	ColGap = 0.0125 * BoxWidth;
+	Canvas.StrLen("CRITICAL", XL, YL);
+	Canvas.StrLen("HEALTHY", HealthXL, YL);
+	Pos = FMin(BoxXPos + 0.67 * BoxWidth, NetXPos - ColGap - FMax(XL, HealthXL));
+	HealthXPos = Pos;
+	Canvas.StrLen("000000", XL, YL);
+	Pos = FMin(BoxXPos + 0.53 * BoxWidth, Pos - ColGap - XL);
+	ScoreXPos = Pos;
+	Canvas.StrLen(PointsText, ScoreXL, YL);
+	Canvas.StrLen(KillsText, KillsXL, YL);
+	Pos = FMin(BoxXPos + 0.4 * BoxWidth, Pos - 0.15*ScoreXL - ColGap - 0.5*KillsXL);
+	KillsXPos = Pos;
 		
 	// draw background boxes
 	Canvas.Style = ERenderStyle.STY_Alpha;
@@ -201,8 +216,11 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 	Canvas.SetPos(HealthXPos - 0.05*HealthXL, TitleYPos);
 	Canvas.DrawText(HealthText,true);
 			
-	// draw player names
-	MaxNamePos = 0.9 * (KillsXPos - NameXPos);
+	// draw player names (they end where the kills header begins)
+	NameRight = KillsXPos - 0.5*KillsXL - 8.f;
+	if( !bDisplayWithKills )
+		NameRight = ScoreXPos - 0.15*ScoreXL - 8.f;
+	MaxNamePos = 0.9 * (NameRight - NameXPos);
 	for ( i=0; i<PlayerCount; i++ )
 	{
 		Canvas.StrLen(GRI.PRIArray[i].PlayerName, XL, YL);
@@ -222,7 +240,7 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 
 	Canvas.DrawColor = HUDClass.default.WhiteColor;
 	MaxNamePos = Canvas.ClipX;
-	Canvas.ClipX = KillsXPos-4.f;
+	Canvas.ClipX = NameRight;
 	for ( i=0; i<PlayerCount; i++ )
 	{
 		Canvas.SetPos(NameXPos, (PlayerBoxSizeY + BoxSpaceY)*i + BoxTextOffsetY);
@@ -258,8 +276,10 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 		// draw kills
 		if( bDisplayWithKills )
 		{
-			Canvas.SetPos(KillsXPos, (PlayerBoxSizeY + BoxSpaceY)*i + BoxTextOffsetY);
-			Canvas.DrawText(KFPlayerReplicationInfo(GRI.PRIArray[i]).Kills$"/"$int(KFPlayerReplicationInfo(GRI.PRIArray[i]).Deaths),true);
+			KillsLine = KFPlayerReplicationInfo(GRI.PRIArray[i]).RepKills$"/"$int(KFPlayerReplicationInfo(GRI.PRIArray[i]).Deaths);
+			Canvas.StrLen(KillsLine, XL, YL);
+			Canvas.SetPos(KillsXPos - 0.5*XL, (PlayerBoxSizeY + BoxSpaceY)*i + BoxTextOffsetY);
+			Canvas.DrawText(KillsLine,true);
 		}
 
 		// draw cash

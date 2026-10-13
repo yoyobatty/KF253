@@ -54,6 +54,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.SharpShooter'
 	VeterancyName="Sharpshooter"
-	VeterancyDescription="|SHARPSHOOTER ||+50% increased damage with Winchester / Crossbow / Pistols|+25% Ammo for Winchester / Crossbow / Pistols|+50% Faster reloading with Winchester / Crossbow / Pistols|+40% greater headshot damage with all weapons|-75% recoil and spread with Winchester / Crossbow|+50% Faster shooting with Winchester / Crossbow"
+	VeterancyDescription="|SHARPSHOOTER ||+50% increased damage with Winchester / Crossbow / Pistols|+25% Ammo for Winchester / Crossbow / Pistols|+50% Faster reloading with Winchester / Crossbow / Pistols|+40% greater headshot damage with all weapons|-75% recoil and spread with Winchester / Crossbow / Pistols|+50% Faster shooting with Winchester / Crossbow"
 	VeterancyRequirement="|REQUIREMENTS:||- Make at least 50 headshot kills using ranged weapons(Winchester / Crossbow)."
 }

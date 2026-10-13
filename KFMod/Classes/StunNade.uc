@@ -23,6 +23,7 @@ function byte BestMode()
 defaultproperties
 {
      ClipCount=1
+     bIsGrenadeWeapon=True
      ReloadRate=1.000000
      ReloadBeginSound=Sound'KFWeaponSound.DeagleClipout'
      ReloadSound=Sound'KFWeaponSound.DeagleClipin'

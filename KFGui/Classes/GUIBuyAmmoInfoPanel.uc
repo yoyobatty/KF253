@@ -6,6 +6,7 @@ var automated GUILabel l_name,l_clipcost,l_fillcost,l_clips;
 function Display(GUIBuyable newWeapon)
 {
 	local BuyableAmmo b;
+	local int Have,Most,Clip;
 	b = BuyableAmmo(newWeapon);
 	if(b == None)
 	{
@@ -16,9 +17,11 @@ function Display(GUIBuyable newWeapon)
 	} else
 	{
 		l_name.Caption = b.ItemName;
-		l_clipcost.Caption = "Clip cost:"@(b.Cost);
-		l_fillcost.Caption = "Full Ammo:"@(b.Cost*B.BuyMoreClips());
-		l_clips.Caption = "Have:"@B.NumClips()@"clips";
+		l_clipcost.Caption = "Clip cost:"@int(b.Cost);
+		l_fillcost.Caption = "Full Ammo:"@b.FillCost(PlayerOwner().Pawn);
+		if( b.Holding(PlayerOwner().Pawn,Have,Most,Clip) )
+			l_clips.Caption = "Have:"@Have@"of"@Most@"rounds";
+		else l_clips.Caption = "";
 	}
 	i_weapBG.ChangeToWeapon(b);
 }

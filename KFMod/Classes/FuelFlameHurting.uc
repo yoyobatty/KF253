@@ -9,7 +9,7 @@ simulated function PostBeginPlay()
 {
     // Dedicated servers + Emitters + AutoDestroy is a bad combo for gameplay actors.
     // Run damage ticking on the server explicitly and self-destruct after BurnTime.
-    if (Role == ROLE_Authority)
+    if (Level.NetMode != NM_Client)
         SetTimer(BurnInterval, true);
 }
 

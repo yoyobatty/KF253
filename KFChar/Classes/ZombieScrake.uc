@@ -170,6 +170,7 @@ defaultproperties
 	GroundSpeed=85.000000
 	WaterSpeed=75.000000
 	HealthMax=1000.000000
+	GibScale=1.200000
 	Health=1000
 	HeadHealth=700.000000
 	MenuName="Scrake"

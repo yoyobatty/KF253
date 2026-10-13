@@ -3,6 +3,7 @@ class GUIBuyable extends Object;
 var Mesh showMesh;              //Mesh to show in Info
 var StaticMesh myShowMesh;      //Actual staticmesh to show in info
 var float cost;                   //Cost to buy
+var float sellValue;              //What selling it pays
 var float weight;                 //Heaviness
 var class<GUIPanel> InfoPanel;  //Panel to show Info in- should actually be KFInfoPanel
 var class<Inventory> relatedInventory; //For inventory sellables,

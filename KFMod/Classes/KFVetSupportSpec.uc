@@ -60,6 +60,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.Support'
 	VeterancyName="Support Specialist"
-	VeterancyDescription="|SUPPORT ||+7 max carry weight|+25% faster welding / unwelding with welder tool.|Doubled frag grenade capacity |+25% max ammo capacity with Shotgun / Hunting Shotgun / LAW |+50% extra shotgun and grenade damage|+10% extra LAW damage|+80% better shotgun penetration|+60% less damage from grenades|+25% less spread from shotguns|+10% faster shotgun reload speed"
+	VeterancyDescription="|SUPPORT ||+7 max carry weight|+150% faster welding / unwelding with welder tool.|Doubled frag grenade capacity |+25% max ammo capacity with Shotgun / Hunting Shotgun / LAW |+50% extra shotgun and grenade damage|+10% extra LAW damage|+80% better shotgun penetration|-40% damage from your own grenades and LAW|+25% less spread from shotguns|+10% faster shotgun reload speed"
 	VeterancyRequirement="|REQUIREMENTS:||- Weld at least 2,000 hitpoints|- Make at least 60 kills with power weapons (HandCannon, Shotgun,...)"
 }

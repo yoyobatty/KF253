@@ -146,9 +146,9 @@ defaultproperties
          Separator="þ"
          OnCreateComponent=lbChat.InternalOnCreateComponent
          FontScale=FNS_Small
-         StyleName="none"
-         WinTop=0.441667
-         WinHeight=0.558333
+         WinTop=0.270000
+         WinWidth=0.440000
+         WinHeight=0.660000
          bBoundToParent=True
          bScaleToParent=True
          bNeverFocus=True

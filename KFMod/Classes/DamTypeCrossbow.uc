@@ -3,6 +3,7 @@ class DamTypeCrossbow extends KFWeaponDamageType;
 defaultproperties
 {
      HeadShotDamageMult=1.300000
+     bSniperWeapon=True
      WeaponClass=Class'KFMod.Crossbow'
      bKUseOwnDeathVel=True
      bThrowRagdoll=True

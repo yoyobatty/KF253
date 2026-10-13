@@ -153,6 +153,13 @@ simulated function DoToggle ()
 function ServerChangeFireMode(bool bNewAltFire)
 {
     bAltFire = bNewAltFire;
+    if ( BullpupFire(FireMode[0]) != None )
+    {
+        if ( bAltFire )
+            BullpupFire(FireMode[0]).MaxFireBurst = 3;
+        else
+            BullpupFire(FireMode[0]).MaxFireBurst = 0;
+    }
 }
 
 function bool RecommendRangedAttack()
@@ -236,7 +243,10 @@ simulated function WeaponTick(float deltaTime)
 	if ( bAimingRifle && Instigator!=None && Instigator.Physics==PHYS_Falling )
 	{
 		FireMode[1].bIsFiring = False;
+		bAimingRifle = False;
 		ServerSetAiming(False);
+		if( Role<ROLE_Authority )
+			ServerStopFire(1);
 		PlayAnimZoom(False);
 	}
 	else if( bZooming && ZoomingInTimer<Level.TimeSeconds )

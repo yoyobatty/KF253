@@ -5,11 +5,20 @@ class ShotgunFire extends KFShotgunFire;
 
 function DoFireEffect()
 {
-     if (KFPawn(Instigator).GetVeteran().default.VeterancyName == "Firebug")
-          ProjectileCLass=Class'KFMod.ShotgunBulletFire';
-     else ProjectileCLass=default.ProjectileCLass;
+    local Shotgun S;
+    S = Shotgun(Weapon);
 
-	Super.DoFireEffect();
+    if (S != None && S.bExplosiveMode)
+    {
+        // Fire a single explosive shell instead of the normal pellet spread
+        ProjectileClass = class'KFMod.ExplosiveShotgunShell';
+    }
+    else if (KFPawn(Instigator) != None && ClassIsChildOf(KFPawn(Instigator).GetVeteran(),class'KFVetFirebug'))
+        ProjectileCLass = Class'KFMod.ShotgunBulletFire';
+    else
+        ProjectileCLass = default.ProjectileCLass;
+
+    Super.DoFireEffect();
 }
 
 defaultproperties
@@ -28,5 +37,5 @@ defaultproperties
      BotRefireRate=0.700000
      FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'
      aimerror=1.000000
-     Spread=1125.000000
+     Spread=1250.000000
 }

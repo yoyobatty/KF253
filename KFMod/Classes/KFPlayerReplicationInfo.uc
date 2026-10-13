@@ -17,6 +17,13 @@ var int CashThrowAmount; // Amount of cash a player throws per keypress.   Set i
 var FakePlayerPawn BlamePawn;
 
 var int KillAssists;
+var int RepKills;
+
+// Zombies mode: Juggernog perk (bought once, survives revives, lost if the
+// player fully dies) and downed/bleedout status (so other clients/HUD know).
+var bool bHasJuggernog, bHasQuickRevive, bHasSpeedCola, bHasDoubleTap, bHasStaminUp;
+var bool bIsDowned;
+var byte QuickRevivesBought;
 
 replication
 {
@@ -24,7 +31,16 @@ replication
 	reliable if ( bNetDirty && (Role == Role_Authority) )
 		bWideScreenOverlay,SubTitle,PlayerHealth,bBuyingStuff,bStartingEquipmentChosen,
 		ThreeSecondScore,bViewingMatineeCinematic,ClientVeteranSkill,
-		KillAssists;
+		KillAssists,RepKills,bHasJuggernog,bHasQuickRevive,bHasSpeedCola,bHasDoubleTap,bHasStaminUp,bIsDowned;
+}
+
+function ClearZombiesPerks()
+{
+	bHasJuggernog = false;
+	bHasQuickRevive = false;
+	bHasSpeedCola = false;
+	bHasDoubleTap = false;
+	bHasStaminUp = false;
 }
 
 simulated function PostNetBeginPlay()
@@ -51,6 +67,7 @@ function Timer()
 
 	SetTimer(0.5 + FRand(), False);
 	UpdatePlayerLocation();
+	RepKills = Kills;
 	C = Controller(Owner);
 	if( C==None )
 		Return;
@@ -68,7 +85,7 @@ function Reset()
 {
 	if( KFGameType(Level.Game)!=None )
 	{
-		Score = KFGameType(Level.Game).StartingCash;
+		Score = KFGameType(Level.Game).GetRejoinCash(PlayerController(Owner));
 		Deaths = 0;
 		HasFlag = None;
 		bReadyToPlay = false;

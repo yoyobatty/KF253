@@ -37,7 +37,10 @@ simulated function WeaponTick(float deltaTime)
 	if ( bAimingRifle && Instigator!=None && Instigator.Physics==PHYS_Falling )
 	{
 		FireMode[1].bIsFiring = False;
+		bAimingRifle = False;
 		ServerSetAiming(False);
+		if( Role<ROLE_Authority )
+			ServerStopFire(1);
 		PlayAnimZoom(False);
 	}
 	if( bZooming && ZoomingInTimer<Level.TimeSeconds )

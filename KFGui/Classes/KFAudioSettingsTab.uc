@@ -5,7 +5,7 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
 	local int i;
 	local bool bIsWin32;
 
-	bIsWin32 = (PlatformIsWindows() && !PlatformIs64Bit());
+	bIsWin32 = PlatformIsWindows();
 
 	Super(Settings_Tabs).InitComponent(MyController, MyOwner);
 
@@ -29,8 +29,8 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
 	i_BG1.ManageComponent(ch_reverseStereo);
 	i_BG1.ManageComponent(ch_MatureTaunts);
 	i_BG1.ManageComponent(ch_AutoTaunt);
-	i_BG1.ManageComponent(ch_MessageBeep);
 
+	i_BG3.ManageComponent(ch_MessageBeep);
 	i_BG3.ManageComponent(ch_TTS);
 	i_BG3.ManageComponent(ch_TTSIRC);
 	i_BG3.ManageComponent(ch_OnlyTeamTTS);
@@ -47,9 +47,6 @@ simulated function InternalOnChange(GUIComponent Sender)
 {
 	local PlayerController PC;
 	local float AnnouncerVol;
-	local bool bIsWin32;
-
-	bIsWin32 = ( ( PlatformIsWindows() ) && ( !PlatformIs64Bit() ) );
 
 	Super.InternalOnChange(Sender);
 	PC = PlayerOwner();
@@ -73,22 +70,6 @@ simulated function InternalOnChange(GUIComponent Sender)
 			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice SoundVolume"@fEffects);
 			PC.ConsoleCommand("stopsounds");
 			PC.PlaySound(sound'KFWeaponSound.knife_deploy1');
-			break;
-
-		case co_Mode:
-			if ( !bIsWin32 )  // Simple OpenAL abstraction...  --ryan.
-				break;
-
-			iMode = co_Mode.GetIndex();
-			if (iMode > 1)
-				ShowPerformanceWarning();
-			bCompat = iMode < 1;
-			b3DSound = iMode > 1;
-			bEAX = iMode > 2;
-			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice CompatibilityMode"@bCompat);
-			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice Use3DSound"@b3DSound);
-			PC.ConsoleCommand("set ini:Engine.Engine.AudioDevice UseEAX"@bEAX);
-			PC.ConsoleCommand("SOUND_REBOOT");
 			break;
 
 		case ch_ReverseStereo:

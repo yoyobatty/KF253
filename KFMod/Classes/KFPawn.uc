@@ -62,9 +62,6 @@ var byte bIsQuickHealing;
 var bool bDestroyNextTick; // Destroy this pawn next tick because destroying it now will cause problems
 var float TimeSetDestroyNextTickTime; // The time we set the bDestroyNextTick flag
 
-var bool    bDestroyAfterRagDollTick;   // Wait until the ragdoll tick has happened and then destroy. Prevents crashes where we try and destroy the actor right after initializing ragdoll
-var bool    bProcessedRagTickDestroy;   // Already called destroy for a bDestroyAfterRagDollTick setting
-
 var vector SmoothedLightDir;          // Smoothed result we apply to the shadow
 var Light  CurrentShadowLight;        // The light we're currently following
 var() float LightDirSmoothSpeed;      // Blend speed per second (higher = faster, 5.0 is a good start)
@@ -254,6 +251,24 @@ simulated event PostNetReceive()
         Setup(class'xUtil'.static.FindPlayerRecord(DrivenVehicle.PlayerReplicationInfo.CharacterName));
         bNetNotify = false;
     }
+}
+
+// A shot or a swing checks the speed of whoever made it. A player's is made as part of his moves, so that his
+// own machine and the server make it at the same point (KFPlayerController.AddMoveBrake): here that is asked
+// for the player at this machine, and left alone for a network player, whose own move brings it.
+simulated function WeaponBrake( float Factor )
+{
+	local KFPlayerController PC;
+
+	PC = KFPlayerController(Controller);
+	if ( PC != None && PC.IsInState('PlayerWalking') )
+	{
+		if ( Viewport(PC.Player) != None )
+			PC.AddMoveBrake(Factor);
+		return;
+	}
+	Velocity.X *= Factor;
+	Velocity.Y *= Factor;
 }
 
 // Don't let this pawn move for a certain amount of time
@@ -725,7 +740,7 @@ simulated function ProcessHitFX()
 						if( Level.NetMode == NM_ListenServer )
 						{
                 			bDestroyNextTick = true;
-                		TimeSetDestroyNextTickTime = Level.TimeSeconds;
+                			TimeSetDestroyNextTickTime = Level.TimeSeconds;
             			}
             			else
             			{
@@ -1158,17 +1173,8 @@ simulated function Tick(float DeltaTime)
 	}
 
 
-    if( Physics == PHYS_KarmaRagdoll && bDestroyAfterRagDollTick &&
-        !bProcessedRagTickDestroy )
-    {
-        bProcessedRagTickDestroy = true;
+    if( bDestroyNextTick && TimeSetDestroyNextTickTime < Level.TimeSeconds )
         Destroy();
-    }
-    // If we've flagged this character to be destroyed next tick, handle that
-    else if( bDestroyNextTick && TimeSetDestroyNextTickTime < Level.TimeSeconds )
-    {
-        Destroy();
-    }
     if (PlayerShadow != None)
     {
         //UpdateShadowLightDirection(DeltaTime);
@@ -1229,6 +1235,11 @@ simulated event SetAnimAction(name NewAction)
 			AnimBlendParams(1, 1.0, 0.0, 0.2, FireRootBone);
 			PlayAnim(NewAction,, 0.0, 1);
 			bThrowingNade = true;
+		}
+		else if ( AnimAction == 'KnifeStab' )
+		{
+			AnimBlendParams(1, 1.0, 0.0, 0.2, FireRootBone);
+			PlayAnim(NewAction,, 0.0, 1);
 		}
 		else if ( AnimAction == 'ShotgunFire' )
 		{
@@ -1682,7 +1693,8 @@ State Dying
 			SpawnGiblet(class 'ClotGibLeg',HitLocation, self.Rotation, 0.06 ) ;
 			if( Physics == PHYS_KarmaRagdoll )
             {
-                bDestroyAfterRagDollTick = true;
+                bDestroyNextTick = true;
+                TimeSetDestroyNextTickTime = Level.TimeSeconds;
             }
             else
             {
@@ -1989,29 +2001,44 @@ function bool ItemIsBuyable( Class<Pickup> IC )
 
 function ServerBuyWeapon( Class<Weapon> WClass )
 {
-	local Inventory I;
-	local float Price;
-
-	if( !CanBuyNow() || Class<KFWeapon>(WClass)==None || Class<KFWeaponPickup>(WClass.Default.PickupClass)==None )
+	if( PlayerReplicationInfo==None || !CanBuyNow()
+	 || Class<KFWeapon>(WClass)==None || Class<KFWeaponPickup>(WClass.Default.PickupClass)==None
+	 || !ItemIsBuyable(WClass.Default.PickupClass) )
 		Return;
-	Price = int(float(Class<KFWeaponPickup>(WClass.Default.PickupClass).Default.Cost)*GetCostScaling(Level.Game.GameDifficulty));
-	if( PlayerReplicationInfo.Score<Price )
-		Return; // Not enough CASH.
+	PurchaseWeapon(WClass, int(float(Class<KFWeaponPickup>(WClass.Default.PickupClass).Default.Cost)*GetCostScaling(Level.Game.GameDifficulty)));
+}
+
+function bool PurchaseWeapon( Class<Weapon> WClass, float Price, optional bool bForceSwap )
+{
+	local Inventory I;
+
+	if( PlayerReplicationInfo==None || Class<KFWeapon>(WClass)==None || PlayerReplicationInfo.Score<Price )
+		Return False;
 	For( I=Inventory; I!=None; I=I.Inventory )
 	{
 		if( I.Class==WClass )
-			Return; // Already has weapon.
+			Return False; // Already has weapon.
 	}
-	if( !CanCarry(Class<KFWeapon>(WClass).Default.Weight) || !ItemIsBuyable(WClass.Default.PickupClass) )
-		Return;
+	if( !CanCarry(Class<KFWeapon>(WClass).Default.Weight) )
+		Return False;
 	I = Spawn(WClass);
-	if( I!=None )
-	{
-		KFWeapon(I).UpdateMagCapacity(PlayerReplicationInfo);
-	    KFWeapon(I).FillToInitialAmmo();
-        I.GiveTo(self);
-		PlayerReplicationInfo.Score-=Price;
-    }
+	if( I==None )
+		Return False;
+	KFWeapon(I).UpdateMagCapacity(PlayerReplicationInfo);
+	KFWeapon(I).FillToInitialAmmo();
+	I.GiveTo(self);
+	PlayerReplicationInfo.Score-=Price;
+	Return True;
+}
+
+simulated function float GetFireSpeedScale()
+{
+	Return 1;
+}
+
+simulated function float GetReloadSpeedScale()
+{
+	Return 1;
 }
 function ServerSellWeapon( Class<Weapon> WClass )
 {
@@ -2024,6 +2051,8 @@ function ServerSellWeapon( Class<Weapon> WClass )
 	{
 		if( I.Class==WClass )
 		{
+			if( KFWeapon(I)==None || KFWeapon(I).bKFNeverThrow )
+				Return;
 			PlayerReplicationInfo.Score+=(Class<KFWeaponPickup>(WClass.Default.PickupClass).Default.Cost*0.75);
 			if( Dualies(I)!=None )
 			{
@@ -2105,14 +2134,23 @@ function ServerBuyFirstAid()
 
 function ServerBuyAmmo( Class<Ammunition> AClass, bool bOnlyClip )
 {
+	if( !CanBuyNow() )
+		Return;
+	PurchaseAmmo(AClass, bOnlyClip);
+}
+
+function bool PurchaseAmmo( Class<Ammunition> AClass, bool bOnlyClip )
+{
 	local Inventory I;
 	local float Price;
 	local Ammunition AM;
 	local KFWeapon KW;
 	local int c;
+	local int effectiveClipCount;
+	local int effectiveAmmoCost;
 
-	if( !CanBuyNow() || AClass==None )
-		Return;
+	if( AClass==None || PlayerReplicationInfo==None )
+		Return False;
 	For( I=Inventory; I!=None; I=I.Inventory )
 	{
 		if( I.Class==AClass )
@@ -2120,34 +2158,47 @@ function ServerBuyAmmo( Class<Ammunition> AClass, bool bOnlyClip )
 		else if( KW==None && KFWeapon(I)!=None && (Weapon(I).AmmoClass[0]==AClass || Weapon(I).AmmoClass[1]==AClass) )
 			KW = KFWeapon(I);
 	}
-	if( AM==None && KW==None )
-		return;
+	if( AM==None || KW==None )
+		Return False;
     AM.MaxAmmo = AM.default.MaxAmmo;
     if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
     {
         AM.MaxAmmo = int(float(AM.MaxAmmo) * KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.AddExtraAmmoFor(AClass));
     }
 	if( AM.AmmoAmount>=AM.MaxAmmo )
-		Return;
-	Price = int(Class<KFWeaponPickup>(KW.PickupClass).Default.AmmoCost*GetCostScaling(Level.Game.GameDifficulty)); // Clip price.
+		Return False;
+	if (KW.AmmoClass[1] == AClass && Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryAmmoCost > 0)
+	{
+		effectiveAmmoCost = Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryAmmoCost;
+		effectiveClipCount = Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryClipCount;
+		if (effectiveClipCount <= 0)
+			effectiveClipCount = KW.Default.ClipCount;
+	}
+	else
+	{
+		effectiveAmmoCost = Class<KFWeaponPickup>(KW.PickupClass).Default.AmmoCost;
+		effectiveClipCount = KW.Default.ClipCount;
+	}
+	Price = int(effectiveAmmoCost * GetCostScaling(Level.Game.GameDifficulty));
 	if( bOnlyClip )
-		c = KW.Default.ClipCount;
+		c = effectiveClipCount;
 	else c = (AM.MaxAmmo-AM.AmmoAmount);
-	Price = float(c)/float(KW.Default.ClipCount)*Price;
-    if ( PlayerReplicationInfo.Score < Price ) 
+	Price = float(c)/float(effectiveClipCount)*Price;
+    if ( PlayerReplicationInfo.Score < Price )
     {
         c *= (PlayerReplicationInfo.Score/Price);
 
         if ( c == 0 )
         {
-            return; // Couldn't even afford 1 bullet.
+            Return False; // Couldn't even afford 1 bullet.
         }
         AM.AddAmmo(c);
-        PlayerReplicationInfo.Score = Max(PlayerReplicationInfo.Score - (float(c) / KW.Default.ClipCount * Price), 0);
-        return;
+        PlayerReplicationInfo.Score = Max(PlayerReplicationInfo.Score - (float(c) / float(effectiveClipCount) * Price), 0);
+        Return True;
     }
 	PlayerReplicationInfo.Score-=Price;
 	AM.AddAmmo(c);
+	Return True;
 }
 
 function ServerSellAmmo( Class<Ammunition> AClass )
@@ -2157,6 +2208,8 @@ function ServerSellAmmo( Class<Ammunition> AClass )
 	local Ammunition AM;
 	local KFWeapon KW;
 	local int c;
+	local int effectiveClipCount;
+	local int effectiveAmmoCost;
 
 	if( !CanBuyNow() || AClass==None )
 		Return;
@@ -2169,11 +2222,23 @@ function ServerSellAmmo( Class<Ammunition> AClass )
 	}
 	if( (AM==None && KW==None) || AM.AmmoAmount==AM.MaxAmmo )
 		Return;
-	Price = int(Class<KFWeaponPickup>(KW.PickupClass).Default.AmmoCost*GetCostScaling(Level.Game.GameDifficulty)); // Clip price.
-	c = KW.Default.ClipCount;
+	if (KW.AmmoClass[1] == AClass && Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryAmmoCost > 0)
+	{
+		effectiveAmmoCost = Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryAmmoCost;
+		effectiveClipCount = Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryClipCount;
+		if (effectiveClipCount <= 0)
+			effectiveClipCount = KW.Default.ClipCount;
+	}
+	else
+	{
+		effectiveAmmoCost = Class<KFWeaponPickup>(KW.PickupClass).Default.AmmoCost;
+		effectiveClipCount = KW.Default.ClipCount;
+	}
+	Price = int(effectiveAmmoCost * GetCostScaling(Level.Game.GameDifficulty));
+	c = effectiveClipCount;
 	if( c>AM.AmmoAmount )
 		c = AM.AmmoAmount;
-	Price = float(c)/float(KW.Default.ClipCount)*Price*0.75;
+	Price = float(c)/float(effectiveClipCount)*Price*0.75;
 	PlayerReplicationInfo.Score+=Price;
 	AM.AmmoAmount-=c;
 }

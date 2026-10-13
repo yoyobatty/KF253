@@ -142,10 +142,8 @@ function InternalOnLoadINI(GUIComponent Sender, string s)
 			break;
 
 		case nu_CashThrowSum:
-			if ( KFPlayerReplicationInfo(PC.PlayerReplicationInfo)==None )
-				CashThrowAmount = 50;
-			else 
-				CashThrowAmount = KFPlayerReplicationInfo(PC.PlayerReplicationInfo).CashThrowAmount;
+			CashThrowAmount = class'KFMod.KFPlayerController'.default.CashThrowAmount;
+			CashThrowAmountD = CashThrowAmount;
 			nu_CashThrowSum.SetValue(CashThrowAmount);
 			break;
 		case ch_SmallWeaps:
@@ -211,10 +209,42 @@ function ShowSpinnyDude()
 	}
 }
 
+// (the stock page's defaults are a UT2004 character)
+function ResetClicked()
+{
+	local PlayerController PC;
+
+	Super.ResetClicked();
+
+	PC = PlayerOwner();
+	PC.ConsoleCommand("ChangeCharacter Soldier_Quick");
+	PC.UpdateURL("Character", "Soldier_Quick", True);
+	sChar = "Soldier_Quick";
+	sCharD = sChar;
+	SetPlayerRec();
+}
+
 function SaveSettings()
 {
 	local bool bSave;
 	local PlayerController PC;
+
+	if (CashThrowAmountD != CashThrowAmount)
+	{
+		CashThrowAmountD = CashThrowAmount;
+		class'KFMod.KFPlayerController'.default.CashThrowAmount = CashThrowAmount;
+		if ( KFPlayerController(PlayerOwner()) != None )
+			KFPlayerController(PlayerOwner()).CashThrowAmount = CashThrowAmount;
+		class'KFMod.KFPlayerController'.static.StaticSaveConfig();
+	}
+
+	// (before the stock code, which takes this box for its own small weapons setting)
+	if (bWeapsD != bWeaps)
+	{
+		bWeapsD = bWeaps;
+		Class'KFPawn'.Default.bRealDeathType = bWeaps;
+		Class'KFPawn'.Static.StaticSaveConfig();
+	}
 
 	Super.SaveSettings();
 	PC = PlayerOwner();
@@ -238,13 +268,6 @@ function SaveSettings()
 
 	if (iTeam == 255)
 		iTeam = 2;
-
-	if (bWeapsD != bWeaps)
-	{
-		bWeapsD = bWeaps;
-		Class'KFPawn'.Default.bRealDeathType = bWeaps;
-		Class'KFPawn'.Static.StaticSaveConfig();
-	}
 
 	if (iHandD != iHand)
 	{

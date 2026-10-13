@@ -45,6 +45,6 @@ defaultproperties
 {
 	OnHUDIcon=Texture'KFX.MEDIC'
 	VeterancyName="Field Medic"
-	VeterancyDescription="|MEDIC ||+150% recharge rate with med-syringe|+75% potency of medical injections|+25% player movement speed|+50% reduction in recoil movement penalty|-75% damage from bloat bile|-50% damage from siren scream|-20% damage taken from all damage types|+50% better armour|Healing grenades"
+	VeterancyDescription="|MEDIC ||+150% recharge rate with med-syringe|+100% potency of medical injections|+25% player movement speed|+50% reduction in recoil movement penalty|-75% damage from bloat bile|-50% damage from siren scream|-20% damage taken from all damage types|+75% better armour|Healing grenades"
 	VeterancyRequirement="|REQUIREMENTS:||- Heal at least 1,000 hitpoints on your team-mates"
 }

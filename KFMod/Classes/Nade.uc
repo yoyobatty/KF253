@@ -55,6 +55,7 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 {
 	local PlayerController  LocalPlayer;
 	local Projectile P;
+	local Actor FX;
 	local byte i;
 
 	bHasExploded = True;
@@ -76,7 +77,8 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 	else if(bHealing)
 	{
 		PlaySound(sound'KFWeaponSound.FlameThrowerFire',,80.5*TransientSoundVolume);
-		Spawn(Class'KFMod.KFNadeHealingExplosion',,, HitLocation, rotator(vect(0,0,1)));
+		if ( Role == ROLE_Authority )
+			Spawn(Class'KFMod.KFNadeHealingExplosion',,, HitLocation, rotator(vect(0,0,1)));
 	}
 	else if(bGas)
 	{
@@ -100,7 +102,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 
 		if ( EffectIsRelevant(Location,false) )
 		{
-			Spawn(Class'KFmod.KFNadeExplosion',,, HitLocation);
+			FX = Spawn(Class'KFmod.KFNadeExplosion',,, HitLocation);
+			if( FX!=None )
+				FX.RemoteRole = ROLE_None;
 			Spawn(ExplosionDecal,self,,HitLocation, rotator(-HitNormal));
 		}
 		// Shake nearby players screens
@@ -118,7 +122,7 @@ simulated function SpawnIncendiaryGroundFires(vector BlastLoc)
     local vector Dir, TestLoc, TraceStart, TraceEnd, HitLoc, HitNorm;
     local Actor A;
 
-    if ( IncendiaryGroundFireClass == None )
+    if ( IncendiaryGroundFireClass == None || Role < ROLE_Authority )
         return;
 
     StepAngle = 2 * Pi / NumGroundFires;
@@ -146,6 +150,8 @@ simulated function SpawnIncendiaryGroundFires(vector BlastLoc)
 
         A = Spawn(IncendiaryGroundFireClass,Instigator,, HitLoc,
                   rotator( HitNorm));
+        if ( A != None )
+            A.RemoteRole = ROLE_SimulatedProxy;
 		//log("Spawned incendiary ground fire at " @ HitLoc @ " actor ref: " @ A);
     }
 }
@@ -168,6 +174,9 @@ simulated function Destroyed()
 		Fear.Destroy();
 	Super.Destroyed();
 }
+
+// Touching a body does it no harm. Stock would have a client's own bodies take the full Damage.
+simulated function ClientSideTouch(Actor Other, Vector HitLocation);
 
 simulated function ProcessTouch( actor Other, vector HitLocation )
 {

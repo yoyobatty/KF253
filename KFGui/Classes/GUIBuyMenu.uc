@@ -19,6 +19,7 @@ var int playerscore;
 var float playerweight;
 var float maxweight;
 var float GameDifficulty;
+var int PendingChecks;
 
 var Sound SellSound,BuySound;
 
@@ -73,7 +74,8 @@ event HandleParameters(string Param1, string Param2)
 				// - Suicidal = 233%
 				AllBuyableItems.Insert(0,1);
 				AllBuyableItems[0] = new class'BuyableWeapon';
-				AllBuyableItems[0].cost = BuyWeapon.default.cost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
+				AllBuyableItems[0].cost = int(float(BuyWeapon.default.cost) * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
+				AllBuyableItems[0].sellValue = int(BuyWeapon.default.cost * 0.75);
 				AllBuyableItems[0].Weight= BuyWeapon.default.Weight;
 				BuyableWeapon(AllBuyableItems[0]).PowerValue=BuyWeapon.default.PowerValue;
 				BuyableWeapon(AllBuyableItems[0]).RangeValue=BuyWeapon.default.RangeValue;
@@ -90,9 +92,9 @@ event HandleParameters(string Param1, string Param2)
 				{
 					AllBuyableItems.Insert(0,1);
 					AllBuyableItems[0] = new class'BuyableAmmo';
-					AllBuyableItems[0].cost = BuyWeapon.default.ammocost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
+					AllBuyableItems[0].cost = int(BuyWeapon.default.ammocost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
 					AllBuyableItems[0].myShowMesh=BuyWeapon.default.AmmoMesh;
-            
+
 					// Little hack for the LAW ammo :P  it's huge.
 					if(BuyWeapon.default.AmmoMesh == StaticMesh'KillingFloorStatics.LAWAmmo')
 						AllBuyableItems[0].infoDrawScale *= 0.5;
@@ -100,6 +102,27 @@ event HandleParameters(string Param1, string Param2)
 					AllBuyableItems[0].ItemName=BuyWeapon.default.AmmoItemName;
 					AllBuyableItems[0].relatedInventory=BuyWeapon.default.InventoryType;
 					BuyableAmmo(AllBuyableItems[0]).ammoType=class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[0].default.AmmoClass;
+
+					// Add a separate entry for weapons that have a secondary ammo type (e.g. explosive shells)
+					if (class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[1] != None &&
+						class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[1].default.AmmoClass != None &&
+						class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[1].default.AmmoClass !=
+							class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[0].default.AmmoClass)
+					{
+						AllBuyableItems.Insert(0,1);
+						AllBuyableItems[0] = new class'BuyableAmmo';
+						if (BuyWeapon.default.SecondaryAmmoCost > 0)
+							AllBuyableItems[0].cost = int(BuyWeapon.default.SecondaryAmmoCost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
+						else
+							AllBuyableItems[0].cost = int(BuyWeapon.default.ammocost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
+						AllBuyableItems[0].myShowMesh=BuyWeapon.default.AmmoMesh;
+						if (BuyWeapon.default.SecondaryAmmoItemName != "")
+							AllBuyableItems[0].ItemName = BuyWeapon.default.SecondaryAmmoItemName;
+						else
+							AllBuyableItems[0].ItemName = BuyWeapon.default.AmmoItemName@"(Alt)";
+						AllBuyableItems[0].relatedInventory=BuyWeapon.default.InventoryType;
+						BuyableAmmo(AllBuyableItems[0]).ammoType=class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[1].default.AmmoClass;
+					}
 				}
 			}
 			else
@@ -111,16 +134,18 @@ event HandleParameters(string Param1, string Param2)
 				{
 					AllBuyableItems.Insert(0,1);
 					AllBuyableItems[0] = new class'BuyableVest';
-					AllBuyableItems[0].cost = AllBuyableItems[0].default.cost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
-					AllBuyableItems[0].cost *= (100.f - PlayerOwner().Pawn.ShieldStrength)/100.f;
+					// as KFPawn.ServerBuyKevlar charges: by the armour that is missing, and by difficulty only for a player with a veterancy
+					AllBuyableItems[0].cost = AllBuyableItems[0].default.cost * (100.f - PlayerOwner().Pawn.ShieldStrength)/100.f;
+					if( KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo)!=None && KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo).ClientVeteranSkill!=None )
+						AllBuyableItems[0].cost *= Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
 					//PlayerOwner().Level.Game.Broadcast(PlayerOwner().Pawn, "Buy cost is: " $AllBuyableItems[0].cost$"");
 				}
 				if( class<FirstAidKit>(KFLR.ItemForSale[i])!=none)
 				{
 					AllBuyableItems.Insert(0,1);
 					AllBuyableItems[0] = new class'BuyableFirstAidKit';
-					AllBuyableItems[0].cost = AllBuyableItems[0].default.cost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
-					AllBuyableItems[0].cost *= (100.f - PlayerOwner().Pawn.Health)/100.f;
+					// as KFPawn.ServerBuyFirstAid charges: the same whatever health is missing
+					AllBuyableItems[0].cost = int(AllBuyableItems[0].default.cost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
 				}
 			}
 		}
@@ -225,18 +250,33 @@ function BuyCurrent()
 	local GUIBuyable b;
 	local int i;
 
+	if( myItems.Index<0 || myItems.Index>=myItems.Elements.Length )
+		Return;
 	b = myItems.Elements[myItems.Index];
+	// (a greyed Buy button can still be pressed with a key)
+	if( myCategories.Index!=0 && !CanAfford(b) )
+		Return;
 	if(myCategories.Index == 0) //sell, don't buy
 	{
 		b.SellMe(KFPawn(playerOwner().Pawn));
 		PlayerOwner().pawn.PlaySound(SellSound,SLOT_Interface,255.0,,120);
+		playerscore += b.sellValue;
+		playerweight -= b.weight;
 	}
 	else
 	{
 		b.BuyMe(KFPawn(playerOwner().Pawn));
-		BuySound = b.relatedInventory.default.PickupClass.default.PickupSound;
+		if( b.relatedInventory!=None && b.relatedInventory.default.PickupClass!=None )
+			BuySound = b.relatedInventory.default.PickupClass.default.PickupSound;
+		else BuySound = default.BuySound;
 		PlayerOwner().pawn.PlaySound(BuySound,SLOT_Interface,255.0,,120);
+		if( BuyableWeapon(b)!=None )
+		{
+			playerscore -= b.cost;
+			playerweight += b.weight;
+		}
 	}
+	PendingChecks = 2;
 
 	myCategories.IndexChanged(myCategories);  //update lists
    	//Only refresh if we're out of whatever we bought.
@@ -257,6 +297,7 @@ function BuyFill()
 
 	b = BuyableAmmo(myItems.Elements[myItems.Index]);
 	b.FillMe(KFPawn(playerOwner().pawn));
+	PendingChecks = 2;
 	myCategories.IndexChanged(myItems);
 }
 
@@ -265,8 +306,8 @@ function bool CanAutoAmmo()
 	local int requiredScore,i;
 	for(i=0;i<AllBuyableItems.length;i++)
 	{
-		if(AllBuyableItems[i].IsA('BuyableAmmo') && AllBuyableItems[i].HasMe(PlayerOwner().Pawn))
-			requiredScore += BuyableAmmo(AllBuyableItems[i]).BuyMoreClips()*AllBuyableItems[i].cost;
+		if(AllBuyableItems[i].IsA('BuyableAmmo') && AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self))
+			requiredScore += BuyableAmmo(AllBuyableItems[i]).FillCost(PlayerOwner().Pawn);
 	}
 	return playerscore >= requiredScore;
 }
@@ -274,17 +315,16 @@ function bool CanAutoAmmo()
 function DoAutoAmmo()
 {
 	local int i;
-	local BuyableWeapon RelWeapon;
 
 	for(i=0;i<AllBuyableItems.length;i++)
 	{
 		if(AllBuyableItems[i].IsA('BuyableAmmo') )
 		{
-			RelWeapon = FindWeapon(AllBuyableItems[i].relatedInventory );
-			if(RelWeapon!=none && RelWeapon.HasMe(PlayerOwner().Pawn))
+			if(AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self))
 				BuyableAmmo(AllBuyableItems[i]).FillMe(KFPawn(playerOwner().pawn));
 		}
 	}
+	PendingChecks = 2;
 	myCategories.IndexChanged(myItems);
 	GUIBuyMenuFooter(t_Footer).SetPlayerStats(playerscore,playerweight);
 }
@@ -316,18 +356,51 @@ function InitAmmoForNewGun()
 function UpdateCosts(GUIComponent Sender)
 {
 	local PlayerController PC;
+	local GUIBuyable Chosen;
 	local float W;
+	local int S,i;
+	local bool bAgain;
 
+	// Once a second: the cash and the weight the server has. When they have changed, or something was just bought
+	// or sold, what the player owns is read again and the list and the buttons are made anew, so that a purchase
+	// the server refused does not stay shown as made.
 	PC = PlayerOwner();
 	if( KFHumanPawn(PC.Pawn)==None ) Return;
-	playerscore = PC.PlayerReplicationInfo.Score;
+	maxweight = KFHumanPawn(PC.Pawn).MaxCarryWeight;
+	if( PendingChecks>0 )
+	{
+		// (the answer to what was just asked for may not be here yet: the menu's own count stands a second longer)
+		PendingChecks--;
+		if( PendingChecks>0 )
+			Return;
+		bAgain = True;
+	}
+	S = PC.PlayerReplicationInfo.Score;
 	W = KFHumanPawn(PC.Pawn).CurrentWeight;
+	if( S!=playerscore || W!=playerweight )
+		bAgain = True;
+	playerscore = S;
 	if( W!=playerweight )
 	{
 		playerweight = W;
 		InitAmmoForNewGun();
 	}
-	maxweight = KFHumanPawn(PC.Pawn).MaxCarryWeight;
+	if( bAgain && myItems!=None )
+	{
+		for(i=0;i<AllBuyableItems.length;i++)
+		{
+			if( BuyableWeapon(AllBuyableItems[i])!=None )
+				BuyableWeapon(AllBuyableItems[i]).bInitalInit = False;
+		}
+		if( myItems.Index>=0 && myItems.Index<myItems.Elements.Length )
+			Chosen = myItems.Elements[myItems.Index];
+		CategoryChange(self);
+		for(i=0;i<myItems.Elements.Length;i++)
+		{
+			if( myItems.Elements[i]==Chosen )
+				myItems.SetIndex(i);
+		}
+	}
 	if( GUIBuyMenuFooter(t_Footer)!=None )
 		GUIBuyMenuFooter(t_Footer).SetPlayerStats(playerscore,playerweight);
 }

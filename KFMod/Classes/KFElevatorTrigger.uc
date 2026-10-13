@@ -18,7 +18,7 @@ var float NextMessageTimer;
 simulated function PostBeginPlay()
 {
     Super.PostBeginPlay();
-    SetTimer(2.0, true);
+    SetTimer(1.0, true);
 }
 
 function bool SelfTriggered()
@@ -28,7 +28,6 @@ function bool SelfTriggered()
 function NotifyElevatorStarted( float MoveTimer )
 {
 	NextAttemptTime = Level.TimeSeconds+MoveTimer+ReUseDelay;
-	SetTimer(MoveTimer+ReUseDelay+1,false);
 }
 function UsedBy( Pawn user )
 {
@@ -47,7 +46,11 @@ function UsedBy( Pawn user )
         if( MyFloorNum==255 )
         {
             if( AIController(user.Controller)!=None )
+            {
                 k = MyElevator.GetAIDesiredFloor(user);
+                if( k==255 && user.Controller.PendingMover!=MyElevator )
+                    return;
+            }
             else k = 255;
             if( k==255 )
             {
@@ -71,11 +74,24 @@ function Reset()
 function Timer()
 {
 	local Pawn P;
+	local Controller C;
+	local LiftExit Exit;
 
 	foreach TouchingActors(Class'Pawn',P)
 	{
         if (AIController(P.Controller) != None )
 		    Touch(P);
+	}
+	if (MyElevator == None || MyFloorNum >= ArrayCount(MyElevator.MyExits))
+		return;
+	Exit = MyElevator.MyExits[MyFloorNum];
+	if (Exit == None)
+		return;
+	for (C = Level.ControllerList; C != None; C = C.NextController)
+	{
+		if (AIController(C) != None && C.Pawn != None && C.PendingMover == MyElevator
+			&& Abs(C.Pawn.Location.Z - Exit.Location.Z) < 120 && VSize(C.Pawn.Location - Exit.Location) < 300)
+			Touch(C.Pawn);
 	}
 }
 
@@ -94,6 +110,34 @@ function bool IsPlayerRiding()
     return false;
 }
 
+function bool IsBotRiding()
+{
+    local Controller C;
+
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+    {
+        if (Bot(C) != None && C.Pawn != None && C.Pawn.Base == MyElevator)
+            return true;
+    }
+    return false;
+}
+
+function bool AIWantsLift( Pawn P )
+{
+    local Controller C;
+
+    if (MyElevator == None)
+        return true;
+    C = P.Controller;
+    if (KFMonsterController(C) != None && !KFMonsterController(C).MayUseLift())
+        return false;
+    if (MyFloorNum == 255)
+        return (P.Base == MyElevator);
+    if (IsBotRiding())
+        return false;
+    return (C.PendingMover == MyElevator || (LiftCenter(C.MoveTarget) != None && LiftCenter(C.MoveTarget).MyLift == MyElevator));
+}
+
 function Touch( Actor Other )
 {
     if ( Pawn(Other) != None )
@@ -110,7 +154,7 @@ function Touch( Actor Other )
         if ( AIController(Pawn(Other).Controller) != None )
         {
             // Don't let AI recall the elevator when a player is riding it
-            if (IsPlayerRiding())
+            if (IsPlayerRiding() || !AIWantsLift(Pawn(Other)))
                 return;
             UsedBy(Pawn(Other));
         }

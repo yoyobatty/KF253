@@ -220,26 +220,11 @@ defaultproperties
      End Object
      b_Buy=GUIButton'KFGui.GUIBuyMenuFooter.Purchase'
 
-     Begin Object Class=GUIButton Name=Cancel
-         Caption="Cancel"
-         StyleName="FooterButton"
-         Hint="Don't buy these weapons."
-         WinTop=0.013974
-         WinLeft=0.579389
-         WinWidth=0.092022
-         WinHeight=0.051756
-         RenderWeight=2.000000
-         TabOrder=5
-         bBoundToParent=True
-         OnClick=GUIBuyMenuFooter.OnFooterClick
-         OnKeyEvent=Cancel.InternalOnKeyEvent
-     End Object
-     b_Cancel=GUIButton'KFGui.GUIBuyMenuFooter.Cancel'
 
      Begin Object Class=GUIButton Name=Complete
          Caption="Complete"
          StyleName="FooterButton"
-         Hint="Purchase weapons and save changes."
+         Hint="Close the trader menu."
          WinTop=0.015971
          WinLeft=0.787105
          WinWidth=0.092022

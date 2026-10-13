@@ -11,6 +11,21 @@ simulated function ProcessTouch(Actor Other, Vector HitLocation)
 
 function TakeDamage( int Damage, Pawn InstigatedBy, Vector Hitlocation, Vector Momentum, class<DamageType> DamageType);
 
+simulated function HurtRadius( float DamageAmount, float DamageRadius, class<DamageType> DamageType, float Momentum, vector HitLocation )
+{
+	local ZombieBoss B;
+	local int Before;
+
+	if( Role==ROLE_Authority )
+		B = ZombieBoss(Instigator);
+	if( B!=None )
+		Before = B.CountLivingHumans();
+	Super.HurtRadius(DamageAmount, DamageRadius, DamageType, Momentum, HitLocation);
+	if( B!=None && B.CountLivingHumans()<Before )
+		B.Taunt(3);
+}
+
+
 defaultproperties
 {
     Damage=350.000000

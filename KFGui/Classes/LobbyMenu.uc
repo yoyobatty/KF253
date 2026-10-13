@@ -63,7 +63,7 @@ function CheckBotButtonAccess()
 		TotallyRemoveBotsButton.DisableMe();
 		BotsBG.DisableMe();
 	}
-	if (PlayerOwner().PlayerReplicationInfo.bAdmin  || PlayerOwner().Level.NetMode == NM_ListenServer )
+	if (PlayerOwner().PlayerReplicationInfo.bAdmin  || PlayerOwner().Level.NetMode != NM_Client )
 	{
 		if (KFGameReplicationInfo(PlayerOwner().GameReplicationInfo).bNoBots )
 		{
@@ -228,11 +228,9 @@ DoneIt:
 
 function bool StopClose(optional bool bCancelled)
 {
-	bStoryBoxFilled = false;
      
 	CheckBotButtonAccess();
 	UpdateBotSlots();
-	ClearChatBox();
 
 	// this is for the OnCanClose delegate
 	// can't close now unless done by call to CloseAll,
@@ -242,6 +240,10 @@ function bool StopClose(optional bool bCancelled)
 
 event Opened(GUIComponent Sender)                   // Called when the Menu Owner is opened
 {
+	Super.Opened(Sender);
+	// a lobby just opened starts clean (this used to be done on every press of Escape)
+	bStoryBoxFilled = false;
+	ClearChatBox();
 	SetTimer(1,true);
 }
 

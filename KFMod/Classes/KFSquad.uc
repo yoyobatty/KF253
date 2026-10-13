@@ -3,27 +3,114 @@
 //-----------------------------------------------------------
 class KFSquad extends InvasionSquad;
 
-// Let's put some hacks in here to account for how Bots judge Specimen threat priorities.
-
 function float AssessThreat( Bot B, Pawn NewThreat, bool bThreatVisible )
 {
-	local float ThreatValue;
+	local float ThreatValue, NewStrength, Dist;
+	local KFMonster KFM;
 
-	if ( KFMonster(NewThreat) != none )
-		ThreatValue += 0.25;
-	if (KFMonster(NewThreat).bCloaked)
-		ThreatValue += 5.f;
-	if (KFMonster(NewThreat).bDecapitated)
-		ThreatValue -= 0.10;
-	if( VSize(B.Pawn.Location-NewThreat.Location)<400.f ) // Consider close range zombies as much bigger threat.
-		ThreatValue += 10.f;
-	if ( KFMonster(NewThreat).bBoss )
-		ThreatValue += 15.f;
-	Return Super.AssessThreat(B,NewThreat,bThreatVisible);
+	NewStrength = B.RelativeStrength(NewThreat);
+	ThreatValue = FClamp(NewStrength, 0, 1);
+	Dist = VSize(NewThreat.Location - B.Pawn.Location);
+	if ( Dist < 2000 )
+	{
+		ThreatValue += 0.2;
+		if ( Dist < 1500 )
+			ThreatValue += 0.2;
+		if ( Dist < 1000 )
+			ThreatValue += 0.2;
+		if ( Dist < 500 )
+			ThreatValue += 0.2;
+	}
+
+	if ( bThreatVisible )
+		ThreatValue += 1;
+	if ( (NewThreat != B.Enemy) && (B.Enemy != None) )
+	{
+		if ( !bThreatVisible )
+			ThreatValue -= 5;
+		else if ( Level.TimeSeconds - B.LastSeenTime > 2 )
+			ThreatValue += 1;
+		if ( Dist > 0.7 * VSize(B.Enemy.Location - B.Pawn.Location) )
+			ThreatValue -= 0.25;
+		ThreatValue -= 0.2;
+
+		if ( B.IsHunting() && (NewStrength < 0.2)
+			&& (Level.TimeSeconds - FMax(B.LastSeenTime,B.AcquireTime) < 2.5) )
+			ThreatValue -= 0.3;
+	}
+
+	KFM = KFMonster(NewThreat);
+	if ( KFM != None )
+	{
+		if ( KFM.bCloaked )
+			ThreatValue += 0.2f;
+		if ( KFM.bDecapitated )
+			ThreatValue -= 0.1;
+		if ( KFM.bBoss )
+			ThreatValue += 0.4f;
+	}
+
+	ThreatValue = ModifyThreat(ThreatValue, NewThreat, bThreatVisible, B);
+	return ThreatValue;
 }
 
 function bool ShouldDeferTo(Controller C)
 {
+	return true;
+}
+
+function bool ClearPathFor(Controller C)
+{
+	local Bot B;
+	local vector Dir, MoveDir;
+	local float Dist;
+	local bool bHasVelocity;
+
+	if ( C.Pawn == None )
+		return false;
+
+	bHasVelocity = VSize(C.Pawn.Velocity) > 10.0;
+	if ( bHasVelocity )
+		MoveDir = Normal(C.Pawn.Velocity);
+
+	// First pass: idle bots (no enemy) - safe to displace without interrupting combat
+	for ( B=SquadMembers; B!=None; B=B.NextSquadMember )
+	{
+		if ( B == C || B.Pawn == None || B.Enemy != None )
+			continue;
+		Dir = B.Pawn.Location - C.Pawn.Location;
+		if ( Abs(Dir.Z) >= B.Pawn.CollisionHeight + C.Pawn.CollisionHeight )
+			continue;
+		Dir.Z = 0;
+		Dist = VSize(Dir);
+		if ( Dist >= 8.0 * B.Pawn.CollisionRadius )
+			continue;
+		// When C is moving, skip bots that aren't roughly ahead in its path
+		if ( bHasVelocity && Dist > C.Pawn.CollisionRadius * 2.0 && (Normal(Dir) Dot MoveDir) < 0.3 )
+			continue;
+		B.ClearPathFor(C);
+	}
+
+	// Second pass: bots in combat that are still in the way
+	for ( B=SquadMembers; B!=None; B=B.NextSquadMember )
+	{
+		if ( B == C || B.Pawn == None || B.Enemy == None )
+			continue;
+		Dir = B.Pawn.Location - C.Pawn.Location;
+		if ( Abs(Dir.Z) >= B.Pawn.CollisionHeight + C.Pawn.CollisionHeight )
+			continue;
+		Dir.Z = 0;
+		Dist = VSize(Dir);
+		if ( Dist >= 8.0 * B.Pawn.CollisionRadius )
+			continue;
+		if ( bHasVelocity && Dist > C.Pawn.CollisionRadius * 2.0 && (Normal(Dir) Dot MoveDir) < 0.3 )
+			continue;
+		B.ClearPathFor(C);
+		// Fallback: Bot.ClearPathFor leaves planted combat bots untouched; wander them away from C.
+		if ( B.Stopped() && !B.Pawn.bStationary )
+			B.DirectedWander(Normal(Dir));
+	}
+
 	return true;
 }
 
@@ -87,7 +174,6 @@ function bool CheckSquadObjectives(Bot B)
 			// follow human leader
 			return TellBotToFollow(B,SquadLeader);
 		}
-		// hold position as ordered (position specified by goalscript)
 	}
 
 	if ( B.GoalScript != None )
@@ -297,32 +383,124 @@ function bool CloseToLeader(Pawn P)
         return false;
 
     dist = VSize(P.Location - SquadLeader.Pawn.Location);
-	distZ = P.Location.Z - SquadLeader.Pawn.Location.Z;
+	distZ = Abs(P.Location.Z - SquadLeader.Pawn.Location.Z);
     FormSize = GetRestingFormation().FormationSize;
 
-    // Well within formation range — always considered close
-    if ( dist < FormSize * 0.75 && distZ < 150 )
-        return true;
-
-    // Beyond formation range — not close
     if ( dist > FormSize )
         return false;
 
-    // Outer 25% of formation range: only fail if leader is running AWAY from us.
-    // This prevents bots near the edge from being constantly recalled just because
-    // the player is sprinting around nearby.
-    if ( PhysicsVolume.bWaterVolume )
-    {
-        if ( VSize(SquadLeader.Pawn.Velocity) > 0 )
-            return false;
-    }
-    else if ( VSize(SquadLeader.Pawn.Velocity) > SquadLeader.Pawn.WalkingPct * SquadLeader.Pawn.GroundSpeed )
-    {
-        if ( (Normal(SquadLeader.Pawn.Velocity) dot Normal(SquadLeader.Pawn.Location - P.Location)) > 0.5 )
-            return false;
-    }
+    if ( distZ > 150 )
+        return false;
 
-	return ( P.Controller.LineOfSightTo(SquadLeader.Pawn) );
+    if ( dist < FormSize * 0.75 )
+        return P.Controller.LineOfSightTo(SquadLeader.Pawn);
+
+    if ( VSize(SquadLeader.Pawn.Velocity) > SquadLeader.Pawn.WalkingPct * SquadLeader.Pawn.GroundSpeed )
+        return false;
+
+    return P.Controller.LineOfSightTo(SquadLeader.Pawn);
+}
+
+/* LostEnemy()
+Bot lost track of enemy.  Change enemy for this bot, clear from list if no one can see it
+*/
+function bool LostEnemy(Bot B)
+{
+	local pawn Lost;
+	local bool bFound;
+	local Bot M;
+
+	if ( (B.Enemy.Health <= 0) || (B.Enemy.Controller == None) )
+	{
+		RemoveEnemy(B.Enemy);
+		return true;
+	}
+
+	if ( MustKeepEnemy(B.Enemy) )
+		return false;
+	Lost = B.Enemy;
+	B.Enemy = None;
+
+	for	( M=SquadMembers; M!=None; M=M.NextSquadMember )
+		if ( (M != B) && (M.Enemy == Lost) && !M.LostContact(5) )
+		{
+			bFound = true;
+			break;
+		}
+
+	if ( bFound )
+		B.Enemy = Lost;
+	else
+	{
+		RemoveEnemy(Lost);
+		FindNewEnemyFor(B,false);
+	}
+	return (B.Enemy != Lost);
+}
+
+function bool FindNewEnemyFor(Bot B, bool bSeeEnemy)
+{
+	local int i;
+	local Pawn BestEnemy, OldEnemy;
+	local bool bSeeNew;
+	local float BestThreat,NewThreat;
+
+	if ( B==None || B.Pawn == None )
+		return false;
+	if ( (B.Enemy != None) && MustKeepEnemy(B.Enemy) && B.EnemyVisible() )
+		return false;
+
+	BestEnemy = B.Enemy;
+	OldEnemy = B.Enemy;
+	if ( BestEnemy != None )
+	{
+		if ( (BestEnemy.Health <= 0) || (BestEnemy.Controller == None) )
+		{
+			B.Enemy = None;
+			BestEnemy = None;
+		}
+		else
+		{
+			if ( ModifyThreat(0,BestEnemy,bSeeEnemy,B) > 5 )
+				return false;
+			BestThreat = AssessThreat(B,BestEnemy,bSeeEnemy);
+		}
+	}
+	for ( i=0; i<ArrayCount(Enemies); i++ )
+	{
+		if ( (Enemies[i] != None) && (Enemies[i].Health > 0) && (Enemies[i].Controller != None) )
+		{
+			if ( BestEnemy == None )
+			{
+				BestEnemy = Enemies[i];
+				bSeeEnemy = B.CanSee(Enemies[i]);
+				BestThreat = AssessThreat(B,BestEnemy,bSeeEnemy);
+			}
+			else if ( Enemies[i] != BestEnemy )
+			{
+				if ( VSize(Enemies[i].Location - B.Pawn.Location) < 1500 )
+					bSeeNew = B.LineOfSightTo(Enemies[i]);
+				else
+					bSeeNew = B.CanSee(Enemies[i]);	// only if looking at him
+				NewThreat = AssessThreat(B,Enemies[i],bSeeNew);
+				if ( NewThreat > BestThreat )
+				{
+					BestEnemy = Enemies[i];
+					BestThreat = NewThreat;
+					bSeeEnemy = bSeeNew;
+				}
+			}
+		}
+		else
+			Enemies[i] = None;
+	}
+	B.Enemy = BestEnemy;
+	if ( (B.Enemy != OldEnemy) && (B.Enemy != None) )
+	{
+		B.EnemyChanged(bSeeEnemy);
+		return true;
+	}
+	return false;
 }
 
 function bool SetEnemy( Bot B, Pawn NewEnemy )
@@ -333,64 +511,22 @@ function bool SetEnemy( Bot B, Pawn NewEnemy )
 	if ( (NewEnemy == B.Enemy) || !ValidEnemy(NewEnemy) )
 		return false;
 
+	// add new enemy to enemy list - ignore if already there, still reassess B
 	AddEnemy(NewEnemy);
 
 	// reassess squad member enemies
 	if ( MustKeepEnemy(NewEnemy) )
 	{
-		for	( M=SquadMembers; M!=None; M=M.NextSquadMember )
+		for ( M=SquadMembers; M!=None; M=M.NextSquadMember )
 		{
 			if ( (M != B) && (M.Enemy != NewEnemy) )
-				FindNewEnemyFor(M,(M.Enemy !=None) && M.EnemyVisible());
+				FindNewEnemyFor(M,(M.Enemy != None) && M.EnemyVisible());
 		}
 	}
-
-	bResult = CheckSwapEnemy(B, NewEnemy);
+	bResult = FindNewEnemyFor(B,(B.Enemy != None) && B.EnemyVisible());
 	if ( bResult && (B.Enemy == NewEnemy) )
 		B.AcquireTime = Level.TimeSeconds;
 	return bResult;
-}
-
-function bool CheckSwapEnemy(Bot B, Pawn NewEnemy)
-{
-	local bool bSeeOld, bSeeNew;
-	local float OldThreat,NewThreat;
-
-	bSeeOld = B.EnemyVisible();
-
-	if ( B.Pawn == None )
-		return true;
-
-	if(B.Enemy == NewEnemy)
-		return false;
-
-	if ( B.Enemy != None )
-	{
-		if ( (B.Enemy.Health < 0) || (B.Enemy.Controller == None) )
-		{
-			B.Enemy = None;
-			//BestEnemy = None;
-			//OldThreat = 0;
-		}
-		else
-		{
-			if ( ModifyThreat(0,B.Enemy,bSeeOld,B) > 5 )
-				return false;
-			OldThreat = AssessThreat(B,B.Enemy,bSeeOld);
-		}
-	}
-
-	bSeeNew = B.LineOfSightTo(NewEnemy);
-
-	NewThreat = AssessThreat(B,NewEnemy,bSeeNew);
-
-	if ( NewThreat > OldThreat )
-	{
-		B.Enemy = NewEnemy;
-		B.EnemyChanged(bSeeNew);
-		return true;
-	}
-	return false;
 }
 
 function NotifyKilled(Controller Killer, Controller Killed, pawn KilledPawn)
@@ -442,7 +578,7 @@ function PickNewLeader()
 
 	// pick a leader that isn't out of the game or in a vehicle turret and can see the old leader
 	for ( B=SquadMembers; B!=None; B=B.NextSquadMember )
-		if ( !B.PlayerReplicationInfo.bOutOfLives && (B.Pawn == None || !B.Pawn.bStationary || B.Pawn.GetVehicleBase() == None || !B.LineOfSightTo(SquadLeader.Pawn)) )
+		if ( !B.PlayerReplicationInfo.bOutOfLives && (B.Pawn != None || !B.Pawn.bStationary || B.Pawn.GetVehicleBase() == None || B.LineOfSightTo(SquadLeader.Pawn)) )
 			break;
 
 	if ( B == None )
@@ -461,6 +597,11 @@ function PickNewLeader()
 			LeaderPRI = TeamPlayerReplicationInfo(SquadLeader.PlayerReplicationInfo);
 		NetUpdateTime = Level.TimeSeconds - 1;
 	}
+}
+
+function SetFreelanceScriptFor(Bot B)
+{
+	B.FreeScript();
 }
 
 defaultproperties

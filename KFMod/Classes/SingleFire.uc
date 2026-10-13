@@ -43,7 +43,6 @@ function StartSuperBerserk()
 
 defaultproperties
 {
-     bRandomPitchFireSound=True
      DamageType=Class'KFMod.DamTypeDualies'
      DamageMin=30
      DamageMax=40

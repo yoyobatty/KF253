@@ -11,34 +11,6 @@ Class KFSettingsPage extends  UT2K4SettingsPage;
 //==============================================================================
 
 
-function InitComponent(GUIController MyController, GUIComponent MyOwner)
-{
-	local rotator PlayerRot;
-	local int i;
-
-	Super.InitComponent(MyController, MyOwner);
-	PageCaption = t_Header.Caption;
-
-	GetSizingButton();
-
-
-	// Set camera's pitch to zero when menu initialised (otherwise spinny weap goes kooky)
-	PlayerRot = PlayerOwner().Rotation;
-	SavedPitch = PlayerRot.Pitch;
-	PlayerRot.Pitch = 0;
-	PlayerRot.Roll = 0;
-	PlayerOwner().SetRotation(PlayerRot);
-
-	for ( i = 0; i < PanelCaption.Length && i < PanelClass.Length && i < PanelHint.Length; i++ )
-	{
-		Profile("Settings_" $ PanelCaption[i]);
-		c_Tabs.AddTab(PanelCaption[i], PanelClass[i],, PanelHint[i]);
-		Profile("Settings_" $ PanelCaption[i]);
-	}
-
-	tp_Game = UT2K4Tab_GameSettings(c_Tabs.BorrowPanel(PanelCaption[3]));
-}
-
 function GetSizingButton()
 {
 	local int i;
