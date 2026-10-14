@@ -132,6 +132,16 @@ var() globalconfig int MaxZombiesOnce;
 var bool bWaveBossInProgress,bHasSetViewYet,bBossHasSaidWord;
 var KFMonster ViewingBoss;
 
+// Glass holds players back between waves as well, when they block nothing so that none can stand in another's way at
+// the trader (KFGlassMover.SetTraderSolid)
+function SetGlassSolid( bool bSolid )
+{
+	local KFGlassMover GM;
+
+	foreach DynamicActors(class'KFGlassMover', GM)
+		GM.SetTraderSolid(bSolid);
+}
+
 function DoBossDeath()
 {
     local Controller C;
@@ -1146,6 +1156,7 @@ State MatchInProgress
 				For( C=Level.ControllerList; C!=None; C=C.NextController )
             		if( C.Pawn!=None && C.Pawn.Health>0 )
                 		C.Pawn.bBlockActors = C.Pawn.default.bBlockActors; // Disable pawn collision during trader time
+				SetGlassSolid(false);
 
 			}
 			if( TraderProblemLevel<4 )
@@ -1219,6 +1230,7 @@ State MatchInProgress
         		For( C=Level.ControllerList; C!=None; C=C.NextController )
             		if( C.Pawn!=None && C.Pawn.Health>0 )
                 		C.Pawn.bBlockActors = C.Pawn.default.bBlockActors; // Disable pawn collision during trader time
+				SetGlassSolid(false);
 			}
 			if( TraderProblemLevel<4 )
 			{
@@ -1272,6 +1284,7 @@ State MatchInProgress
 				For( C=Level.ControllerList; C!=None; C=C.NextController )
 					if( C.Pawn!=None && C.Pawn.Health>0 )
 						C.Pawn.bBlockActors = false; // Disable pawn collision during trader time
+				SetGlassSolid(true);
 			}
 			// Open Trader doors
 			if ( WaveNum > (InitialWave - 1) && !bTradingDoorsOpen )
@@ -1525,6 +1538,7 @@ State MatchInProgress
                 C.Pawn.bBlockActors = C.Pawn.default.bBlockActors;
             }
         }
+        SetGlassSolid(false);
     }
 }
 
@@ -1969,8 +1983,12 @@ function float RateZombieVolume(ZombieVolume z)
 
 function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector HitLocation, out vector Momentum, class<DamageType> DamageType )
 { 
-	local float InstigatorSkill; 
+	local float InstigatorSkill;
 	local KFPlayerController PC;
+
+	// (before the vomit, welder and scream return below, which let bile ticks hurt a player in god mode)
+	if( injured.InGodMode() )
+		return 0;
 
     if ( KFPawn(Injured) != none )
     {
@@ -2035,9 +2053,7 @@ function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector H
 				Damage = Damage; 
 		} 
 	}
-     
-	if( injured.InGodMode() )
-		return 0;
+
 	if( instigatedBy!=injured && MonsterController(InstigatedBy.Controller)==None && (instigatedBy.Controller==None || instigatedBy.GetTeamNum()==injured.GetTeamNum()) )
 	{
 		if ( class<WeaponDamageType>(DamageType) != None || class<VehicleDamageType>(DamageType) != None )

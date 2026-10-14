@@ -2835,6 +2835,12 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 			PreviousNavPath = None;
 		}
 	}
+	// (glass's stand-in for trader time: break the glass, as a bump on it would)
+	if( KFGlassBlocker(Wall)!=None && KFGlassBlocker(Wall).Glass!=None )
+	{
+		KFGlassBlocker(Wall).Glass.TakeDamage(50.f, Pawn, Pawn.Location, vect(0,0,0), class'DamageType');
+		return true;
+	}
 	if( CurrentPath!=None && KFDoorMover(Wall)!=None && ((KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld) || KFDoorMover(Wall).bTriggerTooFar || KFDoorMover(Wall).MyTrigger == None) )
 	{
 		AddSealPath(CurrentPath,KFDoorMover(Wall));

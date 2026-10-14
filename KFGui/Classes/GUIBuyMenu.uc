@@ -33,6 +33,9 @@ function InitComponent( GUIController MyController, GUIComponent MyOwner )
 	CategoryBG.ManageComponent(CategoryBox);
 	ItemBG.ManageComponent(ItemsBox);
 	myCategories = CategoryBox.List;
+	// (spread down their box, a row each and in a bigger font: they were small lines crowded at its top)
+	myCategories.GetItemHeight = CategoryRowHeight;
+	myCategories.FontScale = FNS_Large;
 
 	for(i=0;i<BUYLIST_CATS;i++)
 		myCategories.Add(KFPlayerController(PlayerOwner()).BuyListHeaders[i]);
@@ -84,6 +87,8 @@ event HandleParameters(string Param1, string Param2)
 				AllBuyableItems[0].ItemName=BuyWeapon.default.ItemName;
 				AllBuyableItems[0].showMesh=BuyWeapon.default.ShowMesh;
 				AllBuyableItems[0].relatedInventory=BuyWeapon.default.InventoryType;
+				// (its ammo, for the fill button on what the player owns)
+				BuyableWeapon(AllBuyableItems[0]).AmmoType = class<KFWeapon>(BuyWeapon.default.InventoryType).default.FireModeClass[0].default.AmmoClass;
 
 				if(class<KFWeapon>(BuyWeapon.default.InventoryType).default.bKFNeverThrow==true)
 					BuyableWeapon(AllBuyableItems[0]).bHideSale=true;
@@ -197,8 +202,8 @@ function NewInfo(GUIBuyable b)
 	}
 	if(b != None)
 	{
-		p_Info = new b.GetPanelType(eSaleCat(myCategories.Index));;
-		GUIBuyMenuFooter(t_Footer).SetBuyMode(b.GetBuyCaption(eSaleCat(myCategories.Index)),CanAfford(b)&&b.CanButtonMe(PlayerOwner(),myCategories.Index != 0),b.IsA('BuyableAmmo') && myCategories.Index !=0,b.Isa('BuyableAmmo') && BuyableAmmo(b).BuyMoreClips()*b.cost < playerscore);
+		p_Info = new b.GetPanelType(eSaleCat(myCategories.Index));
+		GUIBuyMenuFooter(t_Footer).SetBuyMode(b.GetBuyCaption(eSaleCat(myCategories.Index)),CanAfford(b)&&b.CanButtonMe(PlayerOwner(),myCategories.Index != 0),FillShown(b),FillAllowed(b),FillCaption(b));
 	}
 	else
 	{
@@ -218,6 +223,116 @@ function NewInfo(GUIBuyable b)
 function bool CanAfford(GUIBuyable b)
 {
 	return myCategories.Index == 0 || (playerscore-b.cost >=0 && playerweight+b.weight <= maxweight);
+}
+// Why a thing on the lists cannot be bought: too dear, or too heavy for what is carried already
+function bool TooDear(GUIBuyable b)
+{
+	return myCategories.Index!=0 && playerscore<b.cost;
+}
+function bool TooHeavy(GUIBuyable b)
+{
+	return myCategories.Index!=0 && playerweight+b.weight>maxweight;
+}
+
+// The categories: a row each, spread down their box, in the biggest of the list's fonts that fits a row
+function float CategoryRowHeight(Canvas C)
+{
+	local float H;
+
+	H = myCategories.ActualHeight()/float(BUYLIST_CATS);
+	if( RowFontHeight(C,FNS_Large)<=H )
+		myCategories.FontScale = FNS_Large;
+	else if( RowFontHeight(C,FNS_Medium)<=H )
+		myCategories.FontScale = FNS_Medium;
+	else myCategories.FontScale = FNS_Small;
+	return H;
+}
+// How tall a line of the category list is in one of its fonts. (Measured with the style's loaded fonts: its
+// TextSize is static, and measured with whatever font the canvas held.)
+function float RowFontHeight(Canvas C, eFontScale S)
+{
+	local GUIFont F;
+	local Font Was;
+	local float XL,YL;
+
+	if( myCategories.Style==None )
+		return 0;
+	F = myCategories.Style.Fonts[int(S)*5];	// (the blurry state's, the first of each size's five)
+	if( F==None )
+		return 0;
+	Was = C.Font;
+	C.Font = F.GetFont(C.ClipX);
+	C.TextSize("My Inventory",XL,YL);
+	C.Font = Was;
+	return YL;
+}
+
+// The Items panel and the footer stop short of the round clock the HUD draws in the top right corner, under the
+// menu; the footer runs the menu's width, with the cash and the weight at its left
+function bool ClearClock(Canvas C)
+{
+	local float R;
+	local HUDKillingFloor H;
+
+	// (the right edge it had)
+	R = 0.946916;
+	H = HUDKillingFloor(PlayerOwner().myHUD);
+	if( H!=None && C.ClipX>0 )
+		R = FMin(R, 1.0-(H.HudUnits(H.CornerUnits)+C.ClipX*0.006)/C.ClipX);
+	ItemBG.WinWidth = R-ItemBG.WinLeft;
+	t_Footer.WinLeft = CategoryBG.WinLeft;
+	t_Footer.WinWidth = R-CategoryBG.WinLeft;
+	return false;
+}
+
+// The ammo the trader sells for a gun
+function BuyableAmmo AmmoFor(BuyableWeapon W)
+{
+	local int i;
+
+	if( W==None )
+		return None;
+	for(i=0;i<AllBuyableItems.length;i++)
+	{
+		if( BuyableAmmo(AllBuyableItems[i])!=None && AllBuyableItems[i].relatedInventory==W.relatedInventory
+		 && BuyableAmmo(AllBuyableItems[i]).ammoType==W.AmmoType )
+			return BuyableAmmo(AllBuyableItems[i]);
+	}
+	return None;
+}
+// What the fill button fills: on the ammo list the ammo picked, on what the player owns the picked gun's ammo
+function BuyableAmmo FillTarget(GUIBuyable b)
+{
+	if( myCategories.Index!=0 )
+		return BuyableAmmo(b);
+	return AmmoFor(BuyableWeapon(b));
+}
+function bool FillShown(GUIBuyable b)
+{
+	local BuyableAmmo A;
+
+	A = FillTarget(b);
+	if( A==None )
+		return false;
+	// (on what the player owns, only while that gun has room for more)
+	return myCategories.Index!=0 || A.FillCost(PlayerOwner().Pawn)>0;
+}
+// (with less cash than a fill costs, as much is bought as the cash pays for)
+function bool FillAllowed(GUIBuyable b)
+{
+	local BuyableAmmo A;
+
+	A = FillTarget(b);
+	return A!=None && A.FillCost(PlayerOwner().Pawn)>0 && playerscore>0;
+}
+function string FillCaption(GUIBuyable b)
+{
+	local BuyableAmmo A;
+
+	A = FillTarget(b);
+	if( A==None || myCategories.Index!=0 )
+		return "Fill Up";
+	return "Fill ammo:"@A.FillCost(PlayerOwner().Pawn);
 }
 
 function CategoryChange(GUIComponent Sender)
@@ -337,6 +452,7 @@ function float RefillCost()
 		Return AmmoCost()+VestCost();
 	Return AmmoCost();
 }
+// (with less cash than a full refill, what it will spend: all of it)
 function string RefillCaption()
 {
 	local float C;
@@ -345,8 +461,8 @@ function string RefillCaption()
 	if( C<=0 )
 		Return "Refill all";
 	if( RefillsArmour() || VestCost()<=0 )
-		Return "Refill all:"@int(C);
-	Return "Refill ammo:"@int(C);
+		Return "Refill all:"@int(FMin(C,playerscore));
+	Return "Refill ammo:"@int(FMin(C,playerscore));
 }
 function BuyCurrent()
 {
@@ -405,7 +521,7 @@ function BuyFill()
 
 	if( myItems.Index<0 || myItems.Index>=myItems.Elements.Length )
 		Return;
-	b = BuyableAmmo(myItems.Elements[myItems.Index]);
+	b = FillTarget(myItems.Elements[myItems.Index]);
 	if( b==None )
 		Return;
 	Was = PlayerOwner().PlayerReplicationInfo.Score;
@@ -416,12 +532,10 @@ function BuyFill()
 	Relist();
 }
 
+// (with less cash than a full refill it buys what the cash pays for)
 function bool CanAutoAmmo()
 {
-	local float C;
-
-	C = RefillCost();
-	return C>0 && playerscore>=C;
+	return RefillCost()>0 && playerscore>0;
 }
 function DoAutoAmmo()
 {
@@ -433,19 +547,84 @@ function DoAutoAmmo()
 	Ask = RefillCost();
 	bArmour = RefillsArmour();
 
-	for(i=0;i<AllBuyableItems.length;i++)
+	if( playerscore<Ask )
+		Ask = ShareAmmo(playerscore);
+	else
 	{
-		if(AllBuyableItems[i].IsA('BuyableAmmo') )
+		for(i=0;i<AllBuyableItems.length;i++)
 		{
-			if(AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self))
-				BuyableAmmo(AllBuyableItems[i]).FillMe(KFPawn(playerOwner().pawn));
+			if(AllBuyableItems[i].IsA('BuyableAmmo') )
+			{
+				if(AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self))
+					BuyableAmmo(AllBuyableItems[i]).FillMe(KFPawn(playerOwner().pawn));
+			}
 		}
+		if( bArmour && FindVest()!=None )
+			FindVest().BuyMe(KFPawn(playerOwner().pawn));
 	}
-	if( bArmour && FindVest()!=None )
-		FindVest().BuyMe(KFPawn(playerOwner().pawn));
 	Paid(Was,Ask);
 	PendingChecks = 2;
 	Relist();
+}
+
+// Less cash than a full refill: clip by clip, one gun after another, so each gets a share; the last of a gun's room,
+// less than a clip, is filled for what it costs (a clip bought into it would be paid in full). What it spends is
+// returned.
+function float ShareAmmo(float Budget)
+{
+	local array<BuyableAmmo> A;
+	local array<int> Have,Most,Clip;
+	local int i,n,h,m,c,Rounds;
+	local float Price,Spent;
+	local bool bAny;
+	local Pawn P;
+
+	P = PlayerOwner().Pawn;
+	for(i=0;i<AllBuyableItems.length;i++)
+	{
+		if( BuyableAmmo(AllBuyableItems[i])!=None && AllBuyableItems[i].ShowMe(P,eSaleCat(5),self)
+		 && BuyableAmmo(AllBuyableItems[i]).Holding(P,h,m,c) && h<m )
+		{
+			n = A.Length;
+			A[n] = BuyableAmmo(AllBuyableItems[i]);
+			Have[n] = h;
+			Most[n] = m;
+			Clip[n] = c;
+		}
+	}
+	for(Rounds=0;Rounds<200 && Budget>0;Rounds++)
+	{
+		bAny = False;
+		for(i=0;i<A.Length && Budget>0;i++)
+		{
+			if( Have[i]>=Most[i] )
+				continue;
+			n = Min(Clip[i],Most[i]-Have[i]);
+			Price = float(n)/float(Clip[i])*A[i].cost;
+			if( Price<=Budget )
+			{
+				if( n<Clip[i] )
+					A[i].FillMe(KFPawn(P));
+				else A[i].BuyMe(KFPawn(P));
+				Have[i] += n;
+			}
+			else
+			{
+				// (too little left for that: what is left buys the rounds it pays for, if one, and this ammo is done)
+				n = int(Budget*float(Clip[i])/A[i].cost);
+				Price = float(n)*A[i].cost/float(Clip[i]);
+				if( n>0 )
+					A[i].FillMe(KFPawn(P));
+				Have[i] = Most[i];
+			}
+			Spent += Price;
+			Budget -= Price;
+			bAny = bAny || n>0;
+		}
+		if( !bAny )
+			break;
+	}
+	return Spent;
 }
 
 function BuyableWeapon FindWeapon(class<Inventory> WeaponType)
@@ -558,7 +737,7 @@ defaultproperties
          WinTop=0.060215
          WinLeft=0.010000
          WinWidth=0.440000
-         WinHeight=0.383940
+         WinHeight=0.300000
          OnPreDraw=catbg.InternalPreDraw
      End Object
      CategoryBG=AltSectionBackground'KFGui.GUIBuyMenu.catbg'
@@ -575,10 +754,10 @@ defaultproperties
 
      Begin Object Class=AltSectionBackground Name=infbg
          Caption="Info"
-         WinTop=0.454030
+         WinTop=0.370000
          WinLeft=0.010000
          WinWidth=0.440000
-         WinHeight=0.486185
+         WinHeight=0.570000
          OnPreDraw=infbg.InternalPreDraw
      End Object
      InfoBG=AltSectionBackground'KFGui.GUIBuyMenu.infbg'
@@ -617,4 +796,5 @@ defaultproperties
      bAllowedAsLast=True
      OnClose=GUIBuyMenu.KFBuyMenuClosed
      OnTimer=GUIBuyMenu.UpdateCosts
+     OnPreDraw=GUIBuyMenu.ClearClock
 }

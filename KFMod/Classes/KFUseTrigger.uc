@@ -541,9 +541,10 @@ function UnWeld(float DeWeldage,bool bZombieAttacking, Pawn WelderInst)
 		DeWeldage *= CombatSealReduction;
 		
 
-//	if( DeWeldage<WeldStrength )
-	//	DeWeldage = WeldStrength;
-	if( DeWeldage==0 )
+	// (no further than nothing: below it, the next welding went to filling the hole before the door held again)
+	if( DeWeldage>WeldStrength )
+		DeWeldage = WeldStrength;
+	if( DeWeldage<=0 )
 		Return;
 
 	if( WelderInst!=None )

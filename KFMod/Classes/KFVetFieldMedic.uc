@@ -27,8 +27,9 @@ static function float GetRecoilMovementSpeedModifier()
 }
 static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
 {
+	// (rounded at random: rounded down, a tick of bile damage came to nothing)
 	if( DmgType==class'DamTypeVomit' )
-		Return float(InDamage) * 0.25;
+		Return int(float(InDamage) * 0.25 + FRand());
 	if( DmgType==class'SirenScreamDamage' )
 		Return float(InDamage) * 0.5;
 	Return float(InDamage)*0.8; //take 20% less because medic

@@ -1,6 +1,8 @@
 class GUIBuyItemsList extends GUIVertList;
 
 var array< GUIBuyable > Elements;
+var float RowShare;		// each row's share of the list's height
+var color Unbuyable;	// the colour of what stops a row being bought
 
 
 event InitComponent(GUIController MyController, GUIComponent MyOwner)
@@ -90,67 +92,100 @@ function bool OnDblClick(GUIComponent Sender)
 
 function DrawBuyItem(Canvas c, int Item, float X, float Y, float W, float HT, bool bSelected, bool bPending)
 {
-	local string tString;
-	local float Iheight,Itop,Ileft,Iwidth;
+	local string Left, Right;
+	local float Iheight,Itop,Ileft,Iwidth,Half,Gap;
 	local eMenuState drawState;
-	local float GameDifficulty;
+	local GUIBuyMenu M;
+	local GUIBuyable b;
+	local int Have,Most,Clip;
+	local bool bDear,bHeavy;
 
-       if (PlayerOwner().Level.Game != none)
-        GameDifficulty = KFGameType(PlayerOwner().Level.Game).GetDifficulty();
-
+	M = GUIBuyMenu(PageOwner);
+	b = Elements[Item];
 	if(!bSelected)
-	   drawState = MSAT_Blurry;
+		drawState = MSAT_Blurry;
 	else
 		drawState = MSAT_Watched;
 
-	Iheight = HT*0.808917;
+	Iheight = HT*0.86;
 	Itop = Y+(HT-Iheight)/2;
-	Ileft = X;
-	Iwidth = W;
+	SectionStyle.Draw(c,drawState,X,Itop,W,Iheight);
+	Ileft = X+W*0.04;
+	Iwidth = W-W*0.08;
 
-	SectionStyle.Draw(c,drawState,Ileft,Itop,Iwidth,Iheight);
+	// below the name: what it costs (or sells for) and weighs; for ammo, a clip's price and the rounds held
+	if( M!=None && M.myCategories.Index==0 )
+	{
+		Left = "Sells for:"@int(b.sellValue);
+		Right = "Weight:"@int(b.weight);
+	}
+	else if( BuyableAmmo(b)!=None )
+	{
+		Left = "Clip:"@int(b.cost);
+		if( BuyableAmmo(b).Holding(PlayerOwner().Pawn,Have,Most,Clip) )
+			Right = "Rounds:"@Have$"/"$Most;
+	}
+	else
+	{
+		Left = "Cost:"@int(b.cost);
+		if( b.weight>0 )
+			Right = "Weight:"@int(b.weight);
+	}
+	if( M!=None )
+	{
+		bDear = M.TooDear(b);
+		bHeavy = M.TooHeavy(b);
+	}
+	// (what cannot be bought is dimmed, and what stops it is in red)
+	if( bDear || bHeavy )
+	{
+		c.Style = 5;
+		c.SetDrawColor(0,0,0,110);
+		c.SetPos(X,Itop);
+		c.DrawTile(Texture'Engine.WhiteTexture',W,Iheight,0,0,1,1);
+		c.SetDrawColor(255,255,255,255);
+	}
+	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,Iheight*0.55,TXTA_Center,b.ItemName,FNS_Medium);
+	if( Right=="" )
+		LineText(c,Ileft,Itop+Iheight*0.45,Iwidth,Iheight*0.45,TXTA_Center,Left,bDear);
+	else
+	{
+		Half = Iwidth*0.5;
+		Gap = Iwidth*0.03;
+		LineText(c,Ileft,Itop+Iheight*0.45,Half-Gap,Iheight*0.45,TXTA_Right,Left,bDear);
+		LineText(c,Ileft+Half+Gap,Itop+Iheight*0.45,Half-Gap,Iheight*0.45,TXTA_Left,Right,bHeavy);
+	}
+}
 
-	Ileft = X*1.05;
-	Iwidth = W-((ILeft-X)*2);
+// A row's second line, in red when it is why the row cannot be bought. (The style is shared with other lists: its
+// colour is borrowed for the line and put back. Its disabled state was dimmed in the drawing.)
+function LineText(Canvas c, float X, float Y, float W, float H, eTextAlign A, string S, bool bRed)
+{
+	local color Was;
 
-	
-       // if (Elements[Item].HasMe(PlayerOwner().Pawn))
-         //	AdjustedValue =int(Elements[Item].cost / GameDifficulty);
-       	//else
-        // 	AdjustedValue = Elements[Item].cost;
-
-	//Draw our nickname
-	tString = GetItemAtIndex(Item);
-	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,(Iheight/2),TXTA_Center,tString,FNS_Medium);
-
-		//Draw cost string  Added to account for whether it is an item that's in myinventory (and therefore can only be sold)
-	//tString = "Cost:"@Elements[Item].cost;
-       //if(Elements[Item].cost == AdjustedValue)
-       //	tString = "Cost:"@AdjustedValue;
-       //else
-       // tString = "Sale Value:"@AdjustedValue;
-		// what is already the player's can only be sold
-		if( GUIBuyMenu(PageOwner)!=None && GUIBuyMenu(PageOwner).myCategories.Index==0 )
-			tString = "Sells for:"@int(Elements[Item].sellValue);
-		else tString = "Cost:"@int(Elements[Item].cost);
-       	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,(Iheight),TXTA_Center,tString,FNS_small);
-
-		//Draw Weight string
-	tString = "Weight:"@int(Elements[item].weight);
-	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,(Iheight+(Iheight /2)),TXTA_Center,tString,FNS_small);
-
+	if( !bRed )
+	{
+		SectionStyle.DrawText(c,MSAT_Blurry,X,Y,W,H,A,S,FNS_Small);
+		return;
+	}
+	Was = SectionStyle.FontColors[0];
+	SectionStyle.FontColors[0] = Unbuyable;
+	SectionStyle.DrawText(c,MSAT_Blurry,X,Y,W,H,A,S,FNS_Small);
+	SectionStyle.FontColors[0] = Was;
 }
 
 function float BuyItemHeight(Canvas c)
 {
 	if(GUIBuyItemsBox(MenuOwner) != None)
-		 return MenuOwner.ActualHeight() * 0.25;
+		 return MenuOwner.ActualHeight() * RowShare;
 	else
 		 return 0;
 }
 
 defaultproperties
 {
+     RowShare=0.142857
+     Unbuyable=(R=255,G=70,B=60,A=255)
      GetItemHeight=GUIBuyItemsList.BuyItemHeight
      StyleName="ItemBoxInfo"
      bMouseOverSound=True

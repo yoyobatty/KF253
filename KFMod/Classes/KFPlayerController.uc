@@ -78,10 +78,7 @@ replication
 
 	// Functions server can call.
 	reliable if( Role == ROLE_Authority )
-		KFClientNetWorkMsg;
-
-	unreliable if( Role == ROLE_Authority )
-		ClientKFShakeView;
+		KFClientNetWorkMsg, ClientKFShakeView;
 }
 
 simulated function InitInputSystem()
@@ -329,9 +326,53 @@ function ClientKFShakeView(vector shRotMag, vector shRotRate, float shRotTime,
 
 function ViewShake(float DeltaTime)
 {
+	// (with no body or no health the shake stops, where it used to wait and play on after the respawn)
 	if(Pawn == None || Pawn.Health <= 0)
+	{
+		ClearViewShake();
 		return;
+	}
 	Super.ViewShake(DeltaTime);
+}
+
+// The engine's shake turns back once it is as far out as its peak on either side, so a shake that dies down (each
+// peak smaller than the last) was already past the next peak on the far side and leapt to it in one frame. It turns
+// now only on reaching the peak it is heading for.
+function CheckShake(out float MaxOffset, out float Offset, out float Rate, out float Time, float dt)
+{
+	if( Rate==0 )
+	{
+		if( MaxOffset==0 )
+			Offset = 0;
+		return;
+	}
+	if( (Rate>0 && Offset<MaxOffset) || (Rate<0 && Offset>MaxOffset) )
+		return;
+
+	Offset = MaxOffset;
+	if( Time>1 )
+	{
+		if( Time * Abs(MaxOffset/Rate) <= 1 )
+			MaxOffset = MaxOffset * (1/Time - 1);
+		else
+			MaxOffset *= -1;
+		Time -= dt;
+		Rate *= -1;
+	}
+	else
+	{
+		MaxOffset = 0;
+		Offset = 0;
+		Rate = 0;
+	}
+}
+
+// Every shake stopped and the view put straight (StopViewShaking alone leaves the tilt and offset it had)
+function ClearViewShake()
+{
+	StopViewShaking();
+	ShakeRot = rot(0,0,0);
+	ShakeOffset = vect(0,0,0);
 }
 
 function ViewFlash(float DeltaTime)

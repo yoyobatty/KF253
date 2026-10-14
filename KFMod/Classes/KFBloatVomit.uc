@@ -20,21 +20,27 @@ simulated function PostBeginPlay()
 // Scales the damage this Zed deals by the difficulty level
 function float DifficultyDamageModifer()
 {
+	return DifficultyScale(Level.Game.GameDifficulty);
+}
+
+// (the bile's damage over time is scaled by it too: KFPawn.BileTick)
+static function float DifficultyScale(float GameDifficulty)
+{
     local float AdjustedDamageModifier;
 
-    if ( Level.Game.GameDifficulty >= 7.0 ) // Hell on Earth
+    if ( GameDifficulty >= 7.0 ) // Hell on Earth
     {
     	AdjustedDamageModifier = 2.0;
     }
-    else if ( Level.Game.GameDifficulty >= 5.0 ) // Suicidal
+    else if ( GameDifficulty >= 5.0 ) // Suicidal
     {
     	AdjustedDamageModifier = 1.5;
     }
-    else if ( Level.Game.GameDifficulty >= 4.0 ) // Hard
+    else if ( GameDifficulty >= 4.0 ) // Hard
     {
     	AdjustedDamageModifier = 1.25;
     }
-    else if ( Level.Game.GameDifficulty >= 2.0 ) // Normal
+    else if ( GameDifficulty >= 2.0 ) // Normal
     {
     	AdjustedDamageModifier = 1.0;
     }

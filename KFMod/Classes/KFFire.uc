@@ -16,6 +16,10 @@ var()           float           RandomPitchAdjustAmt;       // How much to rando
 
 var() int MaxFireBurst; // Maximum number of shots in a burst, 0 for unlimited
 
+// A shot that goes on through bodies (see PenetratingTrace)
+var() int MaxPenetrations;      // bodies it goes on through after the first; 0, it stops at the first
+var() float PenDamageScale;     // share of its damage it keeps after each body
+
 // View punch stuff (the punch itself lives in KFPlayerController)
 var() float   ViewPunchDamping;     // Damping factor for smooth return
 var() float   ViewPunchSpring;      // Spring force for return
@@ -231,6 +235,12 @@ function DoTrace(Vector Start, Rotator Dir)
     local Actor DamageTarget;
     local KFWeaponAttachment WeapAttach;
 
+    if ( MaxPenetrations > 0 )
+    {
+        PenetratingTrace(Start, Dir);
+        return;
+    }
+
     MaxRange();
     X = Normal(Vector(Dir));
     End = Start + TraceRange * X;
@@ -272,6 +282,115 @@ function DoTrace(Vector Start, Rotator Dir)
     }
 }
 
+// A shot that goes on through bodies, as retail Killing Floor's Deagle does and this mod's Winchester did. Each body
+// hit has its collision switched off and the trace goes on from where it was hit, so a specimen pressed right behind
+// another is met too. After MaxPenetrations bodies past the first it stops, and the damage is scaled by
+// PenDamageScale after each. A dead body takes the shot (for its gore) but costs it nothing, and so does a teammate
+// while friendly fire is off. The world, doors, glass and props stop it.
+function PenetratingTrace(Vector Start, Rotator Dir)
+{
+	local Vector X, End, HitLocation, HitNormal;
+	local Actor Other, Target;
+	local array<Actor> Off, Hit;
+	local KFWeaponAttachment WeapAttach;
+	local float HitDamage;
+	local int i, Passed, Tries;
+	local bool bSeen, bFree;
+
+	MaxRange();
+	X = Normal(Vector(Dir));
+	End = Start + TraceRange * X;
+	HitDamage = Lerp(FRand(), DamageMin, DamageMax);
+	WeapAttach = KFWeaponAttachment(Weapon.ThirdPersonActor);
+
+	while ( Tries++ < 24 )
+	{
+		Other = Instigator.Trace(HitLocation, HitNormal, End, Start, true);
+		if ( Other == None || HitScanBlockingVolume(Other) != None )
+			break;
+
+		// the shooter, and what rides on them, are looked through
+		if ( Other == Instigator || Other.Base == Instigator )
+		{
+			LookThrough(Other, Off);
+			Start = HitLocation;
+			continue;
+		}
+
+		if ( Other.bWorldGeometry || Other == Level )
+		{
+			if ( WeapAttach != None )
+				WeapAttach.UpdateHit(Other, HitLocation + 2.0 * HitNormal, HitNormal);
+			break;
+		}
+
+		// a specimen's extra collision (big body, head) is the specimen
+		Target = Other;
+		if ( ExtendedZCollision(Other) != None && Other.Owner != None )
+			Target = Other.Owner;
+
+		// a body already hit, met again through another of its parts
+		bSeen = false;
+		for ( i = 0; i < Hit.Length; i++ )
+			if ( Hit[i] == Target )
+				bSeen = true;
+		if ( bSeen )
+		{
+			LookThrough(Other, Off);
+			Start = HitLocation;
+			continue;
+		}
+
+		// a door, glass or a prop takes the shot and stops it
+		if ( Pawn(Target) == None )
+		{
+			if ( WeapAttach != None )
+				WeapAttach.UpdateHit(Other, HitLocation, HitNormal);
+			Target.TakeDamage(int(HitDamage), Instigator, HitLocation, Momentum*X, DamageType);
+			break;
+		}
+
+		bFree = Pawn(Target).Health <= 0 || FriendlyFireOff(Pawn(Target));
+		// every client keeps a body of its own for a dead specimen, and tries the shot on that
+		if ( Pawn(Target).Health <= 0 && KFMonster(Target) != None && WeapAttach != None )
+			WeapAttach.UpdateCorpseHit(HitLocation);
+		Target.TakeDamage(int(HitDamage), Instigator, HitLocation, Momentum*X, DamageType);
+		Hit[Hit.Length] = Target;
+		LookThrough(Other, Off);
+		if ( Target != Other )
+			LookThrough(Target, Off);
+		Start = HitLocation;
+
+		if ( !bFree )
+		{
+			if ( Passed++ >= MaxPenetrations )
+				break;
+			HitDamage *= PenDamageScale;
+		}
+	}
+
+	// collision back on for what was looked through (a body the shot destroyed is gone)
+	for ( i = 0; i < Off.Length; i++ )
+		if ( Off[i] != None && !Off[i].bDeleteMe )
+			Off[i].SetCollision(true);
+}
+
+// One the trace is to pass through from now on
+function LookThrough(Actor A, out array<Actor> Off)
+{
+	if ( A == None || !A.bCollideActors )
+		return;
+	A.SetCollision(false);
+	Off[Off.Length] = A;
+}
+
+// A teammate, while friendly fire is off: the shot passes them by
+function bool FriendlyFireOff(Pawn P)
+{
+	return P != None && Monster(P) == None && Instigator != None && P.GetTeamNum() == Instigator.GetTeamNum()
+		&& TeamGame(Level.Game) != None && TeamGame(Level.Game).FriendlyFireScale == 0;
+}
+
 // Accuracy update based on pawn velocity
 simulated function AccuracyUpdate(float Velocity)
 {
@@ -297,6 +416,8 @@ defaultproperties
 	ViewPunchSpring=65.000000
 	KickScale=1.000000
 	MaxFireBurst=0
+	MaxPenetrations=0
+	PenDamageScale=0.500000
     RecoilMovePenaltySlow=0.100000
     RecoilMovePenaltyFast=0.250000
     BotRecoilMovePenaltySlow=0.250000

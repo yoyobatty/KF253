@@ -9,11 +9,15 @@ var () class <Emitter> GlassBits,BreakGlassBits;  // Stuff to spawn when the Win
 var () Material ShatteredTexture; // What to change the skin of the glass to when any part of the pane breaks.
 var () int Health;  // How strong is this bit of glass?
 var bool bCracked,bClientCracked;
+var byte ShardCount,ClientShardCount;	// shards knocked off, counted by the server so network players see them too
+var float NextShardTime;
+var bool bTraderSolid;					// trader time: players are held back by Blocker (see SetTraderSolid)
+var KFGlassBlocker Blocker;
 
 replication
 {
 	reliable if ( Role == ROLE_Authority )
-		bCracked;
+		bCracked, ShardCount, bTraderSolid;
 }
 
 function PostBeginPlay()
@@ -26,9 +30,11 @@ function PostBeginPlay()
 simulated function PostNetBeginPlay()
 {
 	bClientCracked = bCracked;
+	ClientShardCount = ShardCount;
 	if( !bHidden && bCracked )
 		CrackWindow();
 	bNetNotify = !bHidden;
+	UpdateBlocker();
 }
 simulated function PostNetReceive()
 {
@@ -37,10 +43,19 @@ simulated function PostNetReceive()
 		BreakWindow();
 		bNetNotify = False;
 	}
-	else if( bClientCracked!=bCracked )
+	else
 	{
-		bClientCracked = bCracked;
-		CrackWindow();
+		UpdateBlocker();
+		if( bClientCracked!=bCracked )
+		{
+			bClientCracked = bCracked;
+			CrackWindow();
+		}
+		if( ClientShardCount!=ShardCount )
+		{
+			ClientShardCount = ShardCount;
+			Spawn(GlassBits);
+		}
 	}
 }
 simulated function CrackWindow()
@@ -57,14 +72,63 @@ simulated function BreakWindow()
 {
 	SetCollision(false,false,false);
 	bHidden = true;
+	UpdateBlocker();
 	NetUpdateTime = Level.TimeSeconds - 1;
 	if( Level.NetMode!=NM_DedicatedServer )
 		Spawn(BreakGlassBits);
 }
+// Shards off the pane: a few a second at most (a specimen pushing on it bumps it every tick, and made a spray each
+// time), and seen by network players too (they were made only on the server's own machine)
 simulated function ShardWindow()
 {
+	if( Level.TimeSeconds<NextShardTime )
+		return;
+	NextShardTime = Level.TimeSeconds+0.25;
 	if( Level.NetMode!=NM_DedicatedServer )
 		Spawn(GlassBits);
+	if( Role==ROLE_Authority && Level.NetMode!=NM_Standalone )
+	{
+		ShardCount++;
+		NetUpdateTime = Level.TimeSeconds - 1;
+	}
+}
+
+// Between waves players block nothing, so that none can stand in another's way at the trader; and since the glass only
+// stops what blocks, they walked through it. For that time the pane gets an unseen stand-in of its own shape that is
+// world geometry, which holds back all that collides with the world. (Set by the game; each machine keeps its own.)
+function SetTraderSolid( bool bSolid )
+{
+	if( bSolid==bTraderSolid )
+		return;
+	bTraderSolid = bSolid;
+	NetUpdateTime = Level.TimeSeconds - 1;
+	UpdateBlocker();
+}
+
+simulated function UpdateBlocker()
+{
+	local bool bOn;
+
+	bOn = bTraderSolid && !bHidden;
+	if( bOn && Blocker==None )
+	{
+		Blocker = Spawn(class'KFGlassBlocker', Self,, Location, Rotation);
+		if( Blocker==None )
+			return;
+		Blocker.Glass = Self;
+		Blocker.SetStaticMesh(StaticMesh);
+		Blocker.SetDrawScale(DrawScale);
+		Blocker.SetDrawScale3D(DrawScale3D);
+	}
+	if( Blocker!=None && Blocker.bCollideActors!=bOn )
+		Blocker.SetCollision(bOn, true, true);
+}
+
+simulated function Destroyed()
+{
+	if( Blocker!=None )
+		Blocker.Destroy();
+	Super.Destroyed();
 }
 
 // When bumped by player (OR ZOMBIES!!!!). evil things happen ....

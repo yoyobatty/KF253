@@ -43,6 +43,8 @@ var Bool bZooming;
 var         bool            bModeZeroCanDryFire;        // FireMode zero can dry fire/cause a reload
 
 var bool bIsReloading, bReloadEffectDone;
+var bool bReloadQueued;			// R came while the last shot's cooldown ran: the reload starts as it ends
+var float ReloadQueuedUntil;	// (and is let go if it cannot start by then)
 
 var () float Weight; // how much does it weigh
 
@@ -69,6 +71,7 @@ var () class<InventoryAttachment> TacShineClass;
 var Actor TacShine;
 
 var Effect_TacLightProjector FlashLight;
+var class<Effect_TacLightProjector> FlashLightClass;	// the light it makes (a mutator may hand it another, as KFTorch does)
 
 var float NextAmmoCheckTime,LastAmmoResult,LastHasGunMsgTime;
 
@@ -206,7 +209,7 @@ function ServerSpawnLight()
       {
 		if( FlashLight == None && KFHumanPawn(Owner).TorchBatteryLife >= 1 && KFHumanPawn(Owner).Health > 0 )
 		{
-			FlashLight = Spawn(class'Effect_TacLightProjector',Instigator);
+			FlashLight = Spawn(FlashLightClass,Instigator);
 			Flashlight.SetRelativeLocation(vect(-80,0,0));
 			PlaySound(sound'KFWeaponSound.HuntingCrack',SLOT_Misc,100);
 			PlayAnim(ModeSwitchAnim,FireMode[0].FireAnimRate,FireMode[0].TweenTime);
@@ -340,7 +343,7 @@ exec function ReloadMeNow()
 {
 	local float ReloadMulti;
 
-	if(!AllowReload())
+	if(!ReloadNowOrLater())
 		return;
 	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
 	{
@@ -355,6 +358,33 @@ exec function ReloadMeNow()
 	PlaySound(ReloadBeginSound, SLOT_Misc, TransientSoundVolume,,TransientSoundRadius,ReloadMulti,false);
 	ClientReload();
 	Instigator.SetAnimAction(WeaponReloadAnim);
+}
+
+// Whether a reload may start now. One asked for while the last shot's cooldown (or the trigger) holds it back is
+// kept and started by WeaponTick once it can be; it used to be dropped, so R pressed just after a shotgun or
+// Winchester shot did nothing.
+function bool ReloadNowOrLater()
+{
+	if( AllowReload() )
+	{
+		bReloadQueued = false;
+		return true;
+	}
+	if( !bIsReloading && ReloadWanted() )
+	{
+		bReloadQueued = true;
+		ReloadQueuedUntil = FireMode[0].NextFireTime;
+		if( FireMode[1]!=None )
+			ReloadQueuedUntil = FMax(ReloadQueuedUntil, FireMode[1].NextFireTime);
+		ReloadQueuedUntil = FMax(ReloadQueuedUntil, Level.TimeSeconds) + 0.25;
+	}
+	return false;
+}
+
+// Whether there is anything to load
+function bool ReloadWanted()
+{
+	return ClipLeft < ClipCount && AmmoAmount(0) > ClipLeft;
 }
 
 simulated function ClientReload()
@@ -845,6 +875,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
 		KFHumanPawn(Instigator).SetAiming(False);
 	bAimingRifle = False;
 	bIsReloading = false;
+	bReloadQueued = false;
 	IdleAnim = Default.IdleAnim;
 	//Super.BringUp(PrevWeapon);
 
@@ -993,6 +1024,14 @@ simulated function WeaponTick(float DT)
 
 	if(!bIsReloading)
 	{
+		// a reload asked for while the last shot's cooldown ran
+		if( bReloadQueued )
+		{
+			if( Level.TimeSeconds > ReloadQueuedUntil || !ReloadWanted() )
+				bReloadQueued = false;
+			else if( AllowReload() )
+				ReloadMeNow();
+		}
 
 		if(!Instigator.IsHumanControlled())
 		{
@@ -1008,6 +1047,16 @@ simulated function WeaponTick(float DT)
 
 		if((Level.TimeSeconds - ReloadTimer) >= ReloadRate)
 		{
+			// the magazine going home (or a shell going in); the last magazine had none
+			if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
+			{
+				ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
+			}
+			else ReloadMulti = 1;
+			if( KFPawn(Instigator)!=None )
+				ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
+			PlaySound(ReloadSound, SLOT_Misc, TransientSoundVolume,,TransientSoundRadius,ReloadMulti,false);
+
 			if(AmmoAmount(0) <= ClipCount && !bHoldToReload)
 			{
 				ClipLeft = AmmoAmount(0);
@@ -1015,15 +1064,6 @@ simulated function WeaponTick(float DT)
 			}
 			else
 			{
-				if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
-				{
-					ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
-				}
-				else ReloadMulti = 1;
-				if( KFPawn(Instigator)!=None )
-					ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
-				PlaySound(ReloadSound, SLOT_Misc, TransientSoundVolume,,TransientSoundRadius,ReloadMulti,false);
-
 				InsertBullet();
 
 				if(ClipLeft < ClipCount && ClipLeft < AmmoAmount(0) && bHoldToReload)
@@ -1802,6 +1842,7 @@ defaultproperties
 	UpKick=500
 	SideKick=100
 	TacShineClass=Class'KFMod.TacLightShineAttachment'
+	FlashLightClass=Class'KFMod.Effect_TacLightProjector'
 	bSniping=True
 	bNoAmmoInstances=False
 	Description="This is a very generic weapon."

@@ -587,6 +587,7 @@ State MatchInProgress
             for (C = Level.ControllerList; C != None; C = C.NextController)
                 if (C.Pawn != None && C.Pawn.Health > 0)
                     C.Pawn.bBlockActors = false;
+            SetGlassSolid(true);
 
             KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
 
@@ -611,6 +612,7 @@ State MatchInProgress
                 for (C = Level.ControllerList; C != None; C = C.NextController)
                     if (C.Pawn != None && C.Pawn.Health > 0)
                         C.Pawn.bBlockActors = C.Pawn.default.bBlockActors;
+                SetGlassSolid(false);
 
                 for (C = Level.ControllerList; C != None; C = C.NextController)
                     if (PlayerController(C) != None)

@@ -1438,8 +1438,20 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 function TakeBileDamage()
 {
-	Super.TakeDamage(2+Rand(3), BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
+	Super.TakeDamage(BileTick(2+Rand(3)), BileInstigator, Location, vect(0,0,0), class'DamTypeVomit');
 	healthtoGive-=5;
+}
+
+// A tick of bile damage, scaled by difficulty as the vomit's own hit is (it was the same on every difficulty), and
+// rounded up or down at random so that a small share still adds up over the ticks
+function int BileTick(int Base)
+{
+	local float D;
+
+	D = float(Base);
+	if( Level.Game!=None )
+		D *= class'KFBloatVomit'.static.DifficultyScale(Level.Game.GameDifficulty);
+	return int(D+FRand());
 }
 
 function bool AddShieldStrength(int ShieldAmount)

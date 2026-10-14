@@ -5,7 +5,7 @@ class Winchester extends KFWeaponShotgun;
 
 exec function ReloadMeNow()
 {
-	if(!AllowReload())
+	if(!ReloadNowOrLater())
 		return;
 
 	if ( bAimingRifle )

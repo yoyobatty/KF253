@@ -4,7 +4,9 @@ class KFMonsterController extends MonsterController;
 
 var KFMonster KFM;
 
-var int MoanTime,ThreatTime;
+var int ThreatTime;
+var float MoanTime;
+var() float MoanGapMin, MoanGapMax;	// seconds between one specimen's moans, picked afresh each time
 var bool ItsSet,bUseFreezeHack,bAboutToGetDoor,bTriggeredFirstEvent,bHuntSqueezed;
 var int TimeToSet;
 var int EvaluateTime;
@@ -113,7 +115,8 @@ function PostBeginPlay()
 	SetCombatTimer();
 	if ( UnrealMPGameInfo(Level.Game).bSoaking )
 		bSoaking = true;
-	MoanTime = Level.TimeSeconds;
+	// the first moan falls anywhere in a gap, so a squad that came in together does not moan as one
+	MoanTime = Level.TimeSeconds + FRand() * MoanGapMax;
 	EvaluateTime = Level.TimeSeconds;
 	TimeToSet = Level.TimeSeconds;
 	ItsSet=false;
@@ -180,7 +183,7 @@ function tick(float DeltaTime)
 	if( Level.TimeSeconds >= MoanTime )
 	{
 		ZombieMoan();
-		MoanTime += (12 + (fRand() * 3));
+		MoanTime = Level.TimeSeconds + MoanGapMin + FRand() * (MoanGapMax - MoanGapMin);
 	}
 	if( bAboutToGetDoor )
 	{
@@ -1482,6 +1485,8 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
+	MoanGapMin=8.000000
+	MoanGapMax=18.000000
 	StrafingAbility=0.000000
 	CombatStyle=1.000000
 	ReactionTime=1.000000

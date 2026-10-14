@@ -13,8 +13,10 @@ var Sound MiscSound;
 var() Material InjuredOverlay, CriticalOverlay;
 
 // --- Camera/Effects ---
-var bool bHitShaking;
-var float StopShakeTime;
+// How a hit jars the view (rotation in rotator units, offset in world units; a full jar at JarFullDamage)
+var() float JarRotateMag, JarRotateRate, JarRotateTime;
+var() float JarMoveMag, JarMoveRate, JarMoveTime;
+var() float JarFullDamage;
 
 // --- Player State ---
 var int ScoreCounter;
@@ -73,7 +75,7 @@ replication
 		CurrentWeight,MaxCarryWeight,AlphaAmount,bTorchOn,TorchBatteryLife;
 
 	reliable if(RemoteRole == ROLE_AutonomousProxy)
-		DoHitCamEffects, StopHitCamEffects, ClientSprintDenied;
+		DoHitCamEffects, ClientSprintDenied;
 
 	reliable if(Role < ROLE_Authority)
 		SetAiming,ServerStartSprintKF,ServerStopSprintKF;
@@ -184,8 +186,6 @@ function Timer()
 		PCC = PlayerController(Controller);
 		if(PCC != None )
 		{
-			if(bHitShaking && Level.TimeSeconds >= StopShakeTime)
-				StopHitCamEffects();
 			// Update for the scoreboards.
 			if (Health <= 0)
 			{
@@ -224,6 +224,7 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 {
 	local int HealthWas;
 	local float ArmourWas;
+	local vector HitDir;
 
 	if( Role<ROLE_Authority )
 		return;
@@ -249,7 +250,14 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 	// took is read off health and armour: this used to ask the game's damage rules a second time, so every rule a
 	// mutator adds saw each hit on a player twice. The blur goes by the health lost.
 	if( Health<HealthWas || ShieldStrength<ArmourWas )
-		DoHitCamEffects(momentum, Max(HealthWas-Health,0));
+	{
+		// The jar goes the way the hit pushed, else away from whoever dealt it (a Berserker's push from specimens is
+		// taken away above); burning and damage from nobody do not jar the view
+		HitDir = momentum;
+		if( HitDir==vect(0,0,0) && instigatedBy!=None && instigatedBy!=self && !ClassIsChildOf(damageType, class'Burned') )
+			HitDir = Location - instigatedBy.Location;
+		DoHitCamEffects(HitDir, Max(HealthWas-Health,0));
+	}
 }
 
 function TakeBileDamage()
@@ -258,7 +266,7 @@ function TakeBileDamage()
 	local float ArmourWas;
 	local vector BileVect;
 
-	RandBileDamage = 2+Rand(2);
+	RandBileDamage = BileTick(2+Rand(2));
 
 	HealthWas = Health;
 	ArmourWas = ShieldStrength;
@@ -282,51 +290,48 @@ function TakeBileDamage()
 	DoHitCamEffects( BileVect, Max(HealthWas-Health,0) );
 }
 
-simulated function DoHitCamEffects(vector Momentum, optional int Damage)
+// Every hit jars the view away from it, as Killing Floor itself does: seen from the player's own view, a hit from in
+// front or behind nods the view and one from the side tilts it; harder hits jar further. HitDir is in world space
+// (the player's machine turns it into his view).
+simulated function DoHitCamEffects(vector HitDir, optional int Damage)
 {
 	local KFScreenFX FX;
+	local PlayerController PC;
+	local rotator ViewYaw;
+	local vector Dir, RotMag, RotRate, MoveMag, MoveRate;
+	local float Jar;
+
+	PC = PlayerController(Controller);
 
 	// the view goes out of focus by how hard the hit was (KFScreenFX clears it again by itself)
-	FX = class'KFFrameTap'.static.GetFX(PlayerController(Controller));
+	FX = class'KFFrameTap'.static.GetFX(PC);
 	if( FX!=None )
 		FX.HitBlur(Damage);
 
-	StopShakeTime = Level.TimeSeconds+3;
-	if(!bHitShaking)
-	{
-		//reset to false if need be.
-		SetTimer(1.5,true);
+	HitDir.Z = 0;
+	if( PC==None || HitDir==vect(0,0,0) )
+		return;
+	ViewYaw.Yaw = PC.Rotation.Yaw;
+	Dir = Normal(HitDir) << ViewYaw;
+	Jar = FClamp(float(Damage) / JarFullDamage, 0.1, 1.0);
 
-		// this cast is OK as long as this is only called from TakeDamage,
-		// where the controller is tested before this function is called
-		PlayerController(Controller).ShakeView( 6000 * Normal(vector(rotator(Momentum))) , 15000 * Normal(vector(rotator(Momentum))),
-			   2.0,
-			   60 * (Normal(Momentum)/30),
-			   vect(1,1,1)/200,
-			   1);
-		bHitShaking = true;
-	}
-}
+	RotMag.X = -Dir.X * JarRotateMag * Jar;
+	RotMag.Z = Dir.Y * JarRotateMag * Jar;
+	MoveMag = Dir * JarMoveMag * Jar;
+	RotRate = JarRotateRate * (2.0 - Jar) * vect(1,1,1);
+	MoveRate = JarMoveRate * (2.0 - Jar) * vect(1,1,1);
 
-simulated function StopHitCamEffects()
-{
-	if(bHitShaking)
-	{
-		// StopViewShaking zeroes Rate/Max/Time but leaves the current
-		// ShakeRot/ShakeOffset intact.  ViewShake only decays them when
-		// Rate != 0, so the residual offset persists forever.  Zero them.
-		PlayerController(Controller).StopViewShaking();
-		PlayerController(Controller).ShakeRot = rot(0,0,0);
-		PlayerController(Controller).ShakeOffset = vect(0,0,0);
-		bHitShaking=false;
-	}
-}
+	// (the engine's shake sets off at the rate's sign and turns at the peak's, so each rate takes its peak's sign)
+	if( RotMag.X<0 )
+		RotRate.X *= -1;
+	if( RotMag.Z<0 )
+		RotRate.Z *= -1;
+	if( MoveMag.X<0 )
+		MoveRate.X *= -1;
+	if( MoveMag.Y<0 )
+		MoveRate.Y *= -1;
 
-simulated function Died(Controller Killer, class<DamageType> damageType, vector HitLocation)
-{
-	StopHitCamEffects();
-
-	Super.Died(Killer, damageType, HitLocation);
+	PC.ShakeView(RotMag, RotRate, JarRotateTime, MoveMag, MoveRate, JarMoveTime);
 }
 
 simulated function PrevWeapon()
@@ -710,6 +715,13 @@ simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 
 defaultproperties
 {
+	JarRotateMag=1000.000000
+	JarRotateRate=10000.000000
+	JarRotateTime=2.000000
+	JarMoveMag=12.000000
+	JarMoveRate=200.000000
+	JarMoveTime=2.000000
+	JarFullDamage=10.000000
 	BreathingSound=Sound'KFPlayerSound.Malebreath'
 	BaseMeleeIncrease=0.200000
 	MaxCarryWeight=15.000000

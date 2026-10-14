@@ -11,22 +11,13 @@ class Bullpup extends KFWeapon;
 
 var() bool bAltFire;
 
-var ()      int         HealBoostAmount;// How much we heal a player by default with the heal dart
-
-var localized   string  SuccessfulHealMessage;
-
-var         int         HealAmmoCharge; // Current healing charger
-var         float       RegenTimer;     // Tracks regeneration
-Const MaxAmmoCount=500;                 // Maximum healing charge count
-var ()      float       AmmoRegenRate;  // How quickly the healing charge regenerates
-
 replication
 {
 	reliable if(Role < ROLE_Authority)
 		ServerChangeFireMode;
 
     reliable if (Role == ROLE_Authority)
-        bAltFire, HealAmmoCharge, ClientSuccessfulHeal;
+        bAltFire;
 }
 
 /* 
@@ -47,74 +38,6 @@ simulated function PostBeginPlay()
 
 }
 */
-// The server lets the client know they successfully healed someone
-simulated function ClientSuccessfulHeal(String HealedName)
-{
-    if( PlayerController(Instigator.Controller) != none )
-    {
-        PlayerController(Instigator.controller).ClientMessage(SuccessfulHealMessage$HealedName, 'CriticalEvent');
-    }
-}
-
-// Return a float value representing the current healing charge amount
-simulated function float ChargeBar()
-{
-	return FClamp(float(HealAmmoCharge)/float(MaxAmmoCount),0,1);
-}
-
-simulated function Tick(float dt)
-{
-	Super.Tick(dt);
-	if ( Level.NetMode!=NM_Client && HealAmmoCharge < MaxAmmoCount && RegenTimer<Level.TimeSeconds )
-	{
-		RegenTimer = Level.TimeSeconds + AmmoRegenRate;
-
-		if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
-		{
-			HealAmmoCharge += 10 * KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetSyringeChargeRate();
-		}
-		else
-		{
-			HealAmmoCharge += 10;
-		}
-		if ( HealAmmoCharge > MaxAmmoCount )
-		{
-			HealAmmoCharge = MaxAmmoCount;
-		}
-	}
-}
-
-simulated function ChangedPerk(string NewPerk)
-{
-	if ( NewPerk == "Field Medic" )
-	{
-		log("Bullpup changed to healing mode for " $Instigator.GetHumanReadableName());
-		//FireMode[1] = BullpupHealFire(Level.ObjectPool.AllocateObject(class'BullpupHealFire'));
-		FireModeClass[1] = class'BullpupHealFire';
-		FireMode[1] = new(class'BullpupHealFire') FireModeClass[1];
-	}
-	else
-	{
-		log("Bullpup changed to zoom mode for " $Instigator.GetHumanReadableName());
-		//FireMode[1] = KFZoom(Level.ObjectPool.AllocateObject(default.FireModeClass[1]));
-		FireModeClass[1] = default.FireModeClass[1];
-		FireMode[1] = new(default.FireModeClass[1]) default.FireModeClass[1];
-	}
-	InitWeaponFires();
-	if (FireMode[1] != None)
-	{
-		FireMode[1].ThisModeNum = 1;
-		FireMode[1].Weapon = self;
-		FireMode[1].Instigator = Instigator;
-		FireMode[1].Level = Level;
-		FireMode[1].Owner = self;
-		FireMode[1].PreBeginPlay();
-		FireMode[1].BeginPlay();
-		FireMode[1].PostBeginPlay();
-		FireMode[1].SetInitialState();
-		FireMode[1].PostNetBeginPlay();
-	}
-}
 
 
 simulated function DoToggle ()
@@ -319,10 +242,6 @@ simulated function PlayAnimZoom( bool bZoomNow )
 
 defaultproperties
 {
-	HealBoostAmount=20
-	SuccessfulHealMessage="You healed "
-	HealAmmoCharge=500
-	AmmoRegenRate=0.300000
 	ClipCount=40
 	ReloadRate=2.000000
 	ReloadBeginSound=Sound'KFWeaponSound.L85Clipchange'

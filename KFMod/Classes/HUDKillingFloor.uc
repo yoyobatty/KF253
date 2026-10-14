@@ -102,6 +102,7 @@ var float NextModLogTime;
 
 var bool bInitialDark;  // a variable that initializes the overlay as black so theres' no pop-in when it adjusts to the zone color
 var bool bScreenFXStarted;  // the frame tap that bloom, vivid and the hit blur are made from is there
+var KFTraderDread Dread;     // the far-off specimen sounds between waves
 var bool bHasFogTint; 
 var float MoodStart;  // when this HUD first drew for a player with a pawn
 
@@ -172,6 +173,8 @@ simulated function PostBeginPlay()
 	SetHUDAlpha();
 	// bloom, vivid and the hit blur start with the HUD
 	StartScreenFX();
+	if( Dread==None )
+		Dread = Spawn(class'KFTraderDread', self);
 	foreach DynamicActors(class'KFSPLevelInfo', KFLevelRule)
 		Break;
 	if ( CustomCrosshairsAllowed() )
@@ -321,6 +324,8 @@ simulated function Destroyed()
 		Level.ObjectPool.FreeObject(MyColorMod);
 		MyColorMod = None;
 	}
+	if( Dread!=None )
+		Dread.Destroy();
 	Super.Destroyed();
 }
 
@@ -549,6 +554,17 @@ simulated function WidgetBox(Canvas C, SpriteWidget W, out float X, out float Y,
 		Y -= 0.5*YL;
 	else if( W.DrawPivot==DP_LowerLeft || W.DrawPivot==DP_LowerMiddle || W.DrawPivot==DP_LowerRight )
 		Y -= YL;
+}
+
+// Whether the trader's menu is open
+simulated function bool TraderOpen()
+{
+	local GUIController G;
+
+	if( PlayerOwner==None || PlayerOwner.Player==None )
+		return false;
+	G = GUIController(PlayerOwner.Player.GUIController);
+	return G!=None && G.bActive && G.ActivePage!=None && G.ActivePage.IsA('GUIBuyMenu');
 }
 
 // Which of the HUD's fonts is nearest in size to so many pixels tall
@@ -1098,6 +1114,9 @@ simulated function DrawHudPassA (Canvas C)
 	local float MW, BX, BY, BXL, BYL;
 
 	DrawDoorHealthBars(C);
+	// (with the trader open, its menu says what is carried, the cash and the weight; these lay under it)
+	if( TraderOpen() )
+		return;
 
 	//  if( bShowWeaponInfo && (PawnOwner.Weapon != None) )
 	if((PawnOwner != none && PawnOwner.Weapon != None) )
@@ -1123,9 +1142,11 @@ simulated function DrawHudPassA (Canvas C)
 	if( KFPawn(PawnOwner)!=None && KFPawn(PawnOwner).GetVeteran() != None )
 		KFPawn(PawnOwner).GetVeteran().Static.SpecialHUDInfo(C);
   
-	// Torch
+	// Torch: while it is lit, and after until the battery is full again
 
-	if ( KFWeapon(PawnOwner.Weapon) != none && KFWeapon(PawnOwner.Weapon).bTorchEnabled )
+	if ( KFWeapon(PawnOwner.Weapon) != none && KFWeapon(PawnOwner.Weapon).bTorchEnabled
+		&& ((KFWeapon(PawnOwner.Weapon).FlashLight != none && KFWeapon(PawnOwner.Weapon).FlashLight.bHasLight)
+		|| (KFHumanPawn(PawnOwner) != none && KFHumanPawn(PawnOwner).TorchBatteryLife < KFHumanPawn(PawnOwner).default.TorchBatteryLife)) )
 	{
 		DrawSpriteWidget (C, BatteryMeter);
 		DrawSpriteWidget (C, TorchBatteryIcon);
@@ -2054,7 +2075,7 @@ simulated function DrawWeaponName(Canvas C)
 	local int i,Best;
 	local byte OldStyle;
 
-	if (  PawnOwner==None || PawnOwner.Weapon==None )
+	if (  PawnOwner==None || PawnOwner.Weapon==None || TraderOpen() )
 	return;
 
 	CurWeaponName = PawnOwner.Weapon.GetHumanReadableName();

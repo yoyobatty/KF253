@@ -128,12 +128,18 @@ function bool AllowReload()
 	return ClipLeft < ClipCount && AmmoAmount(0) > ClipLeft;
 }
 
+// (a change of shell type is something to load too)
+function bool ReloadWanted()
+{
+	return (bWantSlugs != bSlugsLoaded && AmmoAmount(0) > 0) || Super.ReloadWanted();
+}
+
 exec function ReloadMeNow()
 {
 	local float ReloadMulti;
 	local bool bSingle;
 
-	if ( !AllowReload() )
+	if ( !ReloadNowOrLater() )
 		return;
 
 	// a bot filling an empty gun picks the shells for the enemy in front of it

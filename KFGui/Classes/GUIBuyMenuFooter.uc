@@ -3,6 +3,29 @@ class GUIBuyMenuFooter extends ButtonFooter;
 var automated GUIButton b_Buy,b_Cancel,b_Complete,b_AutoAll,b_Fill;
 var automated GUIButton spacer1,spacer2;
 var automated GUILabel l_score,l_weight;
+var automated GUIImage i_cash;	// the HUD's pound sign: the menu's font has none
+
+// Laid out again each frame from the buttons shown: they fit their captions, which change (the refill's price),
+// and the fill button comes and goes. (They were laid out once, in fixed slots, the hidden ones keeping theirs empty.)
+function bool InternalOnPreDraw(Canvas C)
+{
+	if ( bBoundToParent && MenuOwner != None )
+		WinTop = RelativeTop( MenuOwner.ActualTop() + MenuOwner.ActualHeight() - ActualHeight(), True );
+	else
+		WinTop = RelativeTop( Controller.ResY - ActualHeight(), True );
+	if ( ButtonsSized(C) )
+	{
+		ButtonLeft = GetButtonLeft();
+		PositionButtons(C);
+	}
+	// (the pound sign as wide as it is tall, and the cash just after it)
+	if( i_cash!=None && l_score!=None )
+	{
+		i_cash.WinWidth = i_cash.RelativeWidth(i_cash.ActualHeight(),True);
+		l_score.WinLeft = i_cash.WinLeft+i_cash.WinWidth*1.25;
+	}
+	return true;
+}
 
 function PositionButtons (Canvas C)
 {
@@ -13,7 +36,7 @@ function PositionButtons (Canvas C)
 	for ( i = 0; i < Controls.Length; i++ )
 	{
 		b = GUIButton(Controls[i]);
-		if ( b != None)
+		if ( b != None && b.bVisible )
 		{
 			if ( x == 0 )
 				x = ButtonLeft;
@@ -26,13 +49,17 @@ function PositionButtons (Canvas C)
 
 function SetPlayerStats(int score, float weight)
 {
+	local float Most;
+
 	if( l_score!=None )
-		l_score.Caption = "Cash:"@score;
+		l_score.Caption = string(score);
+	if( GUIBuyMenu(PageOwner)!=None )
+		Most = GUIBuyMenu(PageOwner).maxweight;
 	if( l_weight!=None )
-		l_weight.Caption = "Weight:"@weight;
+		l_weight.Caption = "Weight:"@int(weight+0.5)$"/"$int(Most+0.5);
 }
 
-function SetBuyMode(string buyCaption,bool buyEnabled,bool fillVisible,bool fillEnabled)
+function SetBuyMode(string buyCaption,bool buyEnabled,bool fillVisible,bool fillEnabled,optional string FillCaption)
 {
 	local bool AutoAmmoEnabled;
 	AutoAmmoEnabled = GUIBuyMenu(PageOwner).CanAutoAmmo();
@@ -55,6 +82,8 @@ function SetBuyMode(string buyCaption,bool buyEnabled,bool fillVisible,bool fill
 	else if(!fillEnabled)
 		b_fill.MenuState = MSAT_Disabled;
 	b_fill.bVisible = fillVisible;
+	if( FillCaption!="" )
+		b_fill.Caption = FillCaption;
 
 	if(AutoAmmoEnabled && b_AutoAll.MenuState == MSAT_Disabled)
 		b_AutoAll.MenuState = MSAT_Blurry;
@@ -134,7 +163,7 @@ function float GetButtonLeft()
 	for (i = 0; i < Controls.Length; i++ )
 	{
 		b = GUIButton(Controls[i]);
-		if ( b != None )
+		if ( b != None && b.bVisible )
 		{
 			if ( TotalWidth > 0 )
 				TotalWidth += GetSpacer();
@@ -242,7 +271,7 @@ defaultproperties
      Begin Object Class=GUIButton Name=AutoAmmo
          Caption="Refill all"
          StyleName="FooterButton"
-         Hint="Fill every weapon's ammo, and mend your armour if you have the cash for both."
+         Hint="Fill every weapon's ammo (with too little cash, a share for each), and mend your armour if you have the cash for both."
          WinTop=-0.014645
          WinLeft=0.006149
          WinWidth=0.112219
@@ -297,6 +326,50 @@ defaultproperties
      End Object
      spacer2=GUIButton'KFGui.GUIBuyMenuFooter.sp2'
 
+     Begin Object Class=GUIImage Name=CashIcon
+         Image=Texture'KFKillMeNow.KFHUDIcons'
+         ImageStyle=ISTY_Scaled
+         ImageRenderStyle=MSTY_Alpha
+         X1=193
+         Y1=0
+         X2=255
+         Y2=63
+         WinTop=0.150000
+         WinLeft=0.008000
+         WinWidth=0.030000
+         WinHeight=0.700000
+         bBoundToParent=True
+         bScaleToParent=True
+     End Object
+     i_cash=GUIImage'KFGui.GUIBuyMenuFooter.CashIcon'
+
+     Begin Object Class=GUILabel Name=CashLabel
+         TextColor=(B=140,G=210,R=240,A=255)
+         TextFont="UT2MenuFont"
+         VertAlign=TXTA_Center
+         WinLeft=0.040000
+         WinWidth=0.100000
+         WinHeight=1.000000
+         bBoundToParent=True
+         bScaleToParent=True
+     End Object
+     l_score=GUILabel'KFGui.GUIBuyMenuFooter.CashLabel'
+
+     Begin Object Class=GUILabel Name=WeightLabel
+         TextColor=(B=220,G=220,R=220,A=255)
+         TextFont="UT2MenuFont"
+         VertAlign=TXTA_Center
+         WinLeft=0.130000
+         WinWidth=0.200000
+         WinHeight=1.000000
+         bBoundToParent=True
+         bScaleToParent=True
+     End Object
+     l_weight=GUILabel'KFGui.GUIBuyMenuFooter.WeightLabel'
+
+     bFixedWidth=False
+     Padding=0.070000
+     Spacer=0.008000
      StyleName="EditBox"
      WinTop=0.943197
      WinLeft=0.446138

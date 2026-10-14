@@ -47,7 +47,7 @@ var bool bTriggerTooFar;  // true if the use trigger is too far for bots to real
 // If true, this door does not block actors when in an open state.
 var (Collision) const bool bNoBlockWhileOpen;
 
-var private bool bInitialCollideActors, bInitialBlockActors;
+var private bool bInitialCollideActors, bInitialBlockActors, bInitialBlockPlayers;
 
 replication
 {
@@ -65,6 +65,7 @@ function PostBeginPlay()
 
     bInitialCollideActors = bCollideActors;
     bInitialBlockActors = bBlockActors;
+    bInitialBlockPlayers = bBlockPlayers;
 
 	if( DoorPathNode==None ) // Attempt to find one passing through this doorway.
 	{
@@ -124,7 +125,8 @@ function PostBeginPlay()
 		ZombieHitSound[3] = Sound 'PatchSounds.DHitMetal4';
 	}
 
-	if( bStartSealed )
+	// (a door with no trigger has no weld to start with)
+	if( bStartSealed && MyTrigger!=None )
 	{
 		bSealed = true;
 		MyTrigger.WeldStrength = 0;
@@ -180,8 +182,9 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation,Vector mo
 		if ((Level.TimeSeconds - LastZombieHitSoundTime) >= 0.5)
 			PlayZombieHitSound();
 	}
-	//Unsealed damage-dealing.
-	if (!bSealed && damageType!=class'DamTypeWelder')
+	//Unsealed damage-dealing. (Not the unwelder's: held on a door that was not welded, it wore the door down until
+	//it blew up.)
+	if (!bSealed && damageType!=class'DamTypeWelder' && damageType!=class'DamTypeUnWeld')
 	{
 		Damage *= 0.5;
 		Health -= Damage;
@@ -212,12 +215,20 @@ function Bump( Actor Other )
 	if( MyTrigger != None && MyTrigger.bBuyableDoor )
 		return;
 	if( (bSealed || bClosed) && KFMonster(Other)!=None ) // Notify zombie to break this door.
-		KFMonsterController(KFMonster(Other).Controller).BreakUpDoor(Self);
+		ZedBreaksDoor(KFMonster(Other));
 	else if( (bSealed || bClosed) && ExtendedZCollision(Other)!=None && Other.Base != none && KFMonster(Other.Base) != none )
-        KFMonsterController(KFMonster(Other.Base).Controller).BreakUpDoor(Self);
+		ZedBreaksDoor(KFMonster(Other.Base));
 	else if( bSealed && bStartSealed && Pawn(Other)!=None && KFInvasionBot(Pawn(Other).Controller)!=None )
 		KFInvasionBot(Pawn(Other).Controller).SealUpDoor(Self);
 }
+// A specimen that bumps the door is told to break it, when its mind is the specimens' own (not a dying one with
+// none, nor a player's in the versus mode)
+function ZedBreaksDoor(KFMonster M)
+{
+	if( M!=None && KFMonsterController(M.Controller)!=None )
+		KFMonsterController(M.Controller).BreakUpDoor(Self);
+}
+
 // Zombies mode: force this door permanently open after a buyable-door purchase.
 function UnsealForPurchase()
 {
@@ -300,7 +311,10 @@ function RespawnDoor()
 	if( bDoorIsDead )
 	{
 		bHidden = false;
-		SetCollision(true, true, true);
+		// (its own collision back, and none while it stands open if it is a door that does not block when open)
+		if( bNoBlockWhileOpen && bShouldBeOpen )
+			SetCollision(false, bInitialBlockActors, bInitialBlockPlayers);
+		else SetCollision(bInitialCollideActors, bInitialBlockActors, bInitialBlockPlayers);
 		bDoorIsDead = false;
 		Reset();
 		if( bShouldBeOpen )
@@ -310,7 +324,7 @@ function RespawnDoor()
 		}
 		else if( KeyNum!=0 )
 			InterpolateTo(0,0.001);
-		if( bStartSealed )
+		if( bStartSealed && MyTrigger!=None )
 		{
 			bSealed = true;
 			MyTrigger.WeldStrength = 0;
@@ -324,33 +338,34 @@ function MakeGroupStop()
 {
 	MakeGroupReturn();
 }
+// (A welded or blown-up door is not moved, and its collision is left alone: it was changed first, so a welded door
+// told to open could be walked through, and a blown-up one told to close stood again as an invisible wall.)
 function DoOpen()
 {
-	if(bNoBlockWhileOpen)
-    {
-    	// Remove collision from doors when we open them
-        SetCollision(false,bInitialBlockActors);
-    }
 	if( bSealed || bHidden )
 	{
 		bShouldBeOpen = True;
 		Return;
 	}
+	if(bNoBlockWhileOpen)
+    {
+    	// Remove collision from doors when we open them
+        SetCollision(false,bInitialBlockActors);
+    }
 	Super.DoOpen();
 }
 function DoClose()
 {
-	if(bNoBlockWhileOpen)
-    {
-    	// Add collision to doors when we close them
-        SetCollision(bInitialCollideActors,bInitialBlockActors);
-    }
-
 	if( bSealed || bHidden )
 	{
 		bShouldBeOpen = False;
 		Return;
 	}
+	if(bNoBlockWhileOpen)
+    {
+    	// Add collision to doors when we close them
+        SetCollision(bInitialCollideActors,bInitialBlockActors);
+    }
 	Super.DoClose();
 }
 function FinishedOpening()

@@ -3,7 +3,7 @@ class KFWeaponShotgun extends KFWeapon
 
 exec function ReloadMeNow()
 {
-    if(!AllowReload())
+    if(!ReloadNowOrLater())
         return;
 
     Super.ReloadMeNow();

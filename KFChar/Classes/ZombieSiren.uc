@@ -107,7 +107,7 @@ simulated function SpawnTwoShots()
 simulated function HurtRadius( float DamageAmount, float DamageRadius, class<DamageType> DamageType, float Momentum, vector HitLocation )
 {
 	local actor Victims;
-	local float damageScale, dist, dotDmg;
+	local float damageScale, dist, dotDmg, VictimDamage, VictimMomentum;
 	local vector dir,lookdir,pwndir;
 
 	if( bHurtEntry )
@@ -134,14 +134,19 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 			dir = dir/dist;
 			damageScale = 1 - FMax(0,(dist - Victims.CollisionRadius)/DamageRadius);
 
+			// (the damage and the pull worked out for this victim alone: they were written over the scream's own, so
+			// that once a pane of glass was hit every later victim took the glass's figure, from nothing to several
+			// hundred, and once anything not human was hit no later player was pulled)
+			VictimMomentum = Momentum;
 			if (!Victims.IsA('KFHumanPawn')) // If it aint human, don't pull the vortex crap on it.
-				Momentum = 0;
+				VictimMomentum = 0;
 
+			VictimDamage = DamageAmount;
 			if (Victims.IsA('KFGlassMover'))   // Hack for shattering in interesting ways.
-				DamageAmount = KFGlassMover(Victims).Health * rand ((KFGlassMover(Victims).Health * 0.4)) ;
+				VictimDamage = KFGlassMover(Victims).Health * rand ((KFGlassMover(Victims).Health * 0.4)) ;
 
-			Victims.TakeDamage(damageScale * DamageAmount*dotDmg,Instigator,
-			 Victims.Location - 0.5 * (Victims.CollisionHeight + Victims.CollisionRadius) * dir,(damageScale * Momentum * dir)*dotDmg,DamageType);
+			Victims.TakeDamage(damageScale * VictimDamage*dotDmg,Instigator,
+			 Victims.Location - 0.5 * (Victims.CollisionHeight + Victims.CollisionRadius) * dir,(damageScale * VictimMomentum * dir)*dotDmg,DamageType);
 			if (Instigator != None && Vehicle(Victims) != None && Vehicle(Victims).Health > 0)
 				Vehicle(Victims).DriverRadiusDamage(DamageAmount, DamageRadius, Instigator.Controller, DamageType, Momentum, HitLocation);
 		}

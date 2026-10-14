@@ -1,5 +1,7 @@
 //=============================================================================
 // Winchester Fire
+// Goes on through up to four bodies past the first, its damage halved after each (KFFire.PenetratingTrace); it
+// always did full damage, so DamageMin is DamageMax.
 //=============================================================================
 class WinchesterFire extends KFFire;
 
@@ -37,127 +39,13 @@ function NormalSpeed()
 	FireAnim = default.FireAnim;
 }
 
-function DoTrace(Vector Start, Rotator Dir)
-{
-	local Vector X,Y,Z, End, HitLocation, HitNormal, ArcEnd;
-	local Actor Other;
-	local byte HitCount,HCounter;
-	local float HitDamage;
-	local KFPawn HitPawn;
-	local array<Actor>	IgnoreActors;
-	local Actor DamageActor;
-	local int i;
-
-	MaxRange();
-
-	Weapon.GetViewAxes(X, Y, Z);
-	if ( Weapon.WeaponCentered() )
-	{
-		ArcEnd = (Instigator.Location + Weapon.EffectOffset.X * X + 1.5 * Weapon.EffectOffset.Z * Z);
-	}
-	else
-    {
-        ArcEnd = (Instigator.Location + Instigator.CalcDrawOffset(Weapon) + Weapon.EffectOffset.X * X +
-		 Weapon.Hand * Weapon.EffectOffset.Y * Y + Weapon.EffectOffset.Z * Z);
-    }
-
-	X = Vector(Dir);
-	End = Start + TraceRange * X;
-	HitDamage = DamageMax;
-	While( (HitCount++)<10 )
-	{
-        DamageActor = none;
-
-		Other = Instigator.Trace(HitLocation, HitNormal, End, Start, True);
-		if( Other==None )
-		{
-			Break;
-		}
-		else if( Other==Instigator || Other.Base == Instigator )
-		{
-			IgnoreActors[IgnoreActors.Length] = Other;
-			Other.SetCollision(false);
-			Start = HitLocation;
-			Continue;
-		}
-
-		if( ExtendedZCollision(Other)!=None && Other.Owner!=None )
-		{
-            IgnoreActors[IgnoreActors.Length] = Other;
-            IgnoreActors[IgnoreActors.Length] = Other.Owner;
-			Other.SetCollision(false);
-			Other.Owner.SetCollision(false);
-			DamageActor = Pawn(Other.Owner);
-			Other = Other.Owner; // Redirect to the actual pawn for correct headshot handling
-		}
-
-		if ( !Other.bWorldGeometry && Other!=Level )
-		{
-			HitPawn = KFPawn(Other);
-
-	    	if ( HitPawn != none )
-	    	{
-                 // Hit detection debugging
-				 /*log("PreLaunchTrace hit "$HitPawn.PlayerReplicationInfo.PlayerName);
-				 HitPawn.HitStart = Start;
-				 HitPawn.HitEnd = End;*/
-                 if(!HitPawn.bDeleteMe)
-				 	HitPawn.TakeDamage(int(HitDamage), Instigator, HitLocation, Momentum*X,DamageType);
-
-                 // Hit detection debugging
-				 /*if( Level.NetMode == NM_Standalone)
-				 	  HitPawn.DrawBoneLocation();*/
-
-                IgnoreActors[IgnoreActors.Length] = Other;
-    			Other.SetCollision(false);
-    			DamageActor = Other;
-			}
-            else
-            {
-    			if( KFMonster(Other)!=None )
-    			{
-                    IgnoreActors[IgnoreActors.Length] = Other;
-        			Other.SetCollision(false);
-        			DamageActor = Other;
-    			}
-    			else if( DamageActor == none )
-    			{
-                    DamageActor = Other;
-    			}
-    			Other.TakeDamage(int(HitDamage), Instigator, HitLocation, Momentum*X, DamageType);
-			}
-			if( (HCounter++)>=4 || Pawn(DamageActor)==None )
-			{
-				Break;
-			}
-			HitDamage/=2;
-			Start = HitLocation;
-		}
-		else if ( HitScanBlockingVolume(Other)==None )
-		{
-			if( KFWeaponAttachment(Weapon.ThirdPersonActor)!=None )
-		      KFWeaponAttachment(Weapon.ThirdPersonActor).UpdateHit(Other,HitLocation,HitNormal);
-			Break;
-		}
-	}
-
-    // Turn the collision back on for any actors we turned it off
-	if ( IgnoreActors.Length > 0 )
-	{
-		for (i=0; i<IgnoreActors.Length; i++)
-		{
-			if (IgnoreActors[i] != None)
-				IgnoreActors[i].SetCollision(true);
-		}
-	}
-}
-
-
 defaultproperties
 {
      FireAimingAnim="AimFire"
      DamageType=Class'KFMod.DamTypeWinchester'
-     DamageMin=300
+     DamageMin=350
+     MaxPenetrations=4
+     PenDamageScale=0.500000
      DamageMax=350
      Momentum=18000.000000
      bPawnRapidFireAnim=True

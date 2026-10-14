@@ -5,6 +5,7 @@ var int SpeedValue;
 var int RangeValue;
 
 var bool bHideSale,bInitalInit,bHasThisGun;
+var class<Ammunition> AmmoType;	// its ammo (the fill button on what the player owns)
 
 function bool CanBuyMe(PlayerController p)
 {

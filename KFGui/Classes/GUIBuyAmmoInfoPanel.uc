@@ -65,11 +65,10 @@ defaultproperties
      l_fillcost=GUILabel'KFGui.GUIBuyAmmoInfoPanel.fillcost'
 
      Begin Object Class=GUILabel Name=clips
-         TextAlign=TXTA_Right
          TextColor=(B=200,G=200,R=200,A=100)
-         WinTop=0.600000
-         WinLeft=0.350000
-         WinWidth=0.500000
+         WinTop=0.800000
+         WinLeft=0.010000
+         WinWidth=0.950000
          WinHeight=0.070000
      End Object
      l_clips=GUILabel'KFGui.GUIBuyAmmoInfoPanel.clips'

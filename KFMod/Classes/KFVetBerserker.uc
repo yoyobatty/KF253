@@ -22,8 +22,9 @@ static function float GetMeleeMovementSpeedModifier()
 }
 static function int ReduceDamage( KFPawn Injured, Pawn Instigator, int InDamage, class<DamageType> DmgType )
 {
+	// 80% reduced Bloat Bile damage (rounded at random: rounded down, a tick of 2 or 3 came to nothing)
 	if ( class<DamTypeVomit>(DmgType) != none )
-		return float(InDamage) * 0.20; // 80% reduced Bloat Bile damage
+		return int(float(InDamage) * 0.20 + FRand());
 	if ( class<SirenScreamDamage>(DmgType) != none )
 		return float(InDamage) * 0.40; // 60% reduced Siren Scream damage
 
