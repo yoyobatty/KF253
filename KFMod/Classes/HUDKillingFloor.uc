@@ -107,6 +107,14 @@ var float MoodStart;  // when this HUD first drew for a player with a pawn
 
 var () float VeterancyMatScaleFactor;   // Amount to scale all Veterancy indicators on the HUD by
 var int FontPixels[9];   // how tall each of the HUD's fonts is, biggest first
+var float CornerUnits;   // the round icons in the top right corner, in the HUD's units (51.2 was 128 pixels on 1200 lines)
+var float ClockDigits;   // the countdown's digits, as a share of the size that fills the clock's window
+var float NameUnits;     // how tall the weapon's name is, in the HUD's units
+var float NameRoom;      // how wide it may be, in the HUD's units, before it is set smaller
+var float NameHold, NameFade;   // the name is shown this long after a change of weapon, then fades out over this long
+var transient Weapon NameWeapon;
+var transient float NameShownAt;
+var float Edge8X[8], Edge8Y[8];  // the eight ways round a letter, for a dark edge
 
 
 var float CurrentR,CurrentG,CurrentB;
@@ -336,7 +344,7 @@ simulated function SetHUDAlpha()
 	GrenadeIcon.Tints[0].A=KFHUDAlpha;
 	GrenadeIcon.Tints[1].A=KFHUDAlpha;
 	TorchBatteryIcon.Tints[0].A=KFHUDAlpha;
-	TorchBatteryIcon.Tints[0].A=KFHUDAlpha;
+	TorchBatteryIcon.Tints[1].A=KFHUDAlpha;
 	DigitsGrenade.Tints[0].A=KFHUDAlpha;
 	DigitsGrenade.Tints[1].A=KFHUDAlpha;
 	HealthArmourBorderLeft.Tints[0].A=KFHUDAlpha;
@@ -543,6 +551,47 @@ simulated function WidgetBox(Canvas C, SpriteWidget W, out float X, out float Y,
 		Y -= YL;
 }
 
+// Which of the HUD's fonts is nearest in size to so many pixels tall
+simulated function int NearestFont(float Want)
+{
+	local int i, Best;
+
+	Best = ArrayCount(FontPixels)-1;
+	for( i=0; i<ArrayCount(FontPixels); i++ )
+		if( Abs(FontPixels[i]-Want) < Abs(FontPixels[Best]-Want) )
+			Best = i;
+	return Best;
+}
+
+// The biggest of the HUD's fonts no taller than H in which S is no wider than W, narrowed down to Narrowest (a fifth
+// off if not said) if that keeps it a size bigger (FontScaleX is left set: put it back after drawing); the width S
+// takes is returned
+simulated function float FitFont(Canvas C, string S, float W, float H, optional float Narrowest)
+{
+	local int i;
+	local float XL, YL;
+
+	if( Narrowest<=0.0 )
+		Narrowest = 0.8;
+	for( i=0; i<ArrayCount(FontPixels)-1; i++ )
+		if( FontPixels[i]<=H )
+			break;
+	for( i=i; i<ArrayCount(FontPixels); i++ )
+	{
+		C.Font = LoadFont(i);
+		C.FontScaleX = 1.0;
+		C.StrLen(S, XL, YL);
+		if( XL*Narrowest<=W || i==ArrayCount(FontPixels)-1 )
+			break;
+	}
+	if( XL>W )
+	{
+		C.FontScaleX = W/XL;
+		XL = W;
+	}
+	return XL;
+}
+
 // The font nearest in size to what font Index is on a screen of 1200 lines
 simulated function Font HeightFont(Canvas C, int Index)
 {
@@ -725,7 +774,7 @@ simulated function DrawZombiesHUD(Canvas C)
 	C.TextSize("A", XL, YL);
 
 	C.SetDrawColor(200,20,20,255);
-	DrawZombiesText(C, "ROUND" @ (ZGRI.WaveNumber+1), C.ClipX-HudUnits(25.6), HudUnits(52.8));
+	DrawZombiesText(C, "ROUND" @ (ZGRI.WaveNumber+1), C.ClipX-HudUnits(CornerUnits*0.5), HudUnits(CornerUnits*1.03));
 
 	Y = C.ClipY*0.12;
 	C.SetDrawColor(255,255,255,255);
@@ -1329,12 +1378,13 @@ function CanvasDrawActors( Canvas C, bool bClearedZBuffer )
 
 simulated function DrawKFHUDTextElements(Canvas C)
 {
-	local float XL,YL,IS;
-	local int NumZombies,Min;
+	local float XL,YL,IS,S2,Grow,O;
+	local int NumZombies,Min,i;
+	local color Col;
 	local string S;
 
-	// the round icon in the corner: 128 pixels on a screen of 1200 lines
-	IS = HudUnits(51.2);
+	// the round icon in the corner: 160 pixels on a screen of 1200 lines
+	IS = HudUnits(CornerUnits);
 
 	// Countdown Text
 	if(!PlayerOwner.GameReplicationInfo.bMatchHasBegun || PlayerOwner.GameReplicationInfo == none)
@@ -1346,7 +1396,6 @@ simulated function DrawKFHUDTextElements(Canvas C)
 	if(!KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).bWaveInProgress)
 	{
 		C.SetDrawColor(255,255,255,KFHUDAlpha);
-		C.Font = HeightFont(C,7);
 
 		if (KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).TimeToNextWave > 5)
 			C.SetDrawColor(255,255,255,KFHUDAlpha);
@@ -1358,14 +1407,21 @@ simulated function DrawKFHUDTextElements(Canvas C)
 		S = Eval((Min>=10),string(Min),"0"$Min)$":"$Eval((NumZombies>=10),string(NumZombies),"0"$NumZombies);
 		C.SetPos(C.ClipX-IS,IS/64);
 		C.DrawTile(Material'KFKillMeNow.TimeRemainingIcon',IS,IS,0,0,256,256);
-		C.Strlen(S,XL,YL);
-		C.SetPos(C.ClipX-IS/2-(XL/2),IS*0.516-YL/2);
-		C.DrawText(S,False);
+		// (sized by the clock's little window, a little short of filling it; the digits' middle is four tenths of the
+		// way down their line, and is set on the window's middle)
+		XL = FitFont(C,"00:00",IS*0.35,IS*0.12,0.7);
+		C.StrLen("0",S2,YL);
+		C.FontScaleX *= ClockDigits;
+		C.FontScaleY = ClockDigits;
+		XL *= ClockDigits;
+		YL *= ClockDigits;
+		C.SetPos(C.ClipX-IS/2-(XL/2),IS*(1.0/64.0+0.497)-YL*0.4);
+		C.DrawTextClipped(S);
+		C.FontScaleX = 1.0;
+		C.FontScaleY = 1.0;
 	}
 	else
 	{
-		C.Font = HeightFont(C,1);
-
 		S = string(KFGameReplicationInfo(PlayerOwner.GameReplicationInfo).MaxMonsters);
 		C.SetPos(C.ClipX-IS,IS/64);
 		C.SetDrawColor(255,255,255,KFHUDAlpha);
@@ -1375,9 +1431,26 @@ simulated function DrawKFHUDTextElements(Canvas C)
 			C.SetDrawColor(255,255,80,KFHUDAlpha);
 		else C.SetDrawColor(255,50,50,KFHUDAlpha);
 
-		C.Strlen(S,XL,YL);
-		C.SetPos(C.ClipX-IS/2-(XL/2),IS*0.516-YL/2);
-		C.DrawText(S);
+		// (about a quarter of the icon tall: past the biggest font, the biggest drawn larger)
+		C.Font = LoadFont(NearestFont(IS*0.24));
+		Grow = FMax(1.0, IS*0.24/FontPixels[0]);
+		C.StrLen(S,XL,YL);
+		C.FontScaleX = Grow;
+		C.FontScaleY = Grow;
+		// (with a dark edge round it, against the white figure behind it)
+		Col = C.DrawColor;
+		O = FMax(1.0, float(int(IS/160.0)));
+		C.SetDrawColor(0,0,0,Col.A);
+		for( i=0; i<8; i++ )
+		{
+			C.SetPos(C.ClipX-IS/2-(XL*Grow/2)+O*Edge8X[i],IS*0.516-YL*Grow/2+O*Edge8Y[i]);
+			C.DrawTextClipped(S);
+		}
+		C.DrawColor = Col;
+		C.SetPos(C.ClipX-IS/2-(XL*Grow/2),IS*0.516-YL*Grow/2);
+		C.DrawTextClipped(S);
+		C.FontScaleX = 1.0;
+		C.FontScaleY = 1.0;
 	}
 }
 
@@ -1977,20 +2050,56 @@ simulated function DrawSpectatingHud( Canvas C )
 simulated function DrawWeaponName(Canvas C)
 {
 	local string CurWeaponName;
-	local float XL,YL;
-	
+	local float XL,YL,X,Right,SX,BX,BY,BXL,BYL,Fade;
+	local int i,Best;
+	local byte OldStyle;
+
 	if (  PawnOwner==None || PawnOwner.Weapon==None )
 	return;
-	
-	CurWeaponName = PawnOwner.Weapon.GetHumanReadableName();
 
-	C.Font  = GetFontSizeIndex( C, -1 );
-	C.SetDrawColor(255,50,50,KFHUDAlpha);
-	C.Strlen(CurWeaponName,XL,YL);
-	//C.SetPos( (C.ClipX/2) - (XL/2) + C.ClipX / 3 , C.ClipY*0.8-YL + C.ClipY / 8 + 10);
-	C.SetPos(C.ClipX - HudUnits(134.4), C.ClipY * 0.91);
-	C.DrawText(CurWeaponName);
+	CurWeaponName = PawnOwner.Weapon.GetHumanReadableName();
+	// (shown for a few seconds after the weapon changes, then faded out)
+	if( PawnOwner.Weapon!=NameWeapon )
+	{
+		NameWeapon = PawnOwner.Weapon;
+		NameShownAt = Level.TimeSeconds;
+	}
+	Fade = 1.0 - FClamp((Level.TimeSeconds-NameShownAt-NameHold)/NameFade,0.0,1.0);
+	if( Fade<=0.0 )
+		return;
+
+	// Sized by the HUD's scale as the rest of the corner is (the font went by the screen's width alone, and at 1280x720
+	// stood out over the grenade count), on the grenade's row and clear of its count. A name that does not fit where it
+	// begins moves left; one too long for that is set a size or two smaller, then narrowed. (A name that ran past the
+	// screen's edge was wrapped, and its last word lost.)
+	WidgetBox(C, GrenadeIcon, BX, BY, BXL, BYL);
+	SX = DigitsGrenade.TextureScale * HudCanvasScale * ResScaleX * HudScale;
+	Right = (DigitsGrenade.PosX * HudCanvasScale + (1.0 - HudCanvasScale) * 0.5) * C.SizeX + DigitsGrenade.OffsetX * SX
+		- Max(Len(string(DigitsGrenade.Value)),1) * 39.0 * SX - HudUnits(4.0);
+	Best = NearestFont(HudUnits(NameUnits));
+	C.Font = LoadFont(Best);
+	C.StrLen(CurWeaponName,XL,YL);
+	for( i=Best+1; i<ArrayCount(FontPixels) && XL>HudUnits(NameRoom) && FontPixels[i]>=0.75*FontPixels[Best]; i++ )
+	{
+		C.Font = LoadFont(i);
+		C.StrLen(CurWeaponName,XL,YL);
+	}
+	if( XL>HudUnits(NameRoom) )
+	{
+		C.FontScaleX = HudUnits(NameRoom)/XL;
+		XL = HudUnits(NameRoom);
+	}
+	X = FMin(C.ClipX - HudUnits(134.4), Right - XL);
+	OldStyle = C.Style;
+	C.Style = ERenderStyle.STY_Alpha;
+	C.SetDrawColor(255,50,50,byte(float(KFHUDAlpha)*Fade));
+	C.SetPos(X, BY + 0.5*BYL - 0.5*YL);
+	C.DrawTextClipped(CurWeaponName);
+	C.FontScaleX = 1.0;
+	C.Style = OldStyle;
 }
+
+
 
 /* Called when viewing a Matinee cinematic */
 simulated function DrawCinematicHUD( Canvas C )
@@ -2189,7 +2298,7 @@ defaultproperties
      AmmoIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=128,X2=191,Y2=63),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-16,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      BulletIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=64,X2=127,Y2=63),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-394,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      DividerIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(Y1=64,X2=31,Y2=127),TextureScale=0.300000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-219,OffsetY=-16,ScaleMode=SM_Right,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
-     TorchBatteryIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=14,Y1=180,X2=30,Y2=192),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosY=1.000000,OffsetX=-16,OffsetY=-100,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
+     TorchBatteryIcon=(WidgetTexture=Texture'KFKillMeNow.KFHUDIcons',RenderStyle=STY_Alpha,TextureCoords=(X1=14,Y1=180,X2=30,Y2=192),TextureScale=0.500000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-276,OffsetY=-100,Scale=1.000000,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      DigitsClipsLeft=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-74,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      DigitsNumLeftInClip=(RenderStyle=STY_Alpha,TextureScale=0.400000,DrawPivot=DP_LowerRight,PosX=1.000000,PosY=1.000000,OffsetX=-190,OffsetY=-15,Tints[0]=(B=255,G=255,R=255,A=255),Tints[1]=(B=255,G=255,R=255,A=255))
      HealthBarBackMat=Texture'InterfaceContent.Menu.BorderBoxD'
@@ -2212,6 +2321,24 @@ defaultproperties
      LevelActionPositionX=0.500000
      LevelActionPositionY=0.250000
      VeterancyMatScaleFactor=1.500000
+     CornerUnits=64.000000
+     ClockDigits=0.850000
+     NameHold=3.000000
+     NameFade=1.000000
+     Edge8X(0)=1.000000
+     Edge8X(1)=1.000000
+     Edge8X(3)=-1.000000
+     Edge8X(4)=-1.000000
+     Edge8X(5)=-1.000000
+     Edge8X(7)=1.000000
+     Edge8Y(1)=1.000000
+     Edge8Y(2)=1.000000
+     Edge8Y(3)=1.000000
+     Edge8Y(5)=-1.000000
+     Edge8Y(6)=-1.000000
+     Edge8Y(7)=-1.000000
+     NameUnits=9.600000
+     NameRoom=200.000000
      FontPixels(0)=37
      FontPixels(1)=29
      FontPixels(2)=24
