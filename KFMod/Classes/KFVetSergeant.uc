@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.GamesWon>=10 && (Other.GamesWon+Other.GamesLost)>=50);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Games won",Other.GamesWon,10)$"|"$Tally("Games played",Other.GamesWon+Other.GamesLost,50);
+}
 static function float GetSyringeChargeRate()
 {
 	Return 1.25;

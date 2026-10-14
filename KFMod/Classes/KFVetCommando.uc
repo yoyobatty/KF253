@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.StalkerKills>=20 && Other.BullpupDamage>10000);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Stalkers killed",Other.StalkerKills,20)$"|"$Tally("Bullpup damage dealt",Other.BullpupDamage,10000);
+}
 
 // Display enemy health bars
 static function SpecialHUDInfo( Canvas C )

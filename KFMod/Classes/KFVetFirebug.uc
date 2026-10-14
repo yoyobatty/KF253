@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.FlameThrowerDamage>=20000);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Flamethrower damage dealt",Other.FlameThrowerDamage,20000);
+}
 
 static function bool FlamingNades()
 {

@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.TotalHealed>=1000);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Hitpoints healed",Other.TotalHealed,1000);
+}
 static function float GetSyringeChargeRate()
 {
 	Return 2.5;

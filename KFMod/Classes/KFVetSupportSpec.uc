@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.TotalWelded>=2000 && Other.PowerWpnKills>=60);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Hitpoints welded",Other.TotalWelded,2000)$"|"$Tally("Power weapon kills",Other.PowerWpnKills,60);
+}
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
 {
 	if( DmgType==Class'DamTypeShotgun' || DmgType==Class'DamTypeDBShotgun' || DmgType==CLass'DamTypeFrag' )

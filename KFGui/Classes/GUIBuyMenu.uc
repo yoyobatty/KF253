@@ -245,10 +245,114 @@ function CloseSale(bool savePurchases)
 	KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo).bStartingEquipmentChosen = true;
 }
 
+// What a thing that is not a weapon will be charged at: a clip of ammo (nothing when there is no room for more),
+// armour by what is missing of it, anything else its price
+function float Charge(GUIBuyable b)
+{
+	if( BuyableAmmo(b)!=None && BuyableAmmo(b).FillCost(PlayerOwner().Pawn)<=0 )
+		Return 0;
+	if( BuyableVest(b)!=None )
+		Return VestCost();
+	Return b.cost;
+}
+// The cash shown, after something that costs Ask was asked for. Playing alone the purchase is made already and the
+// cash is read off. On a network client the answer is still on its way: the price is taken off meanwhile, and the
+// once-a-second look puts it right if the server said no. (Before, the cash shown stood still for a second or two
+// after ammo or armour was bought.)
+function Paid(float Was, float Ask)
+{
+	local float Is;
+
+	Is = PlayerOwner().PlayerReplicationInfo.Score;
+	if( Is!=Was )
+		playerscore = Is;
+	else if( PlayerOwner().Level.NetMode==NM_Client )
+		playerscore = Max(0,playerscore-int(Ask));
+}
+// The list made anew with the same thing chosen in it
+function Relist()
+{
+	local GUIBuyable Chosen;
+	local int i;
+
+	if( myItems.Index>=0 && myItems.Index<myItems.Elements.Length )
+		Chosen = myItems.Elements[myItems.Index];
+	CategoryChange(self);
+	for(i=0;i<myItems.Elements.Length;i++)
+	{
+		if( myItems.Elements[i]==Chosen )
+			myItems.SetIndex(i);
+	}
+	if( GUIBuyMenuFooter(t_Footer)!=None )
+		GUIBuyMenuFooter(t_Footer).SetPlayerStats(playerscore,playerweight);
+}
+function BuyableVest FindVest()
+{
+	local int i;
+	for(i=0;i<AllBuyableItems.length;i++)
+	{
+		if( BuyableVest(AllBuyableItems[i])!=None )
+			Return BuyableVest(AllBuyableItems[i]);
+	}
+	Return None;
+}
+// What mending the armour costs now, as KFPawn.ServerBuyKevlar charges; nothing if it is whole or not sold here
+function float VestCost()
+{
+	local float C;
+	local Pawn P;
+
+	P = PlayerOwner().Pawn;
+	if( P==None || P.ShieldStrength>=100 || FindVest()==None )
+		Return 0;
+	C = class'BuyableVest'.default.cost * (100.f - P.ShieldStrength)/100.f;
+	if( KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo)!=None && KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo).ClientVeteranSkill!=None )
+		C *= Class'KFPawn'.Static.GetCostScaling(GameDifficulty);
+	Return C;
+}
+// What filling every weapon's ammo costs now
+function float AmmoCost()
+{
+	local float C;
+	local int i;
+
+	for(i=0;i<AllBuyableItems.length;i++)
+	{
+		if( BuyableAmmo(AllBuyableItems[i])!=None && AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self) )
+			C += BuyableAmmo(AllBuyableItems[i]).FillCost(PlayerOwner().Pawn);
+	}
+	Return C;
+}
+// The refill button fills the ammo, and mends the armour as well when there is cash for both
+function bool RefillsArmour()
+{
+	local float V;
+
+	V = VestCost();
+	Return V>0 && playerscore>=AmmoCost()+V;
+}
+function float RefillCost()
+{
+	if( RefillsArmour() )
+		Return AmmoCost()+VestCost();
+	Return AmmoCost();
+}
+function string RefillCaption()
+{
+	local float C;
+
+	C = RefillCost();
+	if( C<=0 )
+		Return "Refill all";
+	if( RefillsArmour() || VestCost()<=0 )
+		Return "Refill all:"@int(C);
+	Return "Refill ammo:"@int(C);
+}
 function BuyCurrent()
 {
 	local GUIBuyable b;
 	local int i;
+	local float Was,Ask;
 
 	if( myItems.Index<0 || myItems.Index>=myItems.Elements.Length )
 		Return;
@@ -265,6 +369,8 @@ function BuyCurrent()
 	}
 	else
 	{
+		Was = PlayerOwner().PlayerReplicationInfo.Score;
+		Ask = Charge(b);
 		b.BuyMe(KFPawn(playerOwner().Pawn));
 		if( b.relatedInventory!=None && b.relatedInventory.default.PickupClass!=None )
 			BuySound = b.relatedInventory.default.PickupClass.default.PickupSound;
@@ -275,6 +381,7 @@ function BuyCurrent()
 			playerscore -= b.cost;
 			playerweight += b.weight;
 		}
+		else Paid(Was,Ask);
 	}
 	PendingChecks = 2;
 
@@ -294,27 +401,37 @@ function BuyCurrent()
 function BuyFill()
 {
 	local BuyableAmmo b;
+	local float Was,Ask;
 
+	if( myItems.Index<0 || myItems.Index>=myItems.Elements.Length )
+		Return;
 	b = BuyableAmmo(myItems.Elements[myItems.Index]);
+	if( b==None )
+		Return;
+	Was = PlayerOwner().PlayerReplicationInfo.Score;
+	Ask = b.FillCost(PlayerOwner().Pawn);
 	b.FillMe(KFPawn(playerOwner().pawn));
+	Paid(Was,Ask);
 	PendingChecks = 2;
-	myCategories.IndexChanged(myItems);
+	Relist();
 }
 
 function bool CanAutoAmmo()
 {
-	local int requiredScore,i;
-	for(i=0;i<AllBuyableItems.length;i++)
-	{
-		if(AllBuyableItems[i].IsA('BuyableAmmo') && AllBuyableItems[i].ShowMe(PlayerOwner().Pawn,eSaleCat(5),self))
-			requiredScore += BuyableAmmo(AllBuyableItems[i]).FillCost(PlayerOwner().Pawn);
-	}
-	return playerscore >= requiredScore;
-}
+	local float C;
 
+	C = RefillCost();
+	return C>0 && playerscore>=C;
+}
 function DoAutoAmmo()
 {
 	local int i;
+	local float Was,Ask;
+	local bool bArmour;
+
+	Was = PlayerOwner().PlayerReplicationInfo.Score;
+	Ask = RefillCost();
+	bArmour = RefillsArmour();
 
 	for(i=0;i<AllBuyableItems.length;i++)
 	{
@@ -324,9 +441,11 @@ function DoAutoAmmo()
 				BuyableAmmo(AllBuyableItems[i]).FillMe(KFPawn(playerOwner().pawn));
 		}
 	}
+	if( bArmour && FindVest()!=None )
+		FindVest().BuyMe(KFPawn(playerOwner().pawn));
+	Paid(Was,Ask);
 	PendingChecks = 2;
-	myCategories.IndexChanged(myItems);
-	GUIBuyMenuFooter(t_Footer).SetPlayerStats(playerscore,playerweight);
+	Relist();
 }
 
 function BuyableWeapon FindWeapon(class<Inventory> WeaponType)

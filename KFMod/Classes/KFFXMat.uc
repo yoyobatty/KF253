@@ -18,8 +18,8 @@ static function ConstantColor Tone(out array<Object> Made, LevelInfo L, int V, i
 	return K;
 }
 
-// Two things put together. What: 0 one times the other, 1 the second less the first, 2 the second as it is.
-// For 1 and 2 the result is as solid as the first.
+// Two things put together. What: 0 one times the other, 1 the second less the first, 2 the second as it is,
+// 3 one plus the other. For 1 and 2 the result is as solid as the first.
 static function Combiner Mix(out array<Object> Made, LevelInfo L, Material A, Material B, int What)
 {
 	local Combiner M;
@@ -43,6 +43,8 @@ static function Combiner Mix(out array<Object> Made, LevelInfo L, Material A, Ma
 		M.CombineOperation = CO_Use_Color_From_Material2;
 		M.AlphaOperation = AO_Use_Alpha_From_Material1;
 	}
+	else if (What == 3)
+		M.CombineOperation = CO_Add;
 	Made[Made.Length] = M;
 	return M;
 }
@@ -66,7 +68,8 @@ static function Combiner Fade(out array<Object> Made, LevelInfo L, Material A, M
 }
 
 // A material as it is drawn. How: 0 over what is there by how solid it is, 1 added to what is there by how solid
-// it is, 2 not at all (a picture drawn so is only made ready).
+// it is, 2 not at all (a picture drawn so is only made ready), 3 what is there times it and doubled, 4 in place
+// of what is there.
 static function FinalBlend Paint(out array<Object> Made, LevelInfo L, Material M, int How)
 {
 	local FinalBlend B;
@@ -77,6 +80,10 @@ static function FinalBlend Paint(out array<Object> Made, LevelInfo L, Material M
 		B.FrameBufferBlending = FB_Brighten;
 	else if (How == 2)
 		B.FrameBufferBlending = FB_Invisible;
+	else if (How == 3)
+		B.FrameBufferBlending = FB_Modulate;
+	else if (How == 4)
+		B.FrameBufferBlending = FB_Overwrite;
 	else
 		B.FrameBufferBlending = FB_AlphaBlend;
 	B.ZWrite = false;

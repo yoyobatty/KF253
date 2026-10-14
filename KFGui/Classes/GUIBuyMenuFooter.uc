@@ -36,6 +36,8 @@ function SetBuyMode(string buyCaption,bool buyEnabled,bool fillVisible,bool fill
 {
 	local bool AutoAmmoEnabled;
 	AutoAmmoEnabled = GUIBuyMenu(PageOwner).CanAutoAmmo();
+	// (the refill button says what it will spend)
+	b_AutoAll.Caption = GUIBuyMenu(PageOwner).RefillCaption();
 	b_buy.Caption = buyCaption;
 	if(buyEnabled && b_buy.MenuState == MSAT_Disabled)
 	{
@@ -238,9 +240,9 @@ defaultproperties
      b_Complete=GUIButton'KFGui.GUIBuyMenuFooter.Complete'
 
      Begin Object Class=GUIButton Name=AutoAmmo
-         Caption="AutoAmmo"
+         Caption="Refill all"
          StyleName="FooterButton"
-         Hint="Fill ammo for all weapons."
+         Hint="Fill every weapon's ammo, and mend your armour if you have the cash for both."
          WinTop=-0.014645
          WinLeft=0.006149
          WinWidth=0.112219

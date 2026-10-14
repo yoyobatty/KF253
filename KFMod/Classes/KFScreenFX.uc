@@ -1,6 +1,6 @@
 //=============================================================================
-// KFScreenFX - bloom and the hit blur, both made from the frame itself
-// (KFFrameTap). One for the player at this machine, in each level.
+// KFScreenFX - bloom, the hit blur and vivid colour, all made from the frame
+// itself (KFFrameTap). One for the player at this machine, in each level.
 //
 // Bloom: what is bright in the frame (the frame less a grey, doubled) is
 // blurred three times over, each at half the size of the one before, and the
@@ -11,6 +11,19 @@
 // player was hit, so the view goes out of focus and comes back. The steps
 // are in the screen's own shape and a set share of its size, so the blur is
 // as strong across as down and the same on a small screen as on a large one.
+//
+// Vivid: more colour over the whole view, by one number of a hundred (100 is
+// the view as it is). Nothing here can mix red, green and blue, so it is not
+// a saturation control: it is a curve on each alone that lets the strong pull
+// ahead of the weak. The view is multiplied by a grey plus a share of the
+// frame itself, doubled, so each colour comes out as
+//     Low * colour + Rich * colour * colour
+// The squared part counts for more the brighter the colour is: the dark parts
+// keep the colour they had and are dimmed a little (Low), the middle and the
+// bright parts gain colour and light. Low is worked out so that a thing as
+// bright as VividRest is left as bright as it was. Under 100 a plain grey is
+// laid over the view instead, as solid as the number is short of 100. Bloom
+// is made from the frame as it was drawn and added afterwards, unchanged.
 //
 // Camera overlays lay both on, after the level is drawn and before the weapon
 // and the HUD. The pictures are made when the first overlay asks for them, so
@@ -25,7 +38,9 @@
 class KFScreenFX extends Actor
 	config(User);
 
-var() globalconfig bool		bBloom, bHitBlur;
+var() globalconfig bool		bBloom, bHitBlur, bVivid;
+var() globalconfig int		VividMuch;			// how much colour, of a hundred: 100 is the view as it is, up to 160 for more, down to 0 for less
+var() globalconfig float	VividRest;			// how bright a thing is left as bright as it was (and the grey the view fades to under 100)
 var() globalconfig float	BloomGain;			// how strong the glow is
 var() globalconfig int		BloomCut;			// what is darker than this, of 255, does not glow
 var() float					BlurPerDamage;		// blur from each point of damage (1 is all of it)
@@ -34,6 +49,7 @@ var() float					BlurSmallHit;		// ...unless it took less health than this: then 
 var() float					BlurShrink;			// how many of the screen's pixels, each way, one pixel of the first soft picture stands for
 var() float					BlurHold;			// seconds a hit's blur stays before it starts to clear
 var() float					BlurFadeTime;		// seconds for a full blur to clear
+var() float					VividPerRich;		// how many of VividMuch, over 100, add the whole of the view's own square
 
 var KFFrameTap				Tap;
 var PlayerController		PC;
@@ -50,6 +66,15 @@ var CameraOverlay			GlowReady, GlowLay;
 var array<Object>			BloomMade;
 var bool					bBloomMade;
 
+// Vivid
+var ScriptedTexture			VividGrey;
+var ConstantColor			VividShare, VividKeep, VividVeil;
+var Material				VividFill, VividMat;
+var CameraOverlay			VividReady, VividLay, VividFade;
+var array<Object>			VividMade;
+var bool					bVividMade;
+var int						VividNow;			// the number in force this frame (100 when it is off)
+
 // Hit blur
 var ScriptedTexture			Soft[3];
 var Material				FrameLayer[16], SoftLayer1[9], SoftLayer2[9], SoftSeen[3];
@@ -62,18 +87,20 @@ var int						SoftForX, SoftForY;	// the screen size and the shrink the soft pict
 var float					SoftForShrink;
 
 // From the settings menu: kept, and taken up by the game in progress
-static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur)
+static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, bool bNewVivid)
 {
 	local KFScreenFX FX;
 
 	default.bBloom = bNewBloom;
 	default.bHitBlur = bNewHitBlur;
+	default.bVivid = bNewVivid;
 	StaticSaveConfig();
 	FX = class'KFFrameTap'.static.GetFX(P);
 	if (FX != None)
 	{
 		FX.bBloom = bNewBloom;
 		FX.bHitBlur = bNewHitBlur;
+		FX.bVivid = bNewVivid;
 		if (!bNewHitBlur)
 			FX.BlurLevel = 0;
 	}
@@ -107,8 +134,12 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 	if (BlurLevel > 0.0 && Level.TimeSeconds > BlurHoldUntil)
 		BlurLevel = FMax(0.0, BlurLevel - DT / BlurFadeTime);
 
+	VividNow = 100;
+	if (bVivid)
+		VividNow = Clamp(VividMuch, 0, 100 + int(2.0 * VividPerRich));
+
 	// (until the frame's picture has been found once the blur stays on, effect or no effect: see KFFrameTap)
-	if (!bBloom && BlurLevel <= 0.0 && Tap.Frame != None)
+	if (!bBloom && VividNow == 100 && BlurLevel <= 0.0 && Tap.Frame != None)
 	{
 		Hang(Want);
 		Tap.Unfit(PC);
@@ -124,6 +155,19 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 			Mend = Overlay(class'KFFXMat'.static.Paint(MendMade, Level, class'KFFXMat'.static.Mix(MendMade, Level,
 				class'KFFXMat'.static.Tone(MendMade, Level, 255, 255), Tap.Frame, 2), 0));
 		Want[Want.Length] = Mend;
+	}
+	if (VividNow != 100)
+	{
+		if (!bVividMade)
+			BuildVivid();
+		SetVivid();
+	}
+	// (more colour goes on before the blur's soft pictures, which are given the same colours as they are made)
+	if (VividNow > 100)
+	{
+		VividGrey.Revision++;
+		Want[Want.Length] = VividReady;
+		Want[Want.Length] = VividLay;
 	}
 	if (BlurLevel > 0.0)
 	{
@@ -142,6 +186,9 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 			Soft[i].Revision++;
 		}
 	}
+	// (less colour is a veil over all of it)
+	if (VividNow < 100)
+		Want[Want.Length] = VividFade;
 	if (bBloom)
 	{
 		if (!bBloomMade)
@@ -233,6 +280,53 @@ simulated function BuildBloom()
 	GlowLay = Overlay(class'KFFXMat'.static.Paint(BloomMade, Level,
 		class'KFFXMat'.static.Mix(BloomMade, Level, class'KFFXMat'.static.Tone(BloomMade, Level, 255, 255), Glow, 0), 1));
 	bBloomMade = true;
+}
+
+simulated function BuildVivid()
+{
+	local Combiner M;
+
+	// more: the frame times a share, and a grey. A row of materials may have one plain colour, so the grey is a
+	// small picture of its own, filled with one.
+	VividGrey = class'KFFXMat'.static.Sheet(VividMade, Level, self, 4, 4);
+	VividKeep = class'KFFXMat'.static.Tone(VividMade, Level, 0, 255);
+	VividFill = class'KFFXMat'.static.Paint(VividMade, Level,
+		class'KFFXMat'.static.Mix(VividMade, Level, VividKeep, Texture'Engine.WhiteTexture', 0), 4);
+	VividShare = class'KFFXMat'.static.Tone(VividMade, Level, 0, 255);
+	VividMat = class'KFFXMat'.static.Paint(VividMade, Level, class'KFFXMat'.static.Mix(VividMade, Level,
+		class'KFFXMat'.static.Mix(VividMade, Level, VividShare, Tap.Frame, 0), VividGrey, 3), 3);
+	VividReady = Overlay(class'KFFXMat'.static.Paint(VividMade, Level, VividGrey, 2));
+	VividLay = Overlay(VividMat);
+	// less: a plain grey, as solid as it is told
+	VividVeil = class'KFFXMat'.static.Tone(VividMade, Level, 64, 0);
+	M = class'KFFXMat'.static.Mix(VividMade, Level, VividVeil, Texture'Engine.WhiteTexture', 0);
+	M.AlphaOperation = AO_Use_Alpha_From_Material1;
+	VividFade = Overlay(class'KFFXMat'.static.Paint(VividMade, Level, M, 0));
+	bVividMade = true;
+}
+
+// The greys vivid works with, from the number and the brightness that is left as it is
+simulated function SetVivid()
+{
+	local float Rich, Low, Rest;
+	local int V;
+
+	Rest = FClamp(VividRest, 0.05, 0.6);
+	if (VividNow > 100)
+	{
+		Rich = FClamp(float(VividNow - 100) / FMax(1.0, VividPerRich), 0.0, 2.0);
+		Low = FMax(0.0, 1.0 - Rest * Rich);
+		// (the overlay doubles what it multiplies by: half of each goes in)
+		V = Clamp(int(127.5 * Rich + 0.5), 0, 255);
+		VividShare.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
+		V = Clamp(int(127.5 * Low + 0.5), 0, 255);
+		VividKeep.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
+	}
+	else
+	{
+		V = Clamp(int(255.0 * Rest + 0.5), 0, 255);
+		VividVeil.Color = class'Canvas'.static.MakeColor(V, V, V, Clamp(int(2.55 * float(100 - VividNow) + 0.5), 0, 255));
+	}
 }
 
 // How strong the glow is, shared out among the three blurs, and the grey that is taken from the frame
@@ -332,6 +426,11 @@ simulated function Destroyed()
 	Shut(SoftReady);
 	for (i = 0; i < 3; i++)
 		Shut(SoftLay[i]);
+	Shut(VividReady);
+	Shut(VividLay);
+	Shut(VividFade);
+	class'KFFXMat'.static.FreeAll(VividMade, Level);
+	bVividMade = false;
 	class'KFFXMat'.static.FreeAll(MendMade, Level);
 	class'KFFXMat'.static.FreeAll(BloomMade, Level);
 	class'KFFXMat'.static.FreeAll(SoftMade, Level);
@@ -413,6 +512,8 @@ simulated event RenderTexture(ScriptedTexture Tex)
 			for (j = 0; j < n; j++)
 				Tex.DrawTile(0, 0, 512, 512, Spread(i, n) * FW / 512.0, Spread(j, n) * FH / 512.0, FW, FH, BrightTap, W);
 	}
+	else if (bVividMade && Tex == VividGrey)
+		Tex.DrawTile(0, 0, 4, 4, 0, 0, 1, 1, VividFill, W);
 	else if (Tex == Blur1)
 		Smear(Tex, 256, Tap1, 512, 1.2);
 	else if (Tex == Blur2)
@@ -434,6 +535,9 @@ simulated event RenderTexture(ScriptedTexture Tex)
 			for (j = 0; j < n; j++)
 				Tex.DrawTile(0, 0, SoftW[0], SoftH[0], Spread(i, n) * FW / float(SoftW[0]), Spread(j, n) * FH / float(SoftH[0]),
 					FW, FH, FrameLayer[i * n + j], W);
+		// (the colours the sharp view has: the two softer pictures are made from this one)
+		if (bVividMade && VividNow > 100)
+			Tex.DrawTile(0, 0, SoftW[0], SoftH[0], 0, 0, FW, FH, VividMat, W);
 	}
 }
 
@@ -441,6 +545,10 @@ defaultproperties
 {
      bBloom=True
      bHitBlur=True
+     bVivid=True
+     VividMuch=120
+     VividRest=0.250000
+     VividPerRich=30.000000
      BloomGain=0.600000
      BloomCut=110
      BlurPerDamage=0.025000

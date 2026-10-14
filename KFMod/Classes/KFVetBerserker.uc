@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.TotalMeleeDamage>=10000);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Melee damage dealt",Other.TotalMeleeDamage,10000);
+}
 
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
 {

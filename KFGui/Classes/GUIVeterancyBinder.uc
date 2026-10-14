@@ -7,9 +7,11 @@ var Automated array<GUIVeterancyButton> bSkills;
 var array< Class<KFVeterancyTypes> > SkillsCl;
 var Class<KFVeterancyTypes> ChosenClass;
 
-var bool bIgnoreEsc,bPerButtonSizes,bHasAddedPerks;
+var bool bIgnoreEsc,bPerButtonSizes,bHasAddedPerks,bAsked;
+var array<string> SkillText;	// what each perk gives, or what it takes and how far along that is
+var float PanelX,PanelY;		// where the panel that says so is drawn: beside the tiles
 
-function AddSkill( Class<KFVeterancyTypes> VCl, bool bEnabled )
+function AddSkill( Class<KFVeterancyTypes> VCl, bool bEnabled, optional string Progress )
 {
 	local int i;
 	local string S;
@@ -30,9 +32,16 @@ function AddSkill( Class<KFVeterancyTypes> VCl, bool bEnabled )
 	bSkills[i].WinHeight = 3.5;
 	if( bEnabled )
 		S = VCl.Default.VeterancyDescription;
-	else S = VCl.Default.VeterancyRequirement;
-	ReplaceText(S,"|",Chr(10));
-	bSkills[i].Hint = S;
+	else
+	{
+		S = VCl.Default.VeterancyRequirement;
+		if( Progress!="" )
+			S = S$"||SO FAR:||"$Progress;
+	}
+	// (said in the panel beside the tiles, not in a tooltip: it is there without waiting over a tile)
+	SkillText[i] = S;
+	bSkills[i].Hint = "";
+	bSkills[i].OnDblClick = InternalOnDblClick;
 	AppendComponent(bSkills[i],False);
 	if( !bEnabled )
 		bSkills[i].MakeMeUnavailable();
@@ -47,14 +56,23 @@ function bool InternalOnPreDraw(Canvas Canvas)
 	if( !bHasAddedPerks )
 	{
 		PC = KFPlayerController(PlayerOwner());
-		if( PC.ClientStatsState==2 )
+		if( !bAsked )
+		{
+			// (asked for anew each time the screen opens: how far along each perk is has moved on)
+			bAsked = True;
+			PC.RefreshClasses();
+		}
+		else if( PC.ClientStatsState==2 )
 		{
 			for( i=0; i<PC.ActStats.Length; i++ )
-				AddSkill(PC.ActStats[i].VetCl,PC.ActStats[i].bNotified);
+			{
+				if( i<PC.ActProgress.Length )
+					AddSkill(PC.ActStats[i].VetCl,PC.ActStats[i].bNotified,PC.ActProgress[i]);
+				else AddSkill(PC.ActStats[i].VetCl,PC.ActStats[i].bNotified);
+			}
 			bHasAddedPerks = True;
 			bStillInit = True;
 		}
-		else PC.RequestForClasses();
 	}
 	// They stopped growing at 140 by 120 pixels: on a bigger screen they keep the share of its height a 4:3 screen gave them.
 	SX = FMax(FClamp(Canvas.ClipX/10,20,140),Canvas.ClipY/7.5);
@@ -94,7 +112,127 @@ function bool InternalOnPreDraw(Canvas Canvas)
 		}
 	}
 	bContinue.WinTop = FYL+2;
+	PanelX = XLeft+SX+Canvas.ClipX/60.0;
+	PanelY = Canvas.ClipY/30.0;
 	return false;
+}
+// A double click on a perk that can be had takes it and closes the screen
+function bool InternalOnDblClick(GUIComponent Sender)
+{
+	local int i;
+	if( GUIVeterancyButton(Sender)==None || GUIVeterancyButton(Sender).bNoSelectMe )
+		return false;
+	for( i=0; i<bSkills.Length; i++ )
+	{
+		if( bSkills[i]==Sender )
+		{
+			ChosenClass = SkillsCl[i];
+			KFPlayerController(PlayerOwner()).SelectVeterancy(ChosenClass);
+			Controller.CloseMenu();
+			return true;
+		}
+	}
+	return false;
+}
+// Beside the tiles: what the perk under the mouse gives, or what it takes and how far along that is. With the mouse
+// on none, the one clicked; with none clicked, the one the player has. And a frame round the one clicked.
+function InternalOnRendered(Canvas C)
+{
+	local int i,Show,Chosen;
+	local float W,H,XL,YL,Pad,Y,L,T,BW,BH;
+	local array<string> Lines;
+	local string Foot;
+	local Class<KFVeterancyTypes> Mine;
+
+	Show = -1;
+	Chosen = -1;
+	if( KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo)!=None )
+		Mine = KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo).ClientVeteranSkill;
+	for( i=0; i<bSkills.Length; i++ )
+	{
+		if( ChosenClass!=None && SkillsCl[i]==ChosenClass )
+			Chosen = i;
+		if( bSkills[i].MenuState==MSAT_Watched || bSkills[i].MenuState==MSAT_Pressed )
+			Show = i;
+	}
+	if( Show<0 )
+		Show = Chosen;
+	for( i=0; i<bSkills.Length && Show<0; i++ )
+	{
+		if( Mine!=None && SkillsCl[i]==Mine )
+			Show = i;
+	}
+	C.Style = 5;
+	if( Chosen>=0 )
+	{
+		L = bSkills[Chosen].ActualLeft();
+		T = bSkills[Chosen].ActualTop();
+		BW = bSkills[Chosen].ActualWidth();
+		BH = bSkills[Chosen].ActualHeight();
+		C.SetDrawColor(250,100,100,255);
+		C.SetPos(L,T);
+		C.DrawTile(Texture'Engine.WhiteTexture',BW,2,0,0,1,1);
+		C.SetPos(L,T+BH-2);
+		C.DrawTile(Texture'Engine.WhiteTexture',BW,2,0,0,1,1);
+		C.SetPos(L,T);
+		C.DrawTile(Texture'Engine.WhiteTexture',2,BH,0,0,1,1);
+		C.SetPos(L+BW-2,T);
+		C.DrawTile(Texture'Engine.WhiteTexture',2,BH,0,0,1,1);
+	}
+	if( Show>=0 && Show<SkillText.Length )
+	{
+		// the biggest of the HUD's fonts whose lines are no taller than a thirty-eighth of the screen
+		for( i=0; i<8; i++ )
+		{
+			C.Font = class'HudBase'.static.LoadFontStatic(i);
+			C.TextSize("Wg",XL,YL);
+			if( YL<=C.ClipY/38.0 )
+				break;
+		}
+		Pad = YL*0.6;
+		W = FMin(C.ClipX*0.44,C.ClipX-PanelX-C.ClipX/60.0);
+		C.WrapStringToArray(SkillText[Show],Lines,W-2.0*Pad,"|");
+		// (what a perk gives begins with its name; what one takes does not, and gets the name as a heading)
+		H = float(Lines.Length+3)*YL+2.0*Pad;
+		if( bSkills[Show].bNoSelectMe )
+			H += YL;
+		C.SetDrawColor(0,0,0,200);
+		C.SetPos(PanelX,PanelY);
+		C.DrawTile(Texture'Engine.WhiteTexture',W,H,0,0,1,1);
+		Y = PanelY+Pad;
+		if( bSkills[Show].bNoSelectMe )
+		{
+			C.SetDrawColor(250,100,100,255);
+			C.SetPos(PanelX+Pad,Y);
+			C.DrawText(SkillsCl[Show].Default.VeterancyName);
+			Y += YL;
+		}
+		Foot = "";
+		for( i=0; i<Lines.Length; i++ )
+		{
+			// (its first line that says anything is the heading)
+			if( !bSkills[Show].bNoSelectMe && Foot=="" && Lines[i]!="" )
+			{
+				Foot = Lines[i];
+				C.SetDrawColor(250,100,100,255);
+			}
+			else C.SetDrawColor(220,220,220,255);
+			C.SetPos(PanelX+Pad,Y);
+			C.DrawText(Lines[i]);
+			Y += YL;
+		}
+		if( bSkills[Show].bNoSelectMe )
+			Foot = "Not earned yet";
+		else if( Mine!=None && SkillsCl[Show]==Mine )
+			Foot = "This is your perk now";
+		else Foot = "Double-click to take it";
+		Y += YL;
+		C.SetDrawColor(250,100,100,255);
+		C.SetPos(PanelX+Pad,Y);
+		C.DrawText(Foot);
+	}
+	C.Style = 1;
+	C.SetDrawColor(255,255,255,255);
 }
 
 function bool InternalOnClick(GUIComponent Sender)
@@ -186,6 +324,7 @@ defaultproperties
      WinTop=0.475000
      WinHeight=1.000000
      OnPreDraw=GUIVeterancyBinder.InternalOnPreDraw
+     OnRendered=GUIVeterancyBinder.InternalOnRendered
      OnMouseRelease=GUIVeterancyBinder.InternalOnMouseRelease
      OnKeyEvent=GUIVeterancyBinder.InternalOnKeyEvent
 }

@@ -101,7 +101,9 @@ var material LastWeaponMat;
 var float NextModLogTime;
 
 var bool bInitialDark;  // a variable that initializes the overlay as black so theres' no pop-in when it adjusts to the zone color
+var bool bScreenFXStarted;  // the frame tap that bloom, vivid and the hit blur are made from is there
 var bool bHasFogTint; 
+var float MoodStart;  // when this HUD first drew for a player with a pawn
 
 var () float VeterancyMatScaleFactor;   // Amount to scale all Veterancy indicators on the HUD by
 var int FontPixels[9];   // how tall each of the HUD's fonts is, biggest first
@@ -160,12 +162,20 @@ simulated function PostBeginPlay()
 	}
 	Super.PostBeginPlay();
 	SetHUDAlpha();
-	// bloom and the hit blur start with the HUD
-	class'KFFrameTap'.static.Of(PlayerOwner);
+	// bloom, vivid and the hit blur start with the HUD
+	StartScreenFX();
 	foreach DynamicActors(class'KFSPLevelInfo', KFLevelRule)
 		Break;
 	if ( CustomCrosshairsAllowed() )
 		SetCustomCrosshairs();
+}
+
+// On a network client the player's screen is not always there yet when the HUD begins: asked again from each
+// frame's drawing until the tap is made.
+simulated function StartScreenFX()
+{
+	if ( !bScreenFXStarted )
+		bScreenFXStarted = (class'KFFrameTap'.static.Of(PlayerOwner) != None);
 }
 
 function bool CustomCrosshairsAllowed()
@@ -585,6 +595,7 @@ simulated function DrawHud( Canvas C )
 
 	UpdateHud();
 
+	StartScreenFX();
 	PassStyle = STY_Modulated;
 	DrawModOverlay(C);
 
@@ -1435,8 +1446,8 @@ simulated function Timer()
 simulated function DrawModOverlay( Canvas C )
 {
 	local int FinalR, FinalG, FinalB;
-	local int MaxRBrighten, MaxGBrighten, MaxBBrighten;
-	local int BaseR, BaseG, BaseB;
+	local float MaxRBrighten, MaxGBrighten, MaxBBrighten;
+	local float BaseR, BaseG, BaseB;
 
 	C.SetPos(0,0);
 
@@ -1477,6 +1488,7 @@ simulated function DrawModOverlay( Canvas C )
 		{
 			C.SetDrawColor(255,255,255,GrainAlpha);
 			C.DrawTile(GhostMat,C.SizeX,C.SizeY,0,0,1024,1024);
+			return;
 		}
 		// Hook for fade in from black at the start.
 		if(!bInitialDark && PlayerOwner.PlayerReplicationInfo.bReadyToPlay)
@@ -1494,8 +1506,11 @@ simulated function DrawModOverlay( Canvas C )
 		if (KFLevelRule != None && !KFLevelRule.bUseVisionOverlay)
 			return;
 
-        // Choose base color: if we never picked up a fog tint, use neutral white so screen isn't black.
-        if( LastR==0 && LastG==0 && LastB==0 )
+        // The fog he stands in is taken up before this frame is drawn with it.
+        TrackMoodZone();
+
+        // Choose base color: until a fog tint has been picked up (or if the one in force is plain black), white, so the screen isn't black.
+        if( !bHasFogTint || (LastR==0 && LastG==0 && LastB==0 && !bZoneChanged) )
         {
             BaseR = 255;
             BaseG = 255;
@@ -1509,9 +1524,9 @@ simulated function DrawModOverlay( Canvas C )
         }
 
         // Original zone-based tinting logic (now using Base* instead of Last*)
-        MaxRBrighten = Round(BaseR * (1.0 - (BaseR / 255)) - 2);
-        MaxGBrighten = Round(BaseG * (1.0 - (BaseG / 255)) - 2);
-        MaxBBrighten = Round(BaseB * (1.0 - (BaseB / 255)) - 2);
+        MaxRBrighten = Round(BaseR * (1.0 - (BaseR / 255.0)) - 2);
+        MaxGBrighten = Round(BaseG * (1.0 - (BaseG / 255.0)) - 2);
+        MaxBBrighten = Round(BaseB * (1.0 - (BaseB / 255.0)) - 2);
 
         // Blend the mod overlay color with grayscale based on DesaturationFactor
         FinalR = Round((BaseR + MaxRBrighten) * (DesaturationFactor));
@@ -1535,58 +1550,84 @@ simulated function DrawModOverlay( Canvas C )
                 C.ColorModulate.Z = LastB;  //B
                 */
 
-		// Here we change over the Zone.
-		// What happens of importance is
-		// A.  Set Old Zone to current
-		// B.  Set New Zone
-		// C.  Set Color info up for use by Tick()
-
-		// if we're in a new zone or volume without distance fog...just , dont touch anything.
-		// the physicsvolume check is abit screwy because the player is always in a volume called "DefaultPhyicsVolume"
-		// so we've gotta make sure that the return checks take this into consideration.
-
-		if (PlayerOwner != none && PlayerOwner.Pawn != none)
+		if (!bTicksTurn && bZoneChanged)
 		{
-			// This block of code here just makes sure that if we've already got a tint, and we step into a zone/volume without
-			// bDistanceFog, our current tint is not affected.
-			// a.  If I'm in a zone and its not bDistanceFog. AND IM NOT IN A PHYSICSVOLUME. Just a zone.
-			// b.  If I'm in a Volume
-			if( PlayerOwner.PlayerReplicationInfo.PlayerZone != none && !PlayerOwner.PlayerReplicationInfo.PlayerZone.bDistanceFog
-			 && PlayerOwner.PlayerReplicationInfo.PlayerVolume == none || DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None
-			 && !PlayerOwner.pawn.PhysicsVolume.bDistanceFog )
-				return;
+			// Pass it off to the tick now
+			// valueCheckout signifies that none of the three values have been
+			// altered by Tick() yet.
+
+			// BOUNCE IT BACK! :D
+			ValueCheckOut = 0;
+			bTicksTurn = true;
+			SetTimer(OverlayFadeSpeed,false);
 		}
-		if (PlayerOwner != none && !bZoneChanged && PlayerOwner.Pawn != none)
-		{
-			// Grab the most recent zone info from our PRI
-			// Only update if it's different
-			// EDIT:  AND HAS bDISTANCEFOG true
-			if( CurrentZone!=PlayerOwner.PlayerReplicationInfo.PlayerZone || DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None
-			 && CurrentVolume!=PlayerOwner.pawn.PhysicsVolume )
-			{
-				if(CurrentZone != none)
-					LastZone = CurrentZone;
-				else if(CurrentVolume != none)
-					LastVolume = CurrentVolume;
+	}
+}
 
-				// This is for all occasions where we're either in a Levelinfo handled zone
-				// Or a zoneinfo.
-				// If we're in a LevelInfo / ZoneInfo  and NOT touching a Volume.  Set current Zone
-				if( PlayerOwner.PlayerReplicationInfo.PlayerZone != none && PlayerOwner.PlayerReplicationInfo.PlayerZone.bDistanceFog
-				 && DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)!=None )
-				{
-					CurrentVolume = none;
-					CurrentZone = PlayerOwner.PlayerReplicationInfo.PlayerZone;
-				}
-				else if( DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None && PlayerOwner.pawn.PhysicsVolume.bDistanceFog )
-				{
-					CurrentZone = none;
-					CurrentVolume = PlayerOwner.pawn.PhysicsVolume;
-				}
-				if (CurrentVolume != none)
-					LastZone = none;
-				else if (CurrentZone != none)
-					LastVolume = none;
+// The fog the mood overlay takes its colour from: the zone the player's pawn is in, or a fog volume he stands in.
+simulated function TrackMoodZone()
+{
+	local ZoneInfo Z;
+
+	if ( PlayerOwner == None || PlayerOwner.Pawn == None || PlayerOwner.PlayerReplicationInfo == None )
+		return;
+	if ( MoodStart == 0 )
+		MoodStart = Level.TimeSeconds;
+	// (the pawn's own zone: the one in the player's replicated record is a second or two behind)
+	Z = PlayerOwner.Pawn.Region.Zone;
+
+	// Here we change over the Zone.
+	// What happens of importance is
+	// A.  Set Old Zone to current
+	// B.  Set New Zone
+	// C.  Set Color info up for use by Tick()
+
+	// if we're in a new zone or volume without distance fog...just , dont touch anything.
+	// the physicsvolume check is abit screwy because the player is always in a volume called "DefaultPhyicsVolume"
+	// so we've gotta make sure that the return checks take this into consideration.
+
+	if (PlayerOwner != none && PlayerOwner.Pawn != none)
+	{
+		// This block of code here just makes sure that if we've already got a tint, and we step into a zone/volume without
+		// bDistanceFog, our current tint is not affected.
+		// a.  If I'm in a zone and its not bDistanceFog. AND IM NOT IN A PHYSICSVOLUME. Just a zone.
+		// b.  If I'm in a Volume
+		if( Z != none && !Z.bDistanceFog
+		 && PlayerOwner.PlayerReplicationInfo.PlayerVolume == none || DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None
+		 && !PlayerOwner.pawn.PhysicsVolume.bDistanceFog )
+			return;
+	}
+	if (PlayerOwner != none && !bZoneChanged && PlayerOwner.Pawn != none)
+	{
+		// Grab the zone the pawn is in
+		// Only update if it's different
+		// EDIT:  AND HAS bDISTANCEFOG true
+		if( CurrentZone!=Z || DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None
+		 && CurrentVolume!=PlayerOwner.pawn.PhysicsVolume )
+		{
+			if(CurrentZone != none)
+				LastZone = CurrentZone;
+			else if(CurrentVolume != none)
+				LastVolume = CurrentVolume;
+
+			// This is for all occasions where we're either in a Levelinfo handled zone
+			// Or a zoneinfo.
+			// If we're in a LevelInfo / ZoneInfo  and NOT touching a Volume.  Set current Zone
+			if( Z != none && Z.bDistanceFog
+			 && DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)!=None )
+			{
+				CurrentVolume = none;
+				CurrentZone = Z;
+			}
+			else if( DefaultPhysicsVolume(PlayerOwner.pawn.PhysicsVolume)==None && PlayerOwner.pawn.PhysicsVolume.bDistanceFog )
+			{
+				CurrentZone = none;
+				CurrentVolume = PlayerOwner.pawn.PhysicsVolume;
+			}
+			if (CurrentVolume != none)
+				LastZone = none;
+			else if (CurrentZone != none)
+				LastVolume = none;
 
                 if (LastZone != none)
                 {
@@ -1602,26 +1643,26 @@ simulated function DrawModOverlay( Canvas C )
                     LastB = LastVolume.DistanceFogColor.B;
                     bHasFogTint = true;  // captured a fog tint
                 }
-				else if (LastZone != none && LastVolume != none)
-					return;
+			else if (LastZone != none && LastVolume != none)
+				return;
 
-				if( LastZone!=CurrentZone || LastVolume!=CurrentVolume )
-				{
-					bZoneChanged = true;
-					SetTimer(OverlayFadeSpeed,false);
-				}
+			if( LastZone!=CurrentZone || LastVolume!=CurrentVolume )
+			{
+				bZoneChanged = true;
+				SetTimer(OverlayFadeSpeed,false);
 			}
 		}
-		if (!bTicksTurn && bZoneChanged)
+	}
+	// The first fog taken up. At the start the view fades in from black (the colour starts at nothing); met later,
+	// after playing with no tint, it eases from that plain view instead.
+	if ( !bHasFogTint && (CurrentZone != None || CurrentVolume != None) )
+	{
+		bHasFogTint = true;
+		if ( Level.TimeSeconds - MoodStart > 1.0 )
 		{
-			// Pass it off to the tick now
-			// valueCheckout signifies that none of the three values have been
-			// altered by Tick() yet.
-
-			// BOUNCE IT BACK! :D
-			ValueCheckOut = 0;
-			bTicksTurn = true;
-			SetTimer(OverlayFadeSpeed,false);
+			LastR = 255;
+			LastG = 255;
+			LastB = 255;
 		}
 	}
 }
@@ -1889,6 +1930,7 @@ simulated function DrawSpectatingHud( Canvas C )
 	local vector CamPos, ViewDir;
 	local int i;
 
+	StartScreenFX();
 	DrawModOverlay(C);
 
 	if( bHideHud )

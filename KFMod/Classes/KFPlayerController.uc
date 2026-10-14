@@ -22,6 +22,8 @@ var array<Actor> LightSources;
 var KFPlayerStats MyActiveStats;
 
 var array<KFPlayerStats.ActStats> ActStats;
+var array<string> ActProgress;	// (how far along each is, as its perk words it: see KFVeterancyTypes.ProgressFor)
+var float NextStatsSend;
 var byte ClientStatsState;
 var float StatsUdpTimer;
 var int CLStats[11];
@@ -1184,6 +1186,15 @@ simulated function RequestForClasses()
 		ServerSendStats();
 	}
 }
+// The perk screen asks again each time it opens: how far along each perk is changes as the game goes
+simulated function RefreshClasses()
+{
+	if( ClientStatsState!=1 )
+	{
+		ClientStatsState = 1;
+		ServerSendStats();
+	}
+}
 function ServerSendStats()
 {
 	local int i;
@@ -1193,13 +1204,18 @@ function ServerSendStats()
 		StatsFinished();
 		Return;
 	}
+	// (no more than once a second, however often it is asked for)
+	if( NextStatsSend>Level.TimeSeconds )
+	{
+		StatsFinished();
+		Return;
+	}
+	NextStatsSend = Level.TimeSeconds+1.0;
 	For( i=0; i<MyActiveStats.ActiveStats.Length; i++ )
-		ClientReceiveStat(MyActiveStats.ActiveStats[i].VetCl,MyActiveStats.ActiveStats[i].bNotified);
+		ClientReceiveStat(MyActiveStats.ActiveStats[i].VetCl,MyActiveStats.ActiveStats[i].bNotified,MyActiveStats.ActiveStats[i].VetCl.Static.ProgressFor(MyActiveStats));
 	StatsFinished();
 }
-
-
-simulated function ClientReceiveStat( Class<KFVeterancyTypes> StatClass, bool bEnabled )
+simulated function ClientReceiveStat( Class<KFVeterancyTypes> StatClass, bool bEnabled, optional string Progress )
 {
 	local int i;
 
@@ -1208,6 +1224,7 @@ simulated function ClientReceiveStat( Class<KFVeterancyTypes> StatClass, bool bE
 		if( ActStats[i].VetCl==StatClass )
 		{
 			ActStats[i].bNotified = bEnabled;
+			ActProgress[i] = Progress;
 			Return;
 		}
 	}
@@ -1215,6 +1232,7 @@ simulated function ClientReceiveStat( Class<KFVeterancyTypes> StatClass, bool bE
 	ActStats.Length = i+1;
 	ActStats[i].VetCl = StatClass;
 	ActStats[i].bNotified = bEnabled;
+	ActProgress[i] = Progress;
 }
 simulated function StatsFinished()
 {

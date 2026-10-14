@@ -15,6 +15,15 @@ static function bool QualityFor( KFPlayerStats Other )
 	Return True;
 }
 // Modify syringe charge speed
+// How far along what it takes a player is: a line for each thing asked, "|" between them; nothing where nothing is asked
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return "";
+}
+static function string Tally( string What, int Have, int Need )
+{
+	Return What$": "$Min(Have,Need)$" of "$Need;
+}
 static function float GetSyringeChargeRate()
 {
 	Return 1;

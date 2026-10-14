@@ -1,7 +1,7 @@
 class KFTab_DetailSettings extends UT2K4Tab_DetailSettings;
 
-var automated moCheckBox   ch_Bloom, ch_HitBlur;
-var() bool bBloom, bHitBlur;
+var automated moCheckBox   ch_Bloom, ch_HitBlur, ch_Vivid;
+var() bool bBloom, bHitBlur, bVivid;
 var bool bScreenFXChanged;
 
 function SetupPositions()
@@ -9,6 +9,7 @@ function SetupPositions()
     Super.SetupPositions();
     sb_Section2.ManageComponent(ch_Bloom);
     sb_Section2.ManageComponent(ch_HitBlur);
+    sb_Section2.ManageComponent(ch_Vivid);
 }
 
 function InternalOnLoadINI(GUIComponent Sender, string s)
@@ -23,6 +24,11 @@ function InternalOnLoadINI(GUIComponent Sender, string s)
         case ch_HitBlur:
             bHitBlur = class'KFMod.KFScreenFX'.default.bHitBlur;
             ch_HitBlur.SetComponentValue(bHitBlur,true);
+            break;
+
+        case ch_Vivid:
+            bVivid = class'KFMod.KFScreenFX'.default.bVivid;
+            ch_Vivid.SetComponentValue(bVivid,true);
             break;
 
         default:
@@ -47,6 +53,11 @@ function InternalOnChange(GUIComponent Sender)
             bHitBlur = ch_HitBlur.IsChecked();
             bScreenFXChanged = true;
             break;
+
+       case ch_Vivid:
+            bVivid = ch_Vivid.IsChecked();
+            bScreenFXChanged = true;
+            break;
     }
     Super.InternalOnChange(Sender);
 }
@@ -55,7 +66,9 @@ function ResetClicked()
 {
     class'KFMod.KFScreenFX'.static.ResetConfig("bBloom");
     class'KFMod.KFScreenFX'.static.ResetConfig("bHitBlur");
-    class'KFMod.KFScreenFX'.static.Configure(PlayerOwner(), class'KFMod.KFScreenFX'.default.bBloom, class'KFMod.KFScreenFX'.default.bHitBlur);
+    class'KFMod.KFScreenFX'.static.ResetConfig("bVivid");
+    class'KFMod.KFScreenFX'.static.Configure(PlayerOwner(), class'KFMod.KFScreenFX'.default.bBloom, class'KFMod.KFScreenFX'.default.bHitBlur,
+        class'KFMod.KFScreenFX'.default.bVivid);
     bScreenFXChanged = false;
     Super.ResetClicked();
 }
@@ -66,7 +79,7 @@ function SaveSettings()
     // (only what was changed here: a page that was never shown has nothing to say)
     if ( bScreenFXChanged )
     {
-        class'KFMod.KFScreenFX'.static.Configure(PlayerOwner(), bBloom, bHitBlur);
+        class'KFMod.KFScreenFX'.static.Configure(PlayerOwner(), bBloom, bHitBlur, bVivid);
         bScreenFXChanged = false;
     }
 }
@@ -108,4 +121,22 @@ defaultproperties
         OnLoadINI=KFTab_DetailSettings.InternalOnLoadINI
     End Object
     ch_HitBlur=HitBlurDetail
+
+    Begin Object Class=moCheckBox Name=VividDetail
+        ComponentJustification=TXTA_Left
+        CaptionWidth=0.940000
+        Caption="Vivid Colours"
+        OnCreateComponent=VividDetail.InternalOnCreateComponent
+        IniOption="@Internal"
+        IniDefault="True"
+        Hint="Strong colours stand out more: fire, blood and lights are richer against the dark."
+        WinTop=0.479308
+        WinLeft=0.600000
+        WinWidth=0.300000
+        WinHeight=0.040000
+        TabOrder=25
+        OnChange=KFTab_DetailSettings.InternalOnChange
+        OnLoadINI=KFTab_DetailSettings.InternalOnLoadINI
+    End Object
+    ch_Vivid=VividDetail
 }

@@ -5,6 +5,10 @@ static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.DecaptedKills>=50);
 }
+static function string ProgressFor( KFPlayerStats Other )
+{
+	Return Tally("Headshot kills",Other.DecaptedKills,50);
+}
 static function int AddDamage( KFMonster Injured, KFPawn DamageTaker, int InDamage, class<DamageType> DmgType )
 {
 	if( DmgType==Class'DamTypeCrossbow' || DmgType==Class'DamTypeCrossbowHeadShot' || DmgType==Class'DamTypeWinchester' || DmgType==Class'DamTypeDeagle' || DmgType==Class'DamTypeDualies' )

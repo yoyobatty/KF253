@@ -274,6 +274,9 @@ simulated function WeaponBrake( float Factor )
 // Don't let this pawn move for a certain amount of time
 function DisableMovement(float DisableDuration)
 {
+    // (a player in god mode is not held)
+    if( Controller != None && Controller.bGodMode )
+        return;
     StopDisabledTime = Level.TimeSeconds + DisableDuration;
     bMovementDisabled = true;
 }
