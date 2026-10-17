@@ -104,8 +104,16 @@ var bool bWasAwake;					// server: the body was awake at the last tick
 var bool bHaveHome;					// server: HomeState is set
 var bool bHaveFloor;				// server: WorldFloorZ is set
 var bool bServerRest;				// client: RemoteState is the pose the server's body rests in
+var bool bHeldAsleep;				// client: at the last look our body was asleep on that pose
+var float FloatUntil;				// client: put on the resting pose with its gravity off, until asleep or this time
+var float GravScale;				// client: the body's own gravity scale
 var byte LastMoves;					// NKState.Moves of the last state taken (client) or packed (server)
-var int RestTries;					// client: corrections since the server's body came to rest
+var int Snaps;						// client: corrections onto the resting pose since SnapWindowEnd was set
+var float SnapWindowEnd;			// client
+var float StillSince;				// server: the awake body has been going nowhere since then
+var KRBVec AnchorPosition;			// server: where the awake body has kept to since AnchorSince
+var Quat AnchorQuaternion;
+var float AnchorSince;
 var int StrayStates;				// client: states of a moving body in a row that found ours more than StrayDistance off
 var float NextWorldCheck;			// server
 var float WorldFloorZ;				// server: height of the lowest navigation point in the map
@@ -136,6 +144,15 @@ simulated function PostBeginPlay()
 		KP.bClientOnly = false;
 		KP.bHighDetailOnly = false;
 	}
+
+	// The server sends an actor only to players it thinks can see it: a line from the eye to the actor's middle
+	// that no wall or floor cuts. A box's or a tray's middle is the bottom of the mesh, which sinks into the floor as
+	// it settles, so such a prop was never sent to anyone, even to a player looking straight at it: bots kicked it
+	// across the room on the server while every client kept it where it first fell. A prop that moved out of sight
+	// was no better off, its last states never sent. Every prop goes to every player instead; a prop at rest costs
+	// nothing to keep that way.
+	if (Role == ROLE_Authority)
+		bAlwaysRelevant = true;
 }
 
 simulated function PostNetBeginPlay()
@@ -174,10 +191,17 @@ simulated function Tick(float Delta)
 		HomeState.LinVel = KRBVecFromVector(vect(0,0,0));
 		HomeState.AngVel = HomeState.LinVel;
 		bHaveHome = true;
+		// (so that a body which never moves sends its resting pose too: clients hold their copies on it)
+		bWasAwake = true;
 	}
 	bAwake = KIsAwake();
 	if (!bAwake && !bWasAwake)
 		return;						// at rest, and its resting pose has gone out
+	if (bAwake && !bWasAwake)
+	{
+		StillSince = Level.TimeSeconds;
+		AnchorSince = Level.TimeSeconds;
+	}
 
 	if ((!bAwake || Level.TimeSeconds >= NextWorldCheck) && !bNewNKState)
 	{
@@ -261,22 +285,63 @@ function PackState(bool bAwake)
 				S.AngVel *= 1000.0 * KP.KMaxAngularSpeed / Speed;
 		}
 
-		// Awake but going nowhere (a body that trembles instead of going to sleep): nothing worth sending.
-		if (S.Moves == LastMoves && VSize(S.LinVel) < 20.0 && VSize(S.AngVel) < 50.0
-			&& Abs(RB.Position.X - NKState.Position.X) < 0.25 && Abs(RB.Position.Y - NKState.Position.Y) < 0.25
-			&& Abs(RB.Position.Z - NKState.Position.Z) < 0.25
-			&& Abs(RB.Quaternion.X * NKState.Quaternion.X + RB.Quaternion.Y * NKState.Quaternion.Y
-				+ RB.Quaternion.Z * NKState.Quaternion.Z + RB.Quaternion.W * NKState.Quaternion.W) > 0.99999)
+		// Sent as resting and still within a unit and a half and two degrees of that pose: nothing new for the
+		// clients, who hold their copies there.
+		if (S.Moves == LastMoves && (NKState.Flags & NKF_Rest) != 0 && NearPose(RB, NKState.Position, NKState.Quaternion, 1.5, 0.99985))
 			return;
+		// (where it has kept to since AnchorSince)
+		if (!NearPose(RB, AnchorPosition, AnchorQuaternion, 1.5, 0.99985))
+		{
+			AnchorPosition = RB.Position;
+			AnchorQuaternion = RB.Quaternion;
+			AnchorSince = Level.TimeSeconds;
+		}
+		if (S.Moves == LastMoves && Level.TimeSeconds - AnchorSince >= 1.0)
+		{
+			// A body that rocks where it lies instead of going to sleep (a drum on a tray) went out every tick for
+			// good: a second within that much of one place, and it is sent as resting.
+			S.LinVel = vect(0,0,0);
+			S.AngVel = vect(0,0,0);
+			S.Flags = NKF_Rest;
+		}
+		else if (S.Moves == LastMoves && VSize(S.LinVel) < 20.0 && VSize(S.AngVel) < 50.0
+			&& NearPose(RB, NKState.Position, NKState.Quaternion, 0.25, 0.99999))
+		{
+			// Awake but going nowhere (a body that trembles instead of going to sleep): nothing worth sending. Once
+			// it has kept still half a second, though, it is sent as resting.
+			if (Level.TimeSeconds - StillSince < 0.5)
+				return;
+			S.LinVel = vect(0,0,0);
+			S.AngVel = vect(0,0,0);
+			S.Flags = NKF_Rest;
+		}
+		else
+			StillSince = Level.TimeSeconds;
 	}
 	else
+	{
+		// (gone to sleep where it was last sent resting: nothing new)
+		if ((NKState.Flags & NKF_Rest) != 0 && S.Moves == LastMoves && NKState.stateCount > 0
+			&& NearPose(RB, NKState.Position, NKState.Quaternion, 0.25, 0.99999))
+			return;
 		S.Flags = NKF_Rest;
+	}
 	LastMoves = S.Moves;
 	S.stateCount = NKState.stateCount + 1;
 
 	// Assigning the variable as a whole is what marks the actor as changed for replication. Setting the members
 	// of NKState one at a time does not, and then nothing is sent after the first packet of a channel.
 	NKState = S;
+}
+
+// Server: the body is within Dist units of a place on each axis, and turned from it by less than the angle whose
+// half has Dot for its cosine (0.99999 is about half a degree, 0.99985 two degrees).
+function bool NearPose(KRigidBodyState RB, KRBVec Position, Quat Quaternion, float Dist, float Dot)
+{
+	return Abs(RB.Position.X - Position.X) < Dist && Abs(RB.Position.Y - Position.Y) < Dist
+		&& Abs(RB.Position.Z - Position.Z) < Dist
+		&& Abs(RB.Quaternion.X * Quaternion.X + RB.Quaternion.Y * Quaternion.Y
+			+ RB.Quaternion.Z * Quaternion.Z + RB.Quaternion.W * Quaternion.W) > Dot;
 }
 
 // Client: a new state from the server.
@@ -307,15 +372,24 @@ simulated event PostNetReceive()
 	LastMoves = NKState.Moves;
 	if (bServerRest)
 	{
-		// A resting pose is taken as it is. (Blending works by giving the body a speed towards the pose: that
-		// cannot lift a copy that fell off something back up, it only makes it hop.)
-		bSnapState = true;
-		RestTries = 0;
+		Snaps = 0;
+		SnapWindowEnd = 0;
 		StrayStates = 0;
-		SetTimer(0.3, true);
+		SetTimer(0.25, true);
+		// A copy asleep on the pose already is left alone: taking a state wakes the body, and a prop the server
+		// has asleep in the air (a board on a wall that nothing has touched yet) would then fall. Otherwise the
+		// pose is taken as it is. (Blending works by giving the body a speed towards the pose: that cannot lift a
+		// copy that fell off something back up, it only makes it hop.)
+		Err = PoseError(RemoteState, Turned);
+		bHeldAsleep = (Err < 2.0 && Turned == 0 && !KIsAwake());
+		if (!bHeldAsleep)
+			HoldSnap();
+		return;
 	}
 	else
 	{
+		if (FloatUntil > 0)
+			EndFloat();
 		// Moving: let the engine blend small errors away, but don't leave a copy that has gone astray to it.
 		// Blending gives the body a speed towards the state, which gravity beats: a copy that missed the thing
 		// the server's body landed on, or went through a floor, stays down. (The engine itself only sets a
@@ -334,6 +408,7 @@ simulated event PostNetReceive()
 	}
 
 	bNewNKState = true;
+	bHeldAsleep = false;
 	// A sleeping body isn't stepped, but physKarma still asks KUpdateState and wakes it for the new state.
 	KWake();
 }
@@ -354,34 +429,71 @@ simulated function float PoseError(KRigidBodyState Want, out int Turned)
 }
 
 // Client: while the server's body is at rest, keep ours on the server's resting pose. A client simulates its
-// own copy, and with no more states coming nothing else would bring a copy that drifted off back.
+// own copy, and with no more states coming nothing else would bring a copy that drifted off back. Dead bodies
+// are the usual push: they fall as ragdolls on clients only (a dedicated server has none), so a body landing on a
+// prop knocked over every client's copy while the server's stood. Four looks a second put it back before it has
+// gone far; a sleeping copy that was on the pose at the last look has not moved since and is not measured.
 simulated function Timer()
 {
 	local float Err;
 	local int Turned;
+	local bool bAwake;
 
 	if (Role == ROLE_Authority || !bServerRest || Physics != PHYS_Karma)
 	{
+		if (FloatUntil > 0)
+			EndFloat();
 		SetTimer(0.0, false);
 		return;
 	}
 	if (bNewNKState)
 		return;						// the last correction hasn't reached the body yet
+	bAwake = KIsAwake();
+	if (FloatUntil > 0 && (!bAwake || Level.TimeSeconds >= FloatUntil))
+		EndFloat();
+	if (bHeldAsleep && !bAwake)
+		return;
 
 	Err = PoseError(RemoteState, Turned);
 	if (Err < 2.0 && Turned == 0)
 	{
-		// On it. Once asleep, look again only now and then, in case something on this client moves it.
-		if (!KIsAwake())
-			SetTimer(2.0 + 2.0 * FRand(), true);
+		bHeldAsleep = !bAwake;
 		return;
 	}
-	if (RestTries == 20)
-		SetTimer(3.0 + 2.0 * FRand(), true);	// something here keeps pushing it off: stop fighting over it
-	RestTries++;
+	bHeldAsleep = false;
+	// (something here that keeps pushing it off, a body lying against it, gets six tries in three seconds)
+	if (Level.TimeSeconds >= SnapWindowEnd)
+	{
+		SnapWindowEnd = Level.TimeSeconds + 3.0;
+		Snaps = 0;
+	}
+	if (Snaps >= 6)
+		return;
+	Snaps++;
+	HoldSnap();
+}
+
+// Client: our body put on the server's resting pose, with its own gravity off until it sleeps there (or for a
+// second and a half at most). A sleeping body stays where it is, and with no gravity a copy the server has
+// asleep in the air does not fall off the pose before it can go to sleep on it.
+simulated function HoldSnap()
+{
 	bSnapState = true;
 	bNewNKState = true;
+	bHeldAsleep = false;
+	if (FloatUntil == 0)
+	{
+		GravScale = KGetActorGravScale();
+		KSetActorGravScale(0.0);
+	}
+	FloatUntil = Level.TimeSeconds + 1.5;
 	KWake();
+}
+
+simulated function EndFloat()
+{
+	KSetActorGravScale(GravScale);
+	FloatUntil = 0;
 }
 
 simulated event bool KUpdateState(out KRigidBodyState newState)
@@ -436,6 +548,7 @@ defaultproperties
 	bRespawnEffectPlayed=True
 	Health=200
 	bKActorShadows=True
+	bAlwaysRelevant=True
 	MaxNetUpdateInterval=0.200000
 	FallLimit=1000.000000
 	SnapDistance=48.000000
