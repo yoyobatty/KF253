@@ -45,7 +45,7 @@ function PostTouch(Actor Other)
 		SetTimer(1.0, false); // 1 second timer before explosion
         MineDestructionEffect = spawn(class'KFmod.KFMiniExplosion',,,self.Location - self.CollisionHeight * vect(0,0,1));
         PlaySound(BlowupSound,,3.0*TransientSoundVolume);
-        Spawn(class'RocketMark',,,self.Location - self.CollisionHeight * vect(0,0,1));
+        Spawn(class'KFRocketMark',,,self.Location - self.CollisionHeight * vect(0,0,1));
 
         HurtRadius ( ExplosionDamage , DamageRadius ,class'KFmod.DamTypeFrag', MomentumFloat, HitLocation);
         Self.Destroy();

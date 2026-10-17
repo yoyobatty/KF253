@@ -2,6 +2,7 @@ class KFVomitJet extends AlienBloodJet;
 
 defaultproperties
 {
+     SplatterClass=Class'KFMod.KFBioDecal'
      mMaxParticles=50
      mSpeedRange(0)=100.000000
      mSpeedRange(1)=180.000000

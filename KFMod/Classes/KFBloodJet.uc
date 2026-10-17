@@ -44,6 +44,7 @@ simulated function WallSplat()
 
 defaultproperties
 {
+    SplatterClass=Class'KFMod.KFBloodSplat'
     Skins(0)=Texture'KFX.BloodSplash'
     bUnlit=False
 }

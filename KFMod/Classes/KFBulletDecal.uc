@@ -58,6 +58,13 @@ simulated event PreBeginPlay()
 		ProjTexture = Marks[Rand(Marks.Length)];
 }
 
+// Laid on the world only, never on a physics prop (see NetKActor.ShedDecal)
+simulated function AttachProjector(optional float FadeInTime)
+{
+	Super.AttachProjector(FadeInTime);
+	class'NetKActor'.static.ShedDecal(self);
+}
+
 defaultproperties
 {
     bGradient=false

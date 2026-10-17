@@ -115,7 +115,7 @@ defaultproperties
  ExplodeDamageType = class 'Gameplay.Burned'
  //bWorldGeometry=False
  bAcceptsProjectors = True
- ExplosionDecal=class'RocketMark'
+ ExplosionDecal=class'KFRocketMark'
  ExplosionSound = Sound'WeaponSounds.BExplosion1'
  ExplosionEffect = class 'KFMod.KFVehicleExplosion'
  bNetNotify=True

@@ -7,5 +7,6 @@ class VomGroundSplash extends AlienSmallHit;
 
 defaultproperties
 {
+     BloodDecalClass=Class'KFMod.KFBioDecal'
      Skins(0)=Texture'KFX.VomitSplash'
 }

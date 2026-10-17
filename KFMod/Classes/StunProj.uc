@@ -125,6 +125,7 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 
 defaultproperties
 {
+     ExplosionDecal=Class'KFMod.KFRocketMark'
      RotMag=(X=100.000000,Y=100.000000,Z=100.000000)
      RotRate=(X=500.000000,Y=500.000000,Z=500.000000)
      RotTime=3.000000

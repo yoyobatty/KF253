@@ -5,6 +5,7 @@ class KFGibJet extends BloodJet;
 
 defaultproperties
 {
+     SplatterClass=Class'KFMod.KFBloodSplat'
      mMaxParticles=20
      mLifeRange(0)=2.500000
      mLifeRange(1)=3.000000

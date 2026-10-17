@@ -510,6 +510,25 @@ simulated event bool KUpdateState(out KRigidBodyState newState)
 	return true;
 }
 
+// A decal (bullet hole, blood, scorch mark) is laid where it lands, fixed there in the world: on a prop that moved
+// later it stayed behind, smeared over whatever was there then. The mod's decals call this right after they are
+// put on, and come off every physics prop within their reach. (Lights and shadows are put on again every frame, so
+// they follow a prop and are left on it.)
+static function ShedDecal(Projector P)
+{
+	local KActor K;
+	local float Reach;
+
+	if (P == None || P.bDeleteMe)
+		return;
+	// (the decal's half width and its depth, and room for the prop's own size: the search goes by its middle)
+	Reach = P.MaxTraceDistance + 400.0;
+	if (P.ProjTexture != None)
+		Reach += 0.75 * P.DrawScale * Max(P.ProjTexture.MaterialUSize(), P.ProjTexture.MaterialVSize());
+	foreach P.CollidingActors(class'KActor', K, Reach)
+		P.DetachActor(K);
+}
+
 // Only called for bodies with bDestroyOnWorldPenetrate. The body used to be hidden and switched off here, on the
 // server alone: clients kept an object the server no longer had.
 simulated event FellOutOfWorld(eKillZType KillType)
