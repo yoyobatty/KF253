@@ -5,7 +5,7 @@ defaultproperties
 {
      WeaponClass=Class'KFMod.Crossbow'
      bSniperWeapon=True
-     DeathString="%ÿ%k put an arrow %o's head."
+     DeathString="ÿ%k put an arrow in %o's head."
      FemaleSuicide="%o shot herself in the head."
      MaleSuicide="%o shot himself in the head."
      bRagdollBullet=True

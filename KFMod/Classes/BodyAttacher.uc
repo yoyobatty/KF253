@@ -2,6 +2,9 @@ Class BodyAttacher extends KBSJoint
 	Transient;
 
 var vector AttachEndPoint;
+var() float WaitForDeath;	// how long the one hit has to fall for its body to be pinned: a hit that did not kill pins nothing
+var() float NearHit;		// ...and how near where it was struck its body must be
+var float MadeAt;
 /* 
 simulated function PostBeginPlay()
 {
@@ -12,6 +15,13 @@ simulated function Timer()
 	Destroy();
 }
 */
+simulated function PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	MadeAt = Level.TimeSeconds;
+}
+
+// (a victim that lived could walk off and die anywhere in the next 20 s, and its body was dragged back toward this wall)
 simulated function Tick( float Delta )
 {
 	if( Owner==None )
@@ -19,8 +29,19 @@ simulated function Tick( float Delta )
 		Destroy();
 		Return;
 	}
-	if( Physics==PHYS_Karma || Owner.Physics!=PHYS_KarmaRagdoll )
+	if( Physics==PHYS_Karma )
 		Return;
+	if( Owner.Physics!=PHYS_KarmaRagdoll )
+	{
+		if( Level.TimeSeconds - MadeAt > WaitForDeath )
+			Destroy();
+		Return;
+	}
+	if( VSize(Owner.Location - Location) > NearHit )
+	{
+		Destroy();
+		Return;
+	}
 	KConstraintActor1 = Owner;
 	KPos1 = (Location-AttachEndPoint)/50.f;
 	KPos2 = AttachEndPoint/50.f;
@@ -39,4 +60,6 @@ defaultproperties
     bNoDelete=False
     Physics=PHYS_None
     LifeSpan=20.000000
+    WaitForDeath=1.000000
+    NearHit=150.000000
 }

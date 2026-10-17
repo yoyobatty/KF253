@@ -107,10 +107,13 @@ simulated function bool AllowFire()
 	return Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire ;
 }
 
-// A line to the player holding the welder, on that player's own machine and not every time the button is tried
+// A line to the player holding the welder, not every time the button is tried. Sent from whichever machine refuses:
+// a network client never learns that a door has opened (movers keep bClosed to the server), so the server says that one.
 simulated function WeldMessage(string S)
 {
-	if( PlayerController(Instigator.Controller)==None || !Instigator.IsLocallyControlled() || Level.TimeSeconds<NextMessageTime )
+	if( PlayerController(Instigator.Controller)==None || Level.TimeSeconds<NextMessageTime )
+		return;
+	if( !Instigator.IsLocallyControlled() && Level.NetMode==NM_Client )
 		return;
 	NextMessageTime = Level.TimeSeconds + 2.0;
 	PlayerController(Instigator.Controller).ClientMessage(S, 'CriticalEvent');

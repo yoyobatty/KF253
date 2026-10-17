@@ -3,13 +3,6 @@ class LAW extends KFWeaponShotgun;
 // Killing Floor's Light Anti Tank Weapon.
 // This is probably about as badass as things get....
 
-simulated event WeaponTick(float dt)
-{ 
-	if(AmmoAmount(0) == 0)
-		Clipleft = 0;
-	super.Weapontick(dt);
-}
-
 simulated function PlayAnimZoom( bool bZoomNow )
 {
 	if( bZoomNow )
@@ -21,27 +14,6 @@ simulated function PlayAnimZoom( bool bZoomNow )
 	{
 		IdleAnim = Default.IdleAnim;
 		TweenAnim(IdleAnim,0.5);
-	}
-}
-
-simulated function PlayIdle()
-{
-	if( ClientState==WS_BringUp && Clipleft==0 && AmmoAmount(0)>0 )
-	{
-		PlayAnim('AimFire');
-		FireMode[0].bIsFiring = True;
-		FireMode[0].NextFireTime = Level.TimeSeconds+FireMode[0].FireRate;
-		ServerSpawnLight();
-	}
-	else Super.PlayIdle();
-}
-function ServerSpawnLight()
-{
-	if( Clipleft==0 && AmmoAmount(0)>0 && !FireMode[0].bIsFiring )
-	{
-		Clipleft = 1;
-		FireMode[0].bIsFiring = True;
-		FireMode[0].NextFireTime = Level.TimeSeconds+FireMode[0].FireRate;
 	}
 }
 
@@ -151,6 +123,7 @@ defaultproperties
 {
 	ClipCount=1
 	ReloadRate=3.000000
+	bLoadsWithFire=True
 	MinimumFireRange=350.000000
 	Weight=13.000000
 	UpKick=300

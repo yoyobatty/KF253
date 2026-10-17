@@ -148,40 +148,10 @@ simulated function bool CanZoomNow()
 simulated event RenderOverlays(Canvas Canvas)
 {
 	local PlayerController PC;
-	local float Dist;
-	local int HitCount;
-	local vector Start, StartDist, HitLoc, HitNorm;
-	local actor T;
-	local string TargetName;
 
-	Start = Instigator.Location + Instigator.EyePosition();
-	StartDist=Start;
-	While( (HitCount++)<50 )
-	{
-		T = Instigator.Trace(HitLoc, HitNorm, Start + vector(Instigator.GetViewRotation()) * 15000, Start, true);
-		if (T == None)
-		{
-			Dist = -1;
-			TargetName = "Null"; //For fun
-			Break;
-		}
-		else if( T==Instigator || T.Base == Instigator )
-		{
-			Start = HitLoc;
-			Continue;
-		}
-
-	}
-	Dist = VSize(HitLoc-StartDist);
-	if(T.IsA('Pawn'))
-		TargetName = T.GetHumanReadableName();
-	else if (T.IsA('ExtendedZCollision'))
-		TargetName = T.Owner.GetHumanReadableName();
-	else
-		TargetName = "None";
-
-	PC = PlayerController(KFPawn(Owner).Controller);
-
+	if( Instigator==None )
+		return;
+	PC = PlayerController(Instigator.Controller);
 	if(PC == None)
 		return;
 
@@ -191,19 +161,9 @@ simulated event RenderOverlays(Canvas Canvas)
 	{
 		Super.RenderOverlays(Canvas);
 		zoomed=false;
-		//bAimingRifle = false;
 	}
 	else
 	{
-		/*
-
-                SetZoomBlendColor(Canvas);
-		SetLocation( Instigator.Location + Instigator.CalcDrawOffset(self) );
-		SetRotation( Instigator.GetViewRotation() );
-		Canvas.DrawActor(self, false);
-		zoomed = true;
-		*/
-		
 		SetZoomBlendColor(Canvas);
 
 		//Black-out either side of the main zoom circle.
@@ -218,17 +178,49 @@ simulated event RenderOverlays(Canvas Canvas)
 		Canvas.SetPos((Canvas.SizeX - Canvas.SizeY) / 2,0);
 		Canvas.DrawTile(ZoomMat, Canvas.SizeY, Canvas.SizeY, 0.0, 0.0, 512, 512);
 
-		//Draw some useful text.
-		Canvas.Font = Canvas.MedFont;
-		Canvas.SetDrawColor(200,150,0);
-
-		Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.43);
-		Canvas.DrawText("Range Finder: " $(Dist/52.5)$ "m");
-		Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.47);
-		Canvas.DrawText("Target: " $TargetName);
-
+		DrawRangeFinder(Canvas);
 		zoomed = true;
 	}
+}
+
+// What the scope is on and how far off it is, worked out only while looking through it. A look at nothing within
+// the finder's reach (open sky) shows no range: a missed trace has no place to measure to.
+simulated function DrawRangeFinder(Canvas Canvas)
+{
+	local int HitCount;
+	local vector Start, End, HitLoc, HitNorm;
+	local actor T;
+	local string RangeText, TargetName;
+
+	Start = Instigator.Location + Instigator.EyePosition();
+	End = Start + vector(Instigator.GetViewRotation()) * 15000;
+	RangeText = "--";
+	TargetName = "None";
+	While( (HitCount++)<50 )
+	{
+		T = Instigator.Trace(HitLoc, HitNorm, End, Start, true);
+		if( T==None )
+			break;
+		// (past the holder and what rides on them)
+		if( T==Instigator || T.Base==Instigator )
+		{
+			Start = HitLoc;
+			continue;
+		}
+		RangeText = int(VSize(HitLoc - (Instigator.Location + Instigator.EyePosition())) / 52.5 + 0.5) $ "m";
+		if( T.IsA('Pawn') )
+			TargetName = T.GetHumanReadableName();
+		else if( T.IsA('ExtendedZCollision') && T.Owner!=None )
+			TargetName = T.Owner.GetHumanReadableName();
+		break;
+	}
+
+	Canvas.Font = Canvas.MedFont;
+	Canvas.SetDrawColor(200,150,0);
+	Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.43);
+	Canvas.DrawText("Range Finder: " $ RangeText);
+	Canvas.SetPos(Canvas.SizeX * 0.16, Canvas.SizeY * 0.47);
+	Canvas.DrawText("Target: " $ TargetName);
 }
 
 simulated function PlayAnimZoom( bool bZoomNow )
@@ -262,6 +254,7 @@ defaultproperties
      ZoomMat=FinalBlend'KillingFloorWeapons.Xbow.CommandoCrossFinalBlend'
      ClipCount=1
      ReloadRate=0.010000
+     bLoadsWithFire=True
      Weight=9.000000
      UpKick=400
 	 SideKick=0

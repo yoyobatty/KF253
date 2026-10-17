@@ -72,6 +72,12 @@ var bool bGunShaking;					// set while a gun's shake is handed in
 var bool bTurningRot;					// set while CheckShake works on a rotation axis
 var() bool bGunShakeEngineTurn;			// False: guns' shakes turn smoothly too (as from 2026-10-14 to 10-15)
 
+// The engine turns the view of a player standing on something by every change in its pitch and yaw (made for turning
+// platforms). A physics prop rocks, and its yaw jumps 180 as it tips past upright, so UndoPropTurn takes that back out.
+var Actor PropFloor;		// the physics prop under the player when the view was last put right
+var Pawn PropFloorPawn;		// the body that stood on it
+var rotator PropFloorRot;	// the prop's rotation then
+
 replication
 {
 	reliable if(RemoteRole == ROLE_AUTONOMOUSPROXY)
@@ -244,10 +250,41 @@ function int FractionCorrection(float in, out float fraction) {
     return result;
 }
 
+// The engine's turn is the sum of the prop's changes since the last call, so exactly that comes off: input, aim and
+// view punch stay. Called before input turns the view, before the view is drawn and when the player's floor changes.
+function UndoPropTurn()
+{
+	local rotator R;
+
+	if ( Viewport(Player) == None )
+		return;
+	if ( PropFloor != None && !PropFloor.bDeleteMe && Pawn != None && Pawn == PropFloorPawn && PropFloor.Rotation != PropFloorRot )
+	{
+		R = Rotation;
+		R.Pitch -= (PropFloor.Rotation.Pitch & 65535) - (PropFloorRot.Pitch & 65535);
+		R.Yaw -= (PropFloor.Rotation.Yaw & 65535) - (PropFloorRot.Yaw & 65535);
+		SetRotation(R);
+	}
+	PropFloor = None;
+	PropFloorPawn = Pawn;
+	if ( Pawn != None && Pawn.Base != None && (Pawn.Base.Physics == PHYS_Karma || Pawn.Base.Physics == PHYS_KarmaRagDoll) )
+	{
+		PropFloor = Pawn.Base;
+		PropFloorRot = PropFloor.Rotation;
+	}
+}
+
+event PlayerCalcView(out actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
+{
+	UndoPropTurn();
+	Super.PlayerCalcView(ViewActor, CameraLocation, CameraRotation);
+}
+
 function UpdateRotation(float DeltaTime, float maxPitch)
 {
     local rotator newRotation, ViewRotation;
 
+    UndoPropTurn();
     if ( bInterpolating || ((Pawn != None) && Pawn.bInterpolating) )
     {
         ViewShake(deltaTime);

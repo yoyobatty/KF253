@@ -45,6 +45,7 @@ var         bool            bModeZeroCanDryFire;        // FireMode zero can dry
 var bool bIsReloading, bReloadEffectDone;
 var bool bReloadQueued;			// R came while the last shot's cooldown ran: the reload starts as it ends
 var float ReloadQueuedUntil;	// (and is let go if it cannot start by then)
+var float DrawnTime;			// when BringUp last ran (see WeaponUp)
 
 var () float Weight; // how much does it weigh
 
@@ -73,6 +74,7 @@ var Actor TacShine;
 var Effect_TacLightProjector FlashLight;
 var class<Effect_TacLightProjector> FlashLightClass;	// the light it makes (a mutator may hand it another, as KFTorch does)
 var class<Actor> MuzzleLightClass;	// the light a shot throws ahead, made on the shooter's machine (a mutator may hand one, as KFTorch does)
+var() bool bLoadsWithFire;		// the next round goes in with the fire animation (crossbow, LAW): it never reloads, the round is in at once
 var Actor MuzzleLight;				// ...the player's one, shared by every weapon; while it is there the weapon's own flash light is not used
 
 var float NextAmmoCheckTime,LastAmmoResult,LastHasGunMsgTime;
@@ -389,6 +391,8 @@ function bool ReloadNowOrLater()
 // Whether there is anything to load
 function bool ReloadWanted()
 {
+	if( bLoadsWithFire )
+		return false;
 	return ClipLeft < ClipCount && AmmoAmount(0) > ClipLeft;
 }
 
@@ -531,8 +535,20 @@ function ServerSetAiming(bool IsAiming)
 	InterruptReload();
 }
 
+// Up in the hands and not on its way down. A server keeps no ClientState for a weapon held by a player on another
+// machine (it stays WS_None there), so for that one it goes by the time since the weapon was drawn.
+simulated function bool WeaponUp()
+{
+	if( ClientState != WS_None )
+		return ClientState == WS_ReadyToFire;
+	return Level.TimeSeconds >= DrawnTime + BringUpTime;
+}
+
 function bool AllowReload()
 {
+	// (a reload of one of these played no animation and only held the weapon up: R, a dry pull and bots asked for it)
+	if( bLoadsWithFire )
+		return false;
 	UpdateMagCapacity(Instigator.PlayerReplicationInfo);
 
     if(KFInvasionBot(Instigator.Controller) != None && !bIsReloading &&
@@ -881,6 +897,7 @@ simulated function BringUp(optional Weapon PrevWeapon)
 	bAimingRifle = False;
 	bIsReloading = false;
 	bReloadQueued = false;
+	DrawnTime = Level.TimeSeconds;
 	IdleAnim = Default.IdleAnim;
 	//Super.BringUp(PrevWeapon);
 
@@ -958,7 +975,11 @@ simulated function bool ConsumeAmmo( int Mode, float Load, optional bool bAmount
 	if( Super.ConsumeAmmo(Mode, Load, bAmountNeededIsMax) )
 	{
 		if( Load > 0 )
+		{
 			ClipLeft--;   // ClipLeft --
+			if( bLoadsWithFire )
+				ClipLeft = Min(ClipCount, AmmoAmount(Mode));
+		}
 		return true;
 	}
 	return false;
@@ -1028,6 +1049,10 @@ simulated function WeaponTick(float DT)
 
     if ( (Level.NetMode == NM_Client) || Instigator == None || KFFriendlyAI(Instigator.Controller) == none && Instigator.PlayerReplicationInfo == None)
         return;
+
+	// (ammo picked up or bought while empty)
+	if( bLoadsWithFire )
+		ClipLeft = Min(ClipCount, AmmoAmount(0));
 
 	// Turn it off on death  / battery expenditure
 	if (FlashLight != none)

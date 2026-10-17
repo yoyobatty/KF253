@@ -222,7 +222,7 @@ var ScriptedTexture	Faint;				// the light's pattern, that much of it
 var ConstantColor	FaintK;
 var Material		FaintOver, FaintSeen, LitFaint;
 var array<Actor>	AllSheer;			// every model in the level that can be seen through
-var array<byte>		AllSheerKind;		// (1 lit in its own colours, 2 lit in the light's colour, 3 not lit)
+var array<byte>		AllSheerKind;		// (1 lit in its own colours, 2 lit in the light's colour, 3 not lit, 4 solid with parts seen through, lit in its own colours)
 var bool			bSheerFound;
 var array<Actor>	Sheer;				// those of them within the light's reach
 var array<byte>		SheerKind;
@@ -239,6 +239,11 @@ var array<byte>		SheerShaderWas;
 var array<FinalBlend>	SheerBlends;
 var array<byte>		SheerBlendWas;
 var bool			bSheerMatsOff;
+var FinalBlend		Vanish;				// drawn as nothing: worn by a moving model's see-through parts for the length of the light's pictures
+var array<Actor>	SkinOn;				// (the models wearing it just now; for each, which part,
+var array<int>		SkinAt;
+var array<Material>	SkinWas;			// what it wore there,
+var array<int>		SkinLen;			// and how many skins it had)
 var array<byte>		ThroughYes;
 var float			NextSheer;
 var array<StaticMesh>	KnownMesh;		// the models looked at so far, and what was found
@@ -411,6 +416,7 @@ simulated function Dress()
 	Gained[2] = Combiner(LitBody);
 	Gained[3] = Combiner(LitFaint);
 	Gained[4] = LitFullX;
+	Vanish = class'KFTMat'.static.Paint(Made, Level, Texture'Engine.WhiteTexture', 2);
 	Soften(SoftSize);
 	ProjTexture = LitFullFall;
 	bDressed = true;
@@ -1054,6 +1060,7 @@ simulated function int SheerKindOf(Actor A)
 {
 	local string Kinds;
 	local int i, n, K, Most;
+	local bool bSolid;
 
 	if (A.StaticMesh == None)
 		return 0;
@@ -1070,12 +1077,117 @@ simulated function int SheerKindOf(Actor A)
 		else
 			continue;
 		if (K == 0)
-			return 0;
+			bSolid = true;
 		Most = Max(Most, K);
+	}
+	// (A solid model with parts seen through and lit in their own colours, a door with a pane of glass, is kind 4
+	// if all of it can be lit so. Lit from the light's pictures, the pane had the room behind it laid on it a second
+	// time, out of place: what was behind the pane was in the picture through it. Anything else with a solid part is
+	// lit as the level is.)
+	if (bSolid)
+	{
+		if (Most == 1 && !Omitted(A) && PlainParts(A))
+			return 4;
+		return 0;
 	}
 	if (Most != 0 && Omitted(A))
 		return 3;
 	return Most;
+}
+
+// Whether each part of a model, as far as it can be read, comes down to one plain texture (as OwnColours asks of a
+// body): the light's material for what is lit in its own colours can be laid on it
+simulated function bool PlainParts(Actor A)
+{
+	local string S, Ref;
+	local Material M;
+	local int i, j;
+
+	S = A.StaticMesh.GetPropertyText("Materials");
+	for (j = 0; j < 64; j++)
+	{
+		i = InStr(S, "Material=");
+		if (i < 0)
+			break;
+		S = Mid(S, i + 9);
+		M = None;
+		if (j < A.Skins.Length && A.Skins[j] != None)
+			M = A.Skins[j];
+		else
+		{
+			i = InStr(S, "'");
+			if (Left(S, 4) ~= "None" || i < 0)
+				continue;
+			Ref = Mid(S, i + 1);
+			i = InStr(Ref, "'");
+			if (i <= 0)
+				continue;
+			M = Material(DynamicLoadObject(Left(Ref, i), class'Material', true));
+		}
+		for (i = 0; i < 6 && M != None && BitmapMaterial(M) == None; i++)
+		{
+			if (Shader(M) != None)
+				M = Shader(M).Diffuse;
+			else if (Modifier(M) != None)
+				M = Modifier(M).Material;
+			else
+				return false;
+		}
+		if (M != None && BitmapMaterial(M) == None)
+			return false;
+	}
+	return true;
+}
+
+// A moving model's see-through parts, left out of the light's pictures by wearing nothing there until UnclearParts.
+// (The level's fixed models are drawn in batches that take no notice of what they wear; on those the pane stays in
+// the pictures, and what is behind it is lit as seen through it.)
+simulated function ClearParts(Actor A)
+{
+	local string Kinds;
+	local int i, n, Was;
+
+	if (Vanish == None || A.StaticMesh == None)
+		return;
+	Kinds = MeshKinds(A.StaticMesh);
+	Was = A.Skins.Length;
+	n = Max(Len(Kinds), Was);
+	for (i = 0; i < n; i++)
+	{
+		if (i < Was && A.Skins[i] != None)
+		{
+			if (MatKind(A.Skins[i]) == 0)
+				continue;
+		}
+		else if (i >= Len(Kinds) || Mid(Kinds, i, 1) == "0")
+			continue;
+		SkinOn[SkinOn.Length] = A;
+		SkinAt[SkinAt.Length] = i;
+		SkinLen[SkinLen.Length] = Was;
+		if (i < Was)
+			SkinWas[SkinWas.Length] = A.Skins[i];
+		else
+			SkinWas[SkinWas.Length] = None;
+		A.Skins[i] = Vanish;
+	}
+}
+
+// What ClearParts took off, put back (last first, so that each model ends with as many skins as it had)
+simulated function UnclearParts()
+{
+	local int i;
+
+	for (i = SkinOn.Length - 1; i >= 0; i--)
+	{
+		if (SkinOn[i] == None || SkinOn[i].bDeleteMe)
+			continue;
+		SkinOn[i].Skins[SkinAt[i]] = SkinWas[i];
+		SkinOn[i].Skins.Length = SkinLen[i];
+	}
+	SkinOn.Length = 0;
+	SkinAt.Length = 0;
+	SkinWas.Length = 0;
+	SkinLen.Length = 0;
 }
 
 // Every model in the level that can be seen through, found once
@@ -1250,6 +1362,7 @@ simulated function Undress()
 		ShadeX.Destroy();
 	ShadeX = None;
 	Shun(false);
+	UnclearParts();
 	if (Sheen != None)
 		Sheen.Destroy();
 	Sheen = None;
@@ -1311,6 +1424,7 @@ simulated function Undress()
 			FallLay = None;
 		}
 		class'KFTMat'.static.FreeAll(Made, Level);
+		Vanish = None;
 	}
 	Bodies.Length = 0;
 	Glows.Length = 0;
@@ -1382,10 +1496,20 @@ simulated function HideSheer(bool bOn)
 	bSheerHidden = bOn;
 	// (what such things are made of as well: see KeepSheerMats)
 	SheerMats(bOn && (Skip & 64) == 0);
+	if (!bOn)
+		UnclearParts();
 	for (i = 0; i < Sheer.Length; i++)
 	{
 		if (Sheer[i] == None || Sheer[i].bDeleteMe)
 			continue;
+		// (a solid model with see-through parts stays in the pictures, but for those parts where it can be so)
+		if (SheerKind[i] == 4)
+		{
+			SheerHid[i] = 0;
+			if (bOn && !Sheer[i].bStatic && (Skip & 64) == 0)
+				ClearParts(Sheer[i]);
+			continue;
+		}
 		if (bOn)
 		{
 			SheerHid[i] = byte(!Sheer[i].bHidden);
@@ -2060,7 +2184,7 @@ simulated function Join()
 		Sheen.SetRotation(Rotation);
 		Sheen.AttachProjector();
 		for (i = 0; i < Sheer.Length; i++)
-			if (SheerKind[i] == 1 && InCone(Sheer[i]))
+			if ((SheerKind[i] == 1 || SheerKind[i] == 4) && InCone(Sheer[i]))
 				Sheen.AttachActor(Sheer[i]);
 	}
 	if (SheenX != None && (Skip & 16) == 0)

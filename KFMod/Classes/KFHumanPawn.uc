@@ -700,6 +700,8 @@ singular event BaseChange()
 	Super.BaseChange();
 	if ( AIController(Controller)!=None && KActor(Base)!=None )
 		JumpOffPawn();
+	else if ( KFPlayerController(Controller)!=None )
+		KFPlayerController(Controller).UndoPropTurn();
 }
 
 simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)

@@ -115,7 +115,7 @@ function SetShells(bool bSlugs)
 
 function bool AllowReload()
 {
-	if ( bIsReloading || AmmoAmount(0) < 1 || ClientState != WS_ReadyToFire )
+	if ( bIsReloading || AmmoAmount(0) < 1 || !WeaponUp() )
 		return false;
 	// let the last shot's animation finish
 	if ( FireMode[0].NextFireTime > Level.TimeSeconds || FireMode[1].NextFireTime > Level.TimeSeconds )

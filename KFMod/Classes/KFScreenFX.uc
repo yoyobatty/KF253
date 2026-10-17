@@ -25,16 +25,6 @@
 // laid over the view instead, as solid as the number is short of 100. Bloom
 // is made from the frame as it was drawn and added afterwards, unchanged.
 //
-// Shading in corners (ambient occlusion): two more pictures of the view are
-// taken before each frame, small, in white fog and in black (KFAOEye); the
-// one less the other is how far away everything is. A point is in a crease where
-// two of its neighbours on opposite sides are, between them, nearer than it
-// is: by more than a step (on a flat surface the two even out), and by less
-// than a share of its distance (or it is the background behind an edge).
-// Four pairs of neighbours are looked at in each of several rings, each ring
-// twice as far out as the one before. What is found is softened and the
-// level as drawn is darkened by it, before the weapon and the HUD.
-//
 // Camera overlays lay both on, after the level is drawn and before the weapon
 // and the HUD. The pictures are made when the first overlay asks for them, so
 // they are this frame's. That first overlay draws nothing: a picture that is
@@ -62,17 +52,8 @@ var() float					BlurFadeTime;		// seconds for a full blur to clear
 var() float					BlurPeak;			// the most a hit, or hits in a row, can blur (1 is all of it)
 var() float					VividPerRich;		// how many of VividMuch, over 100, add the whole of the view's own square
 var bool					bMenu;				// in a level with no game's HUD (the main menu's): more colour only, no glow
-var() globalconfig bool		bAO;				// shading in corners and creases (ambient occlusion)
 var() globalconfig bool		bTorch;				// the player's own tactical light worked out at every pixel, with shadows (KFTorch reads it)
 var() globalconfig bool		bMuzzleLight;		// the player's own shots light what is ahead, with shadows (KFWeapon.ShotLight, KFTorch's light)
-var() globalconfig float	AOStrength;			// how dark the deepest crease is made, of 1
-var() float					AOShrink;			// the pictures it is worked out from are this many times smaller than the screen each way
-var() float					AORange;			// how far the pictures tell distance; nothing past it is shaded, and less the further off
-var() int					AOBias;				// how much nearer two neighbours must be, in the pictures' steps of distance (255 over AORange)
-var() float					AORing;				// how far the first ring of neighbours is from a point, in the pictures' pixels
-var() int					AORings;			// how many rings (each twice as far out as the one before, four pairs in each)
-var() float					AOWindow;			// how much nearer two neighbours may be and still make a crease, in steps of distance past AOBias, at the first ring (twice that at each after)
-var() int					AOShow;				// (a tool) 1 the shading alone, 2 how far away everything is; 3 the grey picture, 4 the black, 5 the distance less a step, 6 and 7 the two sums, 8 the creases
 
 var KFFrameTap				Tap;
 var PlayerController		PC;
@@ -98,22 +79,6 @@ var array<Object>			VividMade;
 var bool					bVividMade;
 var int						VividNow;			// the number in force this frame (100 when it is off)
 
-// Shading in corners
-var KFAOEye					AOEyeG, AOEyeB;
-var ScriptedTexture			AODep, AOCen, AOLow, AOFar[6], AOWeight, AOPlus, AOMinus, AOFade, AOPic, AOSoft;
-var ConstantColor			AOBiasK, AOFarK[6], AOTapK, AOStrK, AOHalfK;
-var Material				AODepOver, AOCenOver, AOLowOver, AOFarOver[6], AOWeightOver, AOFadeOver, AOPicOver, AOClear;
-var Material				AODepSeen, AOCenSeen, AOLowSeen, AOFarSeen[6], AOWeightSeen, AOPlusSeen, AOMinusSeen, AOFadeSeen, AOPicSeen, AOSoftSeen;
-var array<Material>			AOPlusTap, AOMinusTap, AOSoftLayer;
-var CameraOverlay			AOLay, AOShowLay[8];
-var array<Object>			AOMade;
-var bool					bAOMade;
-var int						AOW, AOH, AOForX, AOForY, AOForRings;
-var float					AOForShrink, AOForRing;
-var array<PhysicsVolume>	FogVols;			// the level's volumes, whose fog is put aside for the length of the pictures
-var array<byte>				FogVolWas;
-var bool					bFogVolsFound, bFogVolsOff;
-
 // Hit blur
 var ScriptedTexture			Soft[3];
 var Material				FrameLayer[16], SoftLayer1[9], SoftLayer2[9], SoftSeen[3];
@@ -126,14 +91,13 @@ var int						SoftForX, SoftForY;	// the screen size and the shrink the soft pict
 var float					SoftForShrink;
 
 // From the settings menu: kept, and taken up by the game in progress
-static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, bool bNewVivid, bool bNewAO)
+static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, bool bNewVivid)
 {
 	local KFScreenFX FX;
 
 	default.bBloom = bNewBloom;
 	default.bHitBlur = bNewHitBlur;
 	default.bVivid = bNewVivid;
-	default.bAO = bNewAO;
 	StaticSaveConfig();
 	FX = class'KFFrameTap'.static.GetFX(P);
 	if (FX != None)
@@ -141,7 +105,6 @@ static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, 
 		FX.bBloom = bNewBloom;
 		FX.bHitBlur = bNewHitBlur;
 		FX.bVivid = bNewVivid;
-		FX.bAO = bNewAO;
 		if (!bNewHitBlur)
 			FX.BlurLevel = 0;
 	}
@@ -182,7 +145,7 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 	bGlow = bBloom && !bMenu;
 
 	// (until the frame's picture has been found once the blur stays on, effect or no effect: see KFFrameTap)
-	if (!bGlow && !bAO && VividNow == 100 && BlurLevel <= 0.0 && Tap.Frame != None)
+	if (!bGlow && VividNow == 100 && BlurLevel <= 0.0 && Tap.Frame != None)
 	{
 		Hang(Want);
 		Tap.Unfit(PC);
@@ -199,23 +162,6 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 				class'KFFXMat'.static.Tone(MendMade, Level, 255, 255), Tap.Frame, 2), 0));
 		Want[Want.Length] = Mend;
 	}
-	// (the shading in corners first: it darkens the level as it was drawn)
-	if (bAO)
-	{
-		if (bAOMade && (AOForX != C.SizeX || AOForY != C.SizeY || AOForShrink != AOShrink || AOForRings != AORings || AOForRing != AORing))
-			DropAO();
-		if (!bAOMade)
-			BuildAO(C.SizeX, C.SizeY);
-		if (TakeAO(C))
-		{
-			if (AOShow >= 1 && AOShow <= 8)
-				Want[Want.Length] = AOShowLay[AOShow - 1];
-			else
-				Want[Want.Length] = AOLay;
-		}
-	}
-	else if (bAOMade)
-		DropAO();
 	if (VividNow != 100)
 	{
 		if (!bVividMade)
@@ -302,266 +248,6 @@ simulated function Shut(CameraOverlay O)
 		return;
 	O.OverlayMaterial = None;
 	Level.ObjectPool.FreeObject(O);
-}
-
-// The volumes' fog is put aside for the length of the shading's pictures: a volume the eye is in would give them its
-// fog in place of the grey and the black
-simulated function FogVolumes(bool bOff)
-{
-	local PhysicsVolume V;
-	local int i;
-
-	if (!bFogVolsFound)
-	{
-		bFogVolsFound = true;
-		foreach AllActors(class'PhysicsVolume', V)
-			FogVols[FogVols.Length] = V;
-	}
-	if (bOff == bFogVolsOff)
-		return;
-	bFogVolsOff = bOff;
-	for (i = 0; i < FogVols.Length; i++)
-	{
-		if (FogVols[i] == None || FogVols[i].bDeleteMe)
-			continue;
-		if (bOff)
-		{
-			FogVolWas[i] = byte(FogVols[i].bDistanceFog);
-			FogVols[i].bDistanceFog = false;
-		}
-		else if (FogVolWas[i] != 0)
-			FogVols[i].bDistanceFog = true;
-	}
-}
-
-simulated function BuildAO(int ScreenX, int ScreenY)
-{
-	local TexMatrix Sp, Sm;
-	local Material A, M;
-	local Combiner X;
-	local float R, Ang, DU, DV;
-	local int j, d, Rings;
-
-	AOForX = ScreenX;
-	AOForY = ScreenY;
-	AOForShrink = AOShrink;
-	AOForRings = AORings;
-	AOForRing = AORing;
-	Rings = Clamp(AORings, 1, 6);
-	AOW = Max(int(float(ScreenX) / FClamp(AOShrink, 1.0, 8.0)), 16);
-	AOH = Max(int(float(ScreenY) / FClamp(AOShrink, 1.0, 8.0)), 16);
-	AOEyeG = Spawn(class'KFAOEye', self);
-	AOEyeB = Spawn(class'KFAOEye', self);
-	if (AOEyeG == None || AOEyeB == None)
-	{
-		if (AOEyeG != None)
-			AOEyeG.Destroy();
-		if (AOEyeB != None)
-			AOEyeB.Destroy();
-		AOEyeG = None;
-		AOEyeB = None;
-		return;
-	}
-	AOEyeG.Init(self, AOW, AOH, true);
-	AOEyeB.Init(self, AOW, AOH, false);
-
-	// (Every Combiner here has a plain picture on one side at least: one made of two made ones, or of a plain colour
-	// and a made one, is not drawn at all, and the engine's stand-in texture is drawn in its place.)
-
-	// how far away everything is: the white fog's picture less the black's
-	AODep = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AODepOver = class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOEyeB.View, AOEyeG.View, 1), 4);
-	AODepSeen = class'KFFXMat'.static.Paint(AOMade, Level, AODep, 2);
-	AOCen = AODep;
-	// a point's distance less a step or so: what its two neighbours, between them, must be nearer than
-	AOBiasK = class'KFFXMat'.static.Tone(AOMade, Level, 2, 255);
-	AOLow = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AOLowOver = class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOBiasK, AOCen, 1), 4);
-	AOLowSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOLow, 2);
-	// the point's distance less more steps, ring by ring: what the two may not be nearer than
-	for (j = 0; j < Rings; j++)
-	{
-		AOFarK[j] = class'KFFXMat'.static.Tone(AOMade, Level, 255, 255);
-		AOFar[j] = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-		AOFarOver[j] = class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOFarK[j], AOCen, 1), 4);
-		AOFarSeen[j] = class'KFFXMat'.static.Paint(AOMade, Level, AOFar[j], 2);
-	}
-	// each pair's share of the whole, as a small picture (a plain colour cannot stand against a made thing)
-	AOTapK = class'KFFXMat'.static.Tone(AOMade, Level, 255 / (4 * Rings), 255);
-	AOWeight = class'KFFXMat'.static.Sheet(AOMade, Level, self, 4, 4);
-	AOWeightOver = class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOTapK, Texture'Engine.WhiteTexture', 0), 4);
-	AOWeightSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOWeight, 2);
-
-	// Each pair of neighbours: their average (the one laid over the other at half), taken from the point's distance
-	// less a step; times sixty-four, so that it is a crease or it is not; times the pair's share, added. And the
-	// same against the point's distance less more steps: what is in that is too deep for a crease (the background
-	// behind an edge), and is taken away again.
-	AOHalfK = class'KFFXMat'.static.Tone(AOMade, Level, 255, 128);
-	AOPlusTap.Length = 0;
-	AOMinusTap.Length = 0;
-	R = FMax(AORing, 0.5);
-	for (j = 0; j < Rings; j++)
-	{
-		for (d = 0; d < 4; d++)
-		{
-			Ang = float(d) * Pi * 0.25 + float(j) * Pi * 0.125;
-			DU = R * Cos(Ang) / float(AOW);
-			DV = R * Sin(Ang) / float(AOH);
-			Sp = class'KFFXMat'.static.Shift(AOMade, Level, AODep);
-			class'KFFXMat'.static.Moved(Sp, DU, DV);
-			Sm = class'KFFXMat'.static.Shift(AOMade, Level, AODep);
-			class'KFFXMat'.static.Moved(Sm, -DU, -DV);
-			A = class'KFFXMat'.static.Fade(AOMade, Level, Sp, Sm, AOHalfK);
-			M = class'KFFXMat'.static.Gained(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, A, AOLow, 1), 3);
-			X = class'KFFXMat'.static.Mix(AOMade, Level, M, AOWeight, 0);
-			X.AlphaOperation = AO_Use_Alpha_From_Material2;
-			AOPlusTap[AOPlusTap.Length] = class'KFFXMat'.static.Paint(AOMade, Level, X, 1);
-			M = class'KFFXMat'.static.Gained(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, A, AOFar[j], 1), 3);
-			X = class'KFFXMat'.static.Mix(AOMade, Level, M, AOWeight, 0);
-			X.AlphaOperation = AO_Use_Alpha_From_Material2;
-			AOMinusTap[AOMinusTap.Length] = class'KFFXMat'.static.Paint(AOMade, Level, X, 1);
-		}
-		R *= 2.0;
-	}
-	AOClear = class'KFFXMat'.static.Paint(AOMade, Level, Texture'Engine.BlackTexture', 4);
-	AOPlus = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AOPlusSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOPlus, 2);
-	AOMinus = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AOMinusSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOMinus, 2);
-
-	// less the further off (nothing at the pictures' far end): one less the distance
-	AOFade = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AOFadeOver = class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOCen, Texture'Engine.WhiteTexture', 1), 4);
-	AOFadeSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOFade, 2);
-	// the creases, doubled, times that
-	AOPic = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	X = class'KFFXMat'.static.Mix(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOMinus, AOPlus, 1), AOFade, 0);
-	X.Modulate2X = true;
-	AOPicOver = class'KFFXMat'.static.Paint(AOMade, Level, X, 4);
-	AOPicSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOPic, 2);
-	// softened: nine of it averaged, each a pixel to one side
-	AOSoft = class'KFFXMat'.static.Sheet(AOMade, Level, self, AOW, AOH);
-	AOSoftSeen = class'KFFXMat'.static.Paint(AOMade, Level, AOSoft, 2);
-	AOSoftLayer.Length = 0;
-	for (j = 0; j < 9; j++)
-		AOSoftLayer[j] = class'KFFXMat'.static.Paint(AOMade, Level,
-			class'KFFXMat'.static.Mix(AOMade, Level, class'KFFXMat'.static.Tone(AOMade, Level, 255, 255 / (j + 1)), AOPic, 2), 0);
-
-	// the level as drawn, less that share of itself
-	AOStrK = class'KFFXMat'.static.Tone(AOMade, Level, 150, 255);
-	AOLay = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, class'KFFXMat'.static.Mix(AOMade, Level, AOStrK, AOSoft, 0), 5));
-	// (tools: the shading alone, white where there is none; how far away everything is; the steps on the way)
-	AOShowLay[0] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level,
-		class'KFFXMat'.static.Mix(AOMade, Level, AOSoft, Texture'Engine.WhiteTexture', 1), 4));
-	AOShowLay[1] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOCen, 4));
-	AOShowLay[2] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOEyeG.View, 4));
-	AOShowLay[3] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOEyeB.View, 4));
-	AOShowLay[4] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOLow, 4));
-	AOShowLay[5] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOPlus, 4));
-	AOShowLay[6] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOMinus, 4));
-	AOShowLay[7] = Overlay(class'KFFXMat'.static.Paint(AOMade, Level, AOPic, 4));
-	bAOMade = true;
-}
-
-simulated function DropAO()
-{
-	local array<CameraOverlay> Nothing;
-	local int i;
-
-	if (PC != None)
-		Hang(Nothing);
-	Shut(AOLay);
-	AOLay = None;
-	for (i = 0; i < 8; i++)
-	{
-		Shut(AOShowLay[i]);
-		AOShowLay[i] = None;
-	}
-	if (AOEyeG != None)
-		AOEyeG.Destroy();
-	if (AOEyeB != None)
-		AOEyeB.Destroy();
-	AOEyeG = None;
-	AOEyeB = None;
-	AODep = None;
-	AOCen = None;
-	AOWeight = None;
-	AOFade = None;
-	AOLow = None;
-	for (i = 0; i < 6; i++)
-		AOFar[i] = None;
-	AOPlus = None;
-	AOMinus = None;
-	AOPic = None;
-	AOSoft = None;
-	AOPlusTap.Length = 0;
-	AOMinusTap.Length = 0;
-	AOSoftLayer.Length = 0;
-	class'KFFXMat'.static.FreeAll(AOMade, Level);
-	bAOMade = false;
-}
-
-// The numbers the shading goes by this frame
-simulated function SetAO()
-{
-	local float K;
-	local int j, V;
-
-	V = Clamp(AOBias, 0, 255);
-	AOBiasK.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-	K = FMax(AOWindow, 0.0);
-	for (j = 0; j < Clamp(AORings, 1, 6); j++)
-	{
-		V = Clamp(int(float(AOBias) + K + 0.5), 0, 255);
-		AOFarK[j].Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-		K *= 2.0;
-	}
-	V = Clamp(int(255.0 * AOStrength + 0.5), 0, 255);
-	AOStrK.Color = class'Canvas'.static.MakeColor(V, V, V, 255);
-}
-
-// One of the pictures made from others: drawn now, before anything is drawn with it
-simulated function Make(Canvas C, ScriptedTexture T, Material Seen)
-{
-	T.Revision++;
-	C.SetPos(0, 0);
-	C.DrawTile(Seen, 1, 1, 0, 0, 1, 1);
-	C.DrawActor(None, false, false);
-}
-
-// Before the frame: the two pictures of the view taken from where it is seen this frame, and the shading made from
-// them
-simulated function bool TakeAO(Canvas C)
-{
-	local Actor Cam;
-	local vector Eye;
-	local rotator Rot;
-	local int j;
-
-	if (AOEyeG == None || AOEyeB == None || PC == None)
-		return false;
-	PC.PlayerCalcView(Cam, Eye, Rot);
-	if (Cam == None)
-		Cam = PC;
-	AOEyeG.Take(Cam, Eye, Rot, int(PC.FOVAngle + 0.5));
-	AOEyeB.Take(Cam, Eye, Rot, int(PC.FOVAngle + 0.5));
-	C.SetPos(0, 0);
-	C.DrawTile(AOEyeG.Unseen, 1, 1, 0, 0, 1, 1);
-	C.SetPos(0, 0);
-	C.DrawTile(AOEyeB.Unseen, 1, 1, 0, 0, 1, 1);
-	C.DrawActor(None, false, false);
-	SetAO();
-	Make(C, AODep, AODepSeen);
-	Make(C, AOLow, AOLowSeen);
-	for (j = 0; j < Clamp(AORings, 1, 6); j++)
-		Make(C, AOFar[j], AOFarSeen[j]);
-	Make(C, AOWeight, AOWeightSeen);
-	Make(C, AOPlus, AOPlusSeen);
-	Make(C, AOMinus, AOMinusSeen);
-	Make(C, AOFade, AOFadeSeen);
-	Make(C, AOPic, AOPicSeen);
-	Make(C, AOSoft, AOSoftSeen);
-	return true;
 }
 
 simulated function BuildBloom()
@@ -749,8 +435,6 @@ simulated function Destroyed()
 	Shut(VividReady);
 	Shut(VividLay);
 	Shut(VividFade);
-	if (bAOMade)
-		DropAO();
 	class'KFFXMat'.static.FreeAll(VividMade, Level);
 	bVividMade = false;
 	class'KFFXMat'.static.FreeAll(MendMade, Level);
@@ -801,56 +485,6 @@ simulated function Smooth(ScriptedTexture Into, int Which, int Width, int Height
 	}
 }
 
-// The shading's pictures, drawn when they are asked for
-simulated function bool RenderAO(ScriptedTexture Tex, Color W)
-{
-	local int i, j;
-
-	if (Tex == AODep)
-		Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AODepOver, W);
-	else if (Tex == AOFade)
-		Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOFadeOver, W);
-	else if (Tex == AOWeight)
-		Tex.DrawTile(0, 0, 4, 4, 0, 0, 4, 4, AOWeightOver, W);
-	else if (Tex == AOLow)
-		Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOLowOver, W);
-	else if (Tex == AOPlus || Tex == AOMinus)
-	{
-		Tex.DrawTile(0, 0, AOW, AOH, 0, 0, 1, 1, AOClear, W);
-		for (i = 0; i < AOPlusTap.Length; i++)
-		{
-			if (Tex == AOPlus)
-				Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOPlusTap[i], W);
-			else
-				Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOMinusTap[i], W);
-		}
-	}
-	else if (Tex == AOPic)
-		Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOPicOver, W);
-	else if (Tex == AOSoft)
-	{
-		// (the middle one first, then the eight round it)
-		for (i = 0; i < 9; i++)
-		{
-			j = i + 4;
-			if (j >= 9)
-				j -= 9;
-			Tex.DrawTile(0, 0, AOW, AOH, j - (j / 3) * 3 - 1, j / 3 - 1, AOW, AOH, AOSoftLayer[i], W);
-		}
-	}
-	else
-	{
-		for (i = 0; i < 6; i++)
-			if (AOFar[i] != None && Tex == AOFar[i])
-			{
-				Tex.DrawTile(0, 0, AOW, AOH, 0, 0, AOW, AOH, AOFarOver[i], W);
-				return true;
-			}
-		return false;
-	}
-	return true;
-}
-
 simulated event RenderTexture(ScriptedTexture Tex)
 {
 	local Color W;
@@ -868,8 +502,6 @@ simulated event RenderTexture(ScriptedTexture Tex)
 	if (FW > 2048.0 || FH > 2048.0)
 		n = 4;
 
-	if (bAOMade && RenderAO(Tex, W))
-		return;
 	if (Tex == Glow)
 	{
 		// (a thing drawn unseen is made ready: each of the four is wanted by the next)
@@ -920,16 +552,8 @@ defaultproperties
      bBloom=True
      bHitBlur=True
      bVivid=True
-     bAO=True
      bTorch=True
      bMuzzleLight=True
-     AOStrength=0.600000
-     AOShrink=2.000000
-     AORange=700.000000
-     AOBias=1
-     AORing=8.000000
-     AORings=4
-     AOWindow=3.000000
      VividMuch=120
      VividRest=0.250000
      VividPerRich=30.000000
