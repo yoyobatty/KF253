@@ -925,6 +925,32 @@ simulated function BloodTrail()
 	DripsLeft--;
 }
 
+// A specimen's sidestep (the Fleshpound's, when a projectile is fired at it from in front:
+// FleshpoundZombieController.ReceiveWarning) is the stock dodge's move without the stock dodge's grunt, which in every
+// specimen's sound group is a UT player's (PlayerSounds.JumpSounds.MaleDodge).
+function bool PerformDodge(eDoubleClickDir DoubleClickMove, vector Dir, vector Cross)
+{
+	local float VelocityZ;
+
+	if ( Physics == PHYS_Falling )
+	{
+		TakeFallingDamage();
+		if ( Velocity.Z < -DodgeSpeedZ*0.5 )
+			Velocity.Z += DodgeSpeedZ*0.5;
+	}
+	VelocityZ = Velocity.Z;
+	Velocity = DodgeSpeedFactor*GroundSpeed*Dir + (Velocity Dot Cross)*Cross;
+	if ( !bCanDodgeDoubleJump )
+		MultiJumpRemaining = 0;
+	if ( bCanBoostDodge || (Velocity.Z < -100) )
+		Velocity.Z = VelocityZ + DodgeSpeedZ;
+	else
+		Velocity.Z = DodgeSpeedZ;
+	CurrentDir = DoubleClickMove;
+	SetPhysics(PHYS_Falling);
+	return true;
+}
+
 // High damage was taken, make em fall over.
 function bool FlipOver()
 {
