@@ -1570,14 +1570,24 @@ simulated function HoldShadows(bool bHold)
 		if (Pr == None || Pr.bDeleteMe)
 			continue;
 		SP = ShadowProjector(Pr);
-		// (back on, if it would still be put on now)
+		// (Back on, if it would still be put on now. Taken off first: two lights in one frame, the torch and the muzzle
+		// flash, both hold the same shadow and both put it back, and the engine's AttachProjector never lets go of the
+		// one it had. That one stays on the level for good, pointing at the shadow; once the shadow is gone the next
+		// picture of the level stops the game, and before that enough of them crowd the light out of the 256 the
+		// renderer draws.)
 		if (SP != None)
 		{
 			if (SP.bShadowActive && SP.ShadowActor != None && !SP.ShadowActor.bHidden && SP.ShadowTexture != None)
+			{
+				SP.DetachProjector(true);
 				SP.AttachProjector();
+			}
 		}
 		else if (Pr.Instigator != None && !Pr.Instigator.bHidden)
+		{
+			Pr.DetachProjector(true);
 			Pr.AttachProjector();
+		}
 	}
 	Held.Length = 0;
 	if (!bHold)
@@ -2156,32 +2166,41 @@ simulated function Join()
 	local float D, Wide;
 	local int i;
 
+	// (each taken off before it is put on: putting on what is already on leaves the first on the level for good, see
+	// HoldShadows)
 	if ((Skip & 8) == 0)
+	{
+		DetachProjector(true);
 		AttachProjector();
+	}
 	LastOn = Level.TimeSeconds;
 	if (Fill != None && Soft == 1 && (Skip & 4) == 0)
 	{
 		Fill.SetLocation(Location);
 		Fill.SetRotation(Rotation);
 		Fill.MaxTraceDistance = MaxTraceDistance;
+		Fill.DetachProjector(true);
 		Fill.AttachProjector();
 	}
 	if (Shade != None)
 	{
 		Shade.SetLocation(Location);
 		Shade.SetRotation(Rotation);
+		Shade.DetachProjector(true);
 		Shade.AttachProjector();
 	}
 	if (ShadeX != None)
 	{
 		ShadeX.SetLocation(Location);
 		ShadeX.SetRotation(Rotation);
+		ShadeX.DetachProjector(true);
 		ShadeX.AttachProjector();
 	}
 	if (Sheen != None && (Skip & 16) == 0)
 	{
 		Sheen.SetLocation(Location);
 		Sheen.SetRotation(Rotation);
+		Sheen.DetachProjector(true);
 		Sheen.AttachProjector();
 		for (i = 0; i < Sheer.Length; i++)
 			if ((SheerKind[i] == 1 || SheerKind[i] == 4) && InCone(Sheer[i]))
@@ -2191,6 +2210,7 @@ simulated function Join()
 	{
 		SheenX.SetLocation(Location);
 		SheenX.SetRotation(Rotation);
+		SheenX.DetachProjector(true);
 		SheenX.AttachProjector();
 		for (i = 0; i < Sheer.Length; i++)
 			if (SheerKind[i] == 2 && InCone(Sheer[i]))

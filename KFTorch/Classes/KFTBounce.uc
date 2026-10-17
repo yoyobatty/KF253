@@ -190,6 +190,8 @@ simulated function Prep(Canvas C)
 	// all but what it was, and what is left at the end is a thirteenth, which nobody sees. On models the fall is
 	// laid over the cone's whole length when it is put on, so there it is a little slower than it was.
 	MaxTraceDistance = FullLength;
+	// (taken off first: putting on what is already on leaves the first on the level for good, see KFTLight.HoldShadows)
+	DetachProjector(true);
 	AttachProjector();
 	MaxTraceDistance = FadeLength;
 	bOn = true;
