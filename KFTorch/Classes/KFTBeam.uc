@@ -22,7 +22,7 @@ var bool		bGlowOut;			// (the mod's glow has been put out)
 var bool		bDeviceRead, bDeviceFits;	// (whether this machine draws with Direct3D 9 or 8, read once)
 
 // The light draws alike on Direct3D 9 and on 3369's Direct3D 8 (tested 2026-10-16); the Direct3D 11 renderer crashes
-// drawing it. Also asked by the muzzle flash's light (KFTBullpup). (A change of renderer needs a restart.)
+// drawing it. Also asked by the muzzle flash's light (KFTFlash). (A change of renderer needs a restart.)
 static function bool DeviceFits(Actor A)
 {
 	local string Device;

@@ -72,6 +72,8 @@ var Actor TacShine;
 
 var Effect_TacLightProjector FlashLight;
 var class<Effect_TacLightProjector> FlashLightClass;	// the light it makes (a mutator may hand it another, as KFTorch does)
+var class<Actor> MuzzleLightClass;	// the light a shot throws ahead, made on the shooter's machine (a mutator may hand one, as KFTorch does)
+var Actor MuzzleLight;				// ...the player's one, shared by every weapon; while it is there the weapon's own flash light is not used
 
 var float NextAmmoCheckTime,LastAmmoResult,LastHasGunMsgTime;
 
@@ -157,6 +159,9 @@ replication
 
 	reliable if( bNetDirty && bNetOwner && (Role==ROLE_Authority) )
 		ClipCount, bUpgraded;
+
+	reliable if( bNetInitial && bNetOwner && (Role==ROLE_Authority) )
+		MuzzleLightClass;
 
 	// TODO - which of these ACTUALLY need sending?
 	reliable if(Role < ROLE_Authority)
@@ -976,6 +981,44 @@ function OwnerEvent(name EventName)
 			ServerSpawnLight();
 	}
 	Super.OwnerEvent(EventName);
+}
+
+// A shot with a muzzle flash, on the machine of whoever fires (from the fire mode): the light it throws ahead, for a
+// player looking through their own eyes here who has it on in the settings. One light serves all of the player's
+// weapons; the light itself takes the shot as a Trigger.
+simulated function ShotLight()
+{
+	local PlayerController PC;
+	local Actor A;
+
+	if ( MuzzleLightClass == None || Level.NetMode == NM_DedicatedServer || Instigator == None )
+		return;
+	PC = PlayerController(Instigator.Controller);
+	if ( PC == None || Viewport(PC.Player) == None )
+		return;
+	// (switched off: the light goes, and the weapon's own flash light is used again)
+	if ( !class'KFScreenFX'.default.bMuzzleLight )
+	{
+		if ( MuzzleLight != None && !MuzzleLight.bDeleteMe )
+			MuzzleLight.Destroy();
+		MuzzleLight = None;
+		return;
+	}
+	if ( MuzzleLight == None || MuzzleLight.bDeleteMe )
+	{
+		MuzzleLight = None;
+		foreach DynamicActors(MuzzleLightClass, A)
+			if ( !A.bDeleteMe )
+			{
+				MuzzleLight = A;
+				break;
+			}
+		if ( MuzzleLight == None )
+			MuzzleLight = Spawn(MuzzleLightClass);
+		if ( MuzzleLight == None )
+			return;
+	}
+	MuzzleLight.Trigger(self, Instigator);
 }
 
 simulated function WeaponTick(float DT)

@@ -5,8 +5,10 @@
 // pattern (KFTFlashCookie) is turned at random for each shot and its strength
 // varies a little, so that a burst flickers as a real one does.
 //
-// Made by the weapon in hand (KFTBullpup) on the machine of whoever fires it,
-// for that player alone: everybody else sees the mod's own flash.
+// Made by a weapon's muzzle flash (KFWeapon.ShotLight, which every weapon is
+// handed by MutSingleTorch) on the machine of whoever fires it, for that
+// player alone: everybody else sees the mod's own flash. One serves all of the
+// player's weapons; each shot comes as a Trigger.
 //=============================================================================
 class KFTFlash extends KFTLight;
 
@@ -85,6 +87,21 @@ simulated event Destroyed()
 		Level.ObjectPool.FreeObject(Turn);
 		Turn = None;
 	}
+}
+
+// A shot, from the weapon (KFWeapon.ShotLight): from whoever fired it. A renderer that cannot draw the light
+// (KFTBeam.DeviceFits) gives that weapon back its own flash light for good.
+simulated event Trigger(Actor Other, Pawn EventInstigator)
+{
+	if (!class'KFTBeam'.static.DeviceFits(self))
+	{
+		if (KFWeapon(Other) != None)
+			KFWeapon(Other).MuzzleLightClass = None;
+		Destroy();
+		return;
+	}
+	Holder = EventInstigator;
+	Shot();
 }
 
 // A shot: the light comes up at once, turned and as strong as it happens to be this time

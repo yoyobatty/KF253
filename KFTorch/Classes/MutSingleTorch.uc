@@ -1,8 +1,10 @@
 //=============================================================================
 // MutSingleTorch - everybody's tactical light, on the 9mm and the dual 9mms,
 // is the one worked out at every pixel (KFTBeam, KFTLight): each weapon with
-// a torch is handed that light as the weapon is made. The weapons stay the
-// mod's own, so the trader knows them as ever.
+// a torch is handed that light as the weapon is made. Every weapon is handed
+// the muzzle flash's light too (KFTFlash), which its shots throw ahead on the
+// shooter's machine. The weapons stay the mod's own, so the trader knows them
+// as ever.
 //
 // In the console, on a game of one's own:
 //   mutate torch              what the light is doing
@@ -11,7 +13,6 @@
 //   mutate torch size N       the light's picture of what it falls on, pixels across: 512, 1024, 2048 (2048)
 //   mutate torch thrift 0|1|2 the light's pictures taken every other frame: never, always, when frames are slow (2)
 //   mutate torch soft N       how soft a shadow's edge is, in hundredths: 0 hard, 100 the usual, up to 400
-//   mutate torch bullpup      a Bullpup whose muzzle flash lights what is ahead, with shadows (KFTBullpup)
 // Each is kept in the mod's user ini, under [KFTorch.KFTLight].
 //=============================================================================
 class MutSingleTorch extends Mutator;
@@ -21,6 +22,9 @@ function bool CheckReplacement(Actor Other, out byte bSuperRelevant)
 {
 	if (KFWeapon(Other) != None && KFWeapon(Other).bTorchEnabled)
 		KFWeapon(Other).FlashLightClass = class'KFTBeam';
+	// (only shots with a muzzle flash ask for it: KFWeapon.ShotLight)
+	if (KFWeapon(Other) != None)
+		KFWeapon(Other).MuzzleLightClass = class'KFTFlash';
 	return true;
 }
 
@@ -51,13 +55,6 @@ function Mutate(string MutateString, PlayerController Sender)
 			class'KFTLight'.default.Thrift = Clamp(N, 0, 2);
 		else if (Verb ~= "soft")
 			class'KFTLight'.default.Edge = FClamp(float(N) / 100.0, 0.0, 4.0);
-		else if (Verb ~= "bullpup")
-		{
-			// (a demonstration: the Bullpup whose muzzle flash lights what is ahead, KFTBullpup)
-			if (Sender != None && Sender.Pawn != None)
-				Sender.Pawn.GiveWeapon("KFTorch.KFTBullpup");
-			Verb = "";
-		}
 		else if (Verb ~= "show")
 		{
 			// (a tool: the light's own pictures, along the top of the screen)

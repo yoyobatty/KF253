@@ -81,6 +81,7 @@ function float MaxRange()
 
 defaultproperties
 {
+    bNoShotLight=True
     MaxLoad=3
     ProjSpawnOffset=(X=65.000000,Y=10.000000,Z=-15.000000)
     bSplashDamage=True

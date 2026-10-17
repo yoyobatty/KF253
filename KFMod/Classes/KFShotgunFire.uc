@@ -20,6 +20,16 @@ var float   ViewPunchDamping;     // Damping factor for smooth return
 var float   ViewPunchSpring;      // Spring force for return
 var float   KickScale;            // This shot's share of the weapon's UpKick
 
+var bool    bNoShotLight;         // its muzzle flash throws no light ahead (KFWeapon.ShotLight): the flamethrower's is its pilot flame
+
+// (on the machine of whoever fires, as the flash is shown)
+function FlashMuzzleFlash()
+{
+	Super.FlashMuzzleFlash();
+	if ( FlashEmitterClass != None && !bNoShotLight && KFWeapon(Weapon) != None )
+		KFWeapon(Weapon).ShotLight();
+}
+
 function float GetFireSpeed()
 {
 	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )

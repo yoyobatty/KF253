@@ -7,7 +7,7 @@ function Activate( KFHumanPawn P, KFZombiesGameType G )
 
 defaultproperties
 {
-	PickupMessage="CARPENTER!"
+	PickupMessage="BARRICADES REBUILT!"
 	StaticMesh=StaticMesh'NewPatchSM.WelderGround'
 	DrawScale=1.200000
 	LightHue=160

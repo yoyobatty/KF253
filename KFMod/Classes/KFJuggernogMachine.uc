@@ -22,7 +22,7 @@ defaultproperties
 {
 	Cost=2500
 	HealthBonus=150.000000
-	PerkName="Juggernog"
-	AlreadyBoughtMessage="You already have Juggernog."
-	PurchasedMessage="Juggernog purchased! You can take more hits before going down."
+	PerkName="Iron Hide"
+	AlreadyBoughtMessage="You already have Iron Hide."
+	PurchasedMessage="Iron Hide purchased! You can take more hits before going down."
 }

@@ -693,7 +693,7 @@ defaultproperties
 	ReviveStartMessage="Reviving..."
 	ReviveInterruptedMessage="Revive cancelled."
 	RevivePromptMessage="Hold [USE] to revive"
-	SelfReviveMessage="You're down! Quick Revive is getting you back up."
+	SelfReviveMessage="You're down! Second Wind is getting you back up."
 	RegenDelay=5.000000
 	RegenRate=10.000000
 	RequiredEquipment(0)="KFMod.KnifeZombies"

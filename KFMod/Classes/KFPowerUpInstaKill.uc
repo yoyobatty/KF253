@@ -7,7 +7,7 @@ function Activate( KFHumanPawn P, KFZombiesGameType G )
 
 defaultproperties
 {
-	PickupMessage="INSTA-KILL!"
+	PickupMessage="ONE-HIT KILLS!"
 	StaticMesh=StaticMesh'KillingFloorStatics.3PDeagle_Ground'
 	DrawScale=1.200000
 	LightHue=0

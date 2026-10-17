@@ -670,7 +670,7 @@ defaultproperties
     StuckPlayerDist=1500.000000
     InitialCountDownValue=6
     GameName="Zombies"
-    Description="Like Black Ops Zombies"
+    Description="Survive round after round: earn dosh, repair the barricades, buy weapons off the walls and perks from the machines."
     DefaultPlayerClassName="KFMod.KFHumanPawnZombies"
     PlayerControllerClass=Class'KFMod.KFPlayerControllerZombies'
     PlayerControllerClassName="KFmod.KFPlayerControllerZombies"

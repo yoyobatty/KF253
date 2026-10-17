@@ -134,6 +134,8 @@ function FlashMuzzleFlash()
    //log(r);
 
     Super.FlashMuzzleFlash();
+    if ( FlashEmitterClass != None && KFWeapon(Weapon) != None )
+        KFWeapon(Weapon).ShotLight();
 }
 
 event ModeDoFire()

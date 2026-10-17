@@ -1,8 +1,8 @@
 class KFTab_DetailSettings extends UT2K4Tab_DetailSettings;
 
-var automated moCheckBox   ch_Bloom, ch_HitBlur, ch_Vivid, ch_AO, ch_Torch;
-var() bool bBloom, bHitBlur, bVivid, bAO, bTorch;
-var bool bScreenFXChanged, bTorchChanged;
+var automated moCheckBox   ch_Bloom, ch_HitBlur, ch_Vivid, ch_AO, ch_Torch, ch_MuzzleLight;
+var() bool bBloom, bHitBlur, bVivid, bAO, bTorch, bMuzzleLight;
+var bool bScreenFXChanged, bTorchChanged, bMuzzleLightChanged;
 
 function SetupPositions()
 {
@@ -15,12 +15,13 @@ function SetupPositions()
     i = sb_Section2.FindComponentIndex(ch_Decals);
     if (i < 0)
         i = sb_Section2.AlignStack.Length;
-    sb_Section2.AlignStack.Insert(i, 5);
+    sb_Section2.AlignStack.Insert(i, 6);
     sb_Section2.AlignStack[i] = ch_Bloom;
     sb_Section2.AlignStack[i + 1] = ch_HitBlur;
     sb_Section2.AlignStack[i + 2] = ch_Vivid;
     sb_Section2.AlignStack[i + 3] = ch_AO;
     sb_Section2.AlignStack[i + 4] = ch_Torch;
+    sb_Section2.AlignStack[i + 5] = ch_MuzzleLight;
 }
 
 function InternalOnLoadINI(GUIComponent Sender, string s)
@@ -50,6 +51,11 @@ function InternalOnLoadINI(GUIComponent Sender, string s)
         case ch_Torch:
             bTorch = class'KFMod.KFScreenFX'.default.bTorch;
             ch_Torch.SetComponentValue(bTorch,true);
+            break;
+
+        case ch_MuzzleLight:
+            bMuzzleLight = class'KFMod.KFScreenFX'.default.bMuzzleLight;
+            ch_MuzzleLight.SetComponentValue(bMuzzleLight,true);
             break;
 
         default:
@@ -89,6 +95,11 @@ function InternalOnChange(GUIComponent Sender)
             bTorch = ch_Torch.IsChecked();
             bTorchChanged = true;
             break;
+
+       case ch_MuzzleLight:
+            bMuzzleLight = ch_MuzzleLight.IsChecked();
+            bMuzzleLightChanged = true;
+            break;
     }
     Super.InternalOnChange(Sender);
 }
@@ -100,10 +111,12 @@ function ResetClicked()
     class'KFMod.KFScreenFX'.static.ResetConfig("bVivid");
     class'KFMod.KFScreenFX'.static.ResetConfig("bAO");
     class'KFMod.KFScreenFX'.static.ResetConfig("bTorch");
+    class'KFMod.KFScreenFX'.static.ResetConfig("bMuzzleLight");
     class'KFMod.KFScreenFX'.static.Configure(PlayerOwner(), class'KFMod.KFScreenFX'.default.bBloom, class'KFMod.KFScreenFX'.default.bHitBlur,
         class'KFMod.KFScreenFX'.default.bVivid, class'KFMod.KFScreenFX'.default.bAO);
     bScreenFXChanged = false;
     bTorchChanged = false;
+    bMuzzleLightChanged = false;
     Super.ResetClicked();
 }
 
@@ -121,6 +134,12 @@ function SaveSettings()
         class'KFMod.KFScreenFX'.default.bTorch = bTorch;
         class'KFMod.KFScreenFX'.static.StaticSaveConfig();
         bTorchChanged = false;
+    }
+    if ( bMuzzleLightChanged )
+    {
+        class'KFMod.KFScreenFX'.default.bMuzzleLight = bMuzzleLight;
+        class'KFMod.KFScreenFX'.static.StaticSaveConfig();
+        bMuzzleLightChanged = false;
     }
 }
 
@@ -215,4 +234,22 @@ defaultproperties
         OnLoadINI=KFTab_DetailSettings.InternalOnLoadINI
     End Object
     ch_Torch=TorchDetail
+
+    Begin Object Class=moCheckBox Name=MuzzleLightDetail
+        ComponentJustification=TXTA_Left
+        CaptionWidth=0.940000
+        Caption="Muzzle Flash Light"
+        OnCreateComponent=MuzzleLightDetail.InternalOnCreateComponent
+        IniOption="@Internal"
+        IniDefault="True"
+        Hint="Your own shots light up what is ahead of you for an instant, with shadows behind whatever stands in the flash. Direct3D 9 and 8 only."
+        WinTop=0.479308
+        WinLeft=0.600000
+        WinWidth=0.300000
+        WinHeight=0.040000
+        TabOrder=28
+        OnChange=KFTab_DetailSettings.InternalOnChange
+        OnLoadINI=KFTab_DetailSettings.InternalOnLoadINI
+    End Object
+    ch_MuzzleLight=MuzzleLightDetail
 }

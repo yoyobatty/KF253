@@ -38,8 +38,8 @@ defaultproperties
 	Cost=1500
 	SoloCost=500
 	SoloLimit=3
-	PerkName="Quick Revive"
-	AlreadyBoughtMessage="You already have Quick Revive."
-	PurchasedMessage="Quick Revive purchased!"
-	SoldOutMessage="Quick Revive is sold out."
+	PerkName="Second Wind"
+	AlreadyBoughtMessage="You already have Second Wind."
+	PurchasedMessage="Second Wind purchased!"
+	SoldOutMessage="Second Wind is sold out."
 }

@@ -14,7 +14,7 @@ function GivePerk( KFHumanPawnZombies P, KFPlayerReplicationInfo KFPRI )
 defaultproperties
 {
 	Cost=2000
-	PerkName="Double Tap"
-	AlreadyBoughtMessage="You already have Double Tap."
-	PurchasedMessage="Double Tap purchased! You fire faster."
+	PerkName="Hair Trigger"
+	AlreadyBoughtMessage="You already have Hair Trigger."
+	PurchasedMessage="Hair Trigger purchased! You fire faster."
 }

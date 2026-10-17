@@ -14,7 +14,7 @@ function GivePerk( KFHumanPawnZombies P, KFPlayerReplicationInfo KFPRI )
 defaultproperties
 {
 	Cost=3000
-	PerkName="Speed Cola"
-	AlreadyBoughtMessage="You already have Speed Cola."
-	PurchasedMessage="Speed Cola purchased! You reload faster."
+	PerkName="Quick Hands"
+	AlreadyBoughtMessage="You already have Quick Hands."
+	PurchasedMessage="Quick Hands purchased! You reload faster."
 }

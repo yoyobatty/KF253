@@ -14,7 +14,7 @@ function GivePerk( KFHumanPawnZombies P, KFPlayerReplicationInfo KFPRI )
 defaultproperties
 {
 	Cost=2000
-	PerkName="Stamin-Up"
-	AlreadyBoughtMessage="You already have Stamin-Up."
-	PurchasedMessage="Stamin-Up purchased! You sprint faster and longer."
+	PerkName="Fleet Foot"
+	AlreadyBoughtMessage="You already have Fleet Foot."
+	PurchasedMessage="Fleet Foot purchased! You sprint faster and longer."
 }

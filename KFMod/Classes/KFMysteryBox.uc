@@ -98,7 +98,7 @@ function UsedBy( Pawn user )
 
 	if( PossibleWeapons.Length==0 )
 	{
-		Warn(Self $ ": PossibleWeapons is empty - this mystery box was placed without any weapons configured.");
+		Warn(Self $ ": PossibleWeapons is empty - this weapon crate was placed without any weapons configured.");
 		Return;
 	}
 
@@ -239,7 +239,7 @@ defaultproperties
 	RefireDelay=0.500000
 	DrawType=DT_StaticMesh
 	NotEnoughPointsMessage="Not enough dosh."
-	AlreadySpinningMessage="Someone is already using the mystery box."
+	AlreadySpinningMessage="Someone is already using the weapon crate."
 	CantCarryMessage="You can't carry that."
 	NotYoursMessage="That weapon isn't yours yet."
 	AlreadyOwnedMessage="You already have that weapon."

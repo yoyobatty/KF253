@@ -7,7 +7,7 @@ function Activate( KFHumanPawn P, KFZombiesGameType G )
 
 defaultproperties
 {
-	PickupMessage="DOUBLE POINTS!"
+	PickupMessage="DOUBLE DOSH!"
 	StaticMesh=StaticMesh'22Patch.BankNote'
 	DrawScale=0.800000
 	LightHue=40

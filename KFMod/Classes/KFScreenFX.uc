@@ -64,6 +64,7 @@ var() float					VividPerRich;		// how many of VividMuch, over 100, add the whole
 var bool					bMenu;				// in a level with no game's HUD (the main menu's): more colour only, no glow
 var() globalconfig bool		bAO;				// shading in corners and creases (ambient occlusion)
 var() globalconfig bool		bTorch;				// the player's own tactical light worked out at every pixel, with shadows (KFTorch reads it)
+var() globalconfig bool		bMuzzleLight;		// the player's own shots light what is ahead, with shadows (KFWeapon.ShotLight, KFTorch's light)
 var() globalconfig float	AOStrength;			// how dark the deepest crease is made, of 1
 var() float					AOShrink;			// the pictures it is worked out from are this many times smaller than the screen each way
 var() float					AORange;			// how far the pictures tell distance; nothing past it is shaded, and less the further off
@@ -921,6 +922,7 @@ defaultproperties
      bVivid=True
      bAO=True
      bTorch=True
+     bMuzzleLight=True
      AOStrength=0.600000
      AOShrink=2.000000
      AORange=700.000000

@@ -1,5 +1,5 @@
 // Endless Killing Floor - infinite waves, always-open trader, combat music throughout.
-// Inspired by Call of Duty Zombies: survive as long as you can with ever-scaling difficulty.
+// Survive as long as you can with ever-scaling difficulty.
 //
 // Key differences from KFGameType:
 //   - Waves never end (no FinalWave check, no boss wave)

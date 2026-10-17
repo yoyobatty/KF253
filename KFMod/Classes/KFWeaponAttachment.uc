@@ -280,7 +280,9 @@ simulated function WeaponLight()
 		if ( Instigator.IsFirstPerson() )
 		{
 			LitWeapon = Instigator.Weapon;
-			LitWeapon.bDynamicLight = true;
+			// (while a shot's light thrown ahead is there, it does the lighting: KFWeapon.ShotLight)
+			if ( KFWeapon(LitWeapon) == None || KFWeapon(LitWeapon).MuzzleLight == None || KFWeapon(LitWeapon).MuzzleLight.bDeleteMe )
+				LitWeapon.bDynamicLight = true;
 		}
 		else
 			bDynamicLight = true;

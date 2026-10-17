@@ -829,11 +829,11 @@ simulated function DrawZombiesHUD(Canvas C)
 	C.SetDrawColor(255,255,255,255);
 	if( ZGRI.InstaKillTime>0 )
 	{
-		DrawZombiesText(C, "INSTA-KILL" @ ZGRI.InstaKillTime, CentreX, Y);
+		DrawZombiesText(C, "ONE-HIT KILLS" @ ZGRI.InstaKillTime, CentreX, Y);
 		Y += YL;
 	}
 	if( ZGRI.DoublePointsTime>0 )
-		DrawZombiesText(C, "DOUBLE POINTS" @ ZGRI.DoublePointsTime, CentreX, Y);
+		DrawZombiesText(C, "DOUBLE DOSH" @ ZGRI.DoublePointsTime, CentreX, Y);
 
 	ZP = KFHumanPawnZombies(PawnOwner);
 	if( ZP==None )
@@ -863,7 +863,7 @@ simulated function DrawZombiesHUD(Canvas C)
 	{
 		C.SetDrawColor(255,60,60,255);
 		if( ZP.bSelfReviving )
-			S = "QUICK REVIVE";
+			S = "SECOND WIND";
 		else if( ZP.bBeingRevived )
 			S = "BEING REVIVED";
 		else
@@ -930,11 +930,11 @@ simulated function DrawZombiesHUD(Canvas C)
 		Size = FMax(32, C.ClipY*0.045);
 		X = C.ClipX*0.02;
 		Y = C.ClipY*0.78;
-		DrawZombiesPerk(C, ZPRI.bHasJuggernog, "JUG", 190,30,30, X, Y, Size);
-		DrawZombiesPerk(C, ZPRI.bHasQuickRevive, "REV", 40,120,220, X, Y, Size);
-		DrawZombiesPerk(C, ZPRI.bHasSpeedCola, "SPD", 30,150,60, X, Y, Size);
-		DrawZombiesPerk(C, ZPRI.bHasDoubleTap, "DBL", 210,120,20, X, Y, Size);
-		DrawZombiesPerk(C, ZPRI.bHasStaminUp, "STA", 190,170,20, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasJuggernog, "IRN", 190,30,30, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasQuickRevive, "WND", 40,120,220, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasSpeedCola, "HND", 30,150,60, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasDoubleTap, "TRG", 210,120,20, X, Y, Size);
+		DrawZombiesPerk(C, ZPRI.bHasStaminUp, "FLT", 190,170,20, X, Y, Size);
 	}
 
 	C.Style = OldStyle;
