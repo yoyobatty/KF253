@@ -1439,7 +1439,7 @@ simulated function DrawKFHUDTextElements(Canvas C)
 	IS = HudUnits(CornerUnits);
 
 	// Countdown Text
-	if(!PlayerOwner.GameReplicationInfo.bMatchHasBegun || PlayerOwner.GameReplicationInfo == none)
+	if( PlayerOwner.GameReplicationInfo == none || !PlayerOwner.GameReplicationInfo.bMatchHasBegun )
 		return;
 
 	if (KFHumanPawn(PlayerOwner.Pawn) != none)
@@ -1515,17 +1515,9 @@ simulated function Timer()
 	{
 		// Lets get the facts straight, first.
 		if (CurrentZone != none)
-		{
-			CurrentR = CurrentZone.DistanceFogColor.R ;
-			CurrentG = CurrentZone.DistanceFogColor.G ;
-			CurrentB = CurrentZone.DistanceFogColor.B ;
-		}
+			MoodTint(CurrentZone.DistanceFogColor, CurrentR, CurrentG, CurrentB);
 		else if (CurrentVolume != none)
-		{
-			CurrentR = CurrentVolume.DistanceFogColor.R ;
-			CurrentG = CurrentVolume.DistanceFogColor.G ;
-			CurrentB = CurrentVolume.DistanceFogColor.B ;
-		}
+			MoodTint(CurrentVolume.DistanceFogColor, CurrentR, CurrentG, CurrentB);
 		else return;
 
 		// Do we even need to tally up, or we sorted?
@@ -1689,6 +1681,23 @@ simulated function DrawModOverlay( Canvas C )
 	}
 }
 
+// A fog colour as a mood tint. Black fog, or next to it, is a map's darkness, not a mood: it gives no tint, as a map
+// with no fog does. (Taken as a colour it tinted the view black, for good in a near-black zone, and for the length
+// of a change between black zones, so a doorway between them blinked the view black.)
+simulated function MoodTint(color Fog, out float R, out float G, out float B)
+{
+	if ( Fog.R <= 2 && Fog.G <= 2 && Fog.B <= 2 )
+	{
+		R = 255;
+		G = 255;
+		B = 255;
+		return;
+	}
+	R = Fog.R;
+	G = Fog.G;
+	B = Fog.B;
+}
+
 // The fog the mood overlay takes its colour from: the zone the player's pawn is in, or a fog volume he stands in.
 simulated function TrackMoodZone()
 {
@@ -1756,16 +1765,12 @@ simulated function TrackMoodZone()
 
                 if (LastZone != none)
                 {
-                    LastR = LastZone.DistanceFogColor.R;
-                    LastG = LastZone.DistanceFogColor.G;
-                    LastB = LastZone.DistanceFogColor.B;
+                    MoodTint(LastZone.DistanceFogColor, LastR, LastG, LastB);
                     bHasFogTint = true;  // captured a fog tint
                 }
                 else if (LastVolume != none)
                 {
-                    LastR = LastVolume.DistanceFogColor.R;
-                    LastG = LastVolume.DistanceFogColor.G;
-                    LastB = LastVolume.DistanceFogColor.B;
+                    MoodTint(LastVolume.DistanceFogColor, LastR, LastG, LastB);
                     bHasFogTint = true;  // captured a fog tint
                 }
 			else if (LastZone != none && LastVolume != none)
