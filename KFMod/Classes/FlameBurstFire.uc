@@ -73,9 +73,10 @@ function DoFireEffect()
 	}
 }
 
+// As far as the stream reaches (at 2000 bots sprayed specimens it could not reach)
 function float MaxRange()
 {
-    return 2000;
+    return class'FlameTendril'.default.Speed * class'FlameTendril'.static.FlightFor(Instigator) + ProjSpawnOffset.X;
 }
 
 defaultproperties

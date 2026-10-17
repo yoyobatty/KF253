@@ -58,7 +58,8 @@ State RunningState
     }
 	function BeginState()
 	{
-		SetGroundSpeed(OriginalGroundSpeed * 1.7);
+		if( !bFixedPace )
+			SetGroundSpeed(OriginalGroundSpeed * 1.7);
 		bRunning = true;
 		if( Level.NetMode!=NM_DedicatedServer )
 			PostNetReceive();
@@ -78,6 +79,12 @@ State RunningState
 	function RangedAttack(Actor A)
 	{
 		Super.RangedAttack(A);
+	}
+	function Tick(float DeltaTime)
+	{
+		Global.Tick(DeltaTime);
+		if( GorefastController(Controller)!=None )
+			GorefastController(Controller).SteerSprint();
 	}
 Begin:
 	While( Controller!=None && Controller.Target!=None && VSize(Controller.Target.Location-Location)<400 )

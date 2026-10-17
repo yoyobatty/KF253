@@ -65,6 +65,13 @@ var() float PunchCeiling;      // Punches that keep coming level off near this m
 var() float PunchLookAhead;    // Seconds of travel counted in when judging how far the view is already kicked
 var() float PunchMaxStep;      // Longest spring step in seconds, so the swing is the same at any frame rate
 
+// A gun's own shake turns the engine's way (it collapses back in a few frames), which the guns' numbers were made
+// for; played out in full swings they wobbled for three times as long. Other shakes turn smoothly (CheckShake).
+var bool bGunShakeRot, bGunShakeOffset;	// the rotation / offset shake playing came from a gun
+var bool bGunShaking;					// set while a gun's shake is handed in
+var bool bTurningRot;					// set while CheckShake works on a rotation axis
+var() bool bGunShakeEngineTurn;			// False: guns' shakes turn smoothly too (as from 2026-10-14 to 10-15)
+
 replication
 {
 	reliable if(RemoteRole == ROLE_AUTONOMOUSPROXY)
@@ -315,7 +322,27 @@ function ShakeView(vector shRotMag, vector shRotRate, float shRotTime,
 {
 	if (bGodMode)
 		return;
+	// (as the engine tests it: a part is replaced only by a bigger shake)
+	if (VSize(shRotMag) > VSize(ShakeRotMax))
+		bGunShakeRot = bGunShaking;
+	if (VSize(shOffsetMag) > VSize(ShakeOffsetMax))
+		bGunShakeOffset = bGunShaking;
 	Super.ShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
+}
+
+function WeaponShakeView(vector shRotMag, vector shRotRate, float shRotTime,
+                   vector shOffsetMag, vector shOffsetRate, float shOffsetTime)
+{
+	bGunShaking = true;
+	Super.WeaponShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
+	bGunShaking = false;
+}
+
+function UpdateShakeRotComponent(out float max, out int current, out float rate, out float time, float dt)
+{
+	bTurningRot = true;
+	Super.UpdateShakeRotComponent(max, current, rate, time, dt);
+	bTurningRot = false;
 }
 
 function ClientKFShakeView(vector shRotMag, vector shRotRate, float shRotTime,
@@ -340,6 +367,11 @@ function ViewShake(float DeltaTime)
 // now only on reaching the peak it is heading for.
 function CheckShake(out float MaxOffset, out float Offset, out float Rate, out float Time, float dt)
 {
+	if( bGunShakeEngineTurn && ((bTurningRot && bGunShakeRot) || (!bTurningRot && bGunShakeOffset)) )
+	{
+		Super.CheckShake(MaxOffset, Offset, Rate, Time, dt);
+		return;
+	}
 	if( Rate==0 )
 	{
 		if( MaxOffset==0 )
@@ -1541,6 +1573,7 @@ function PlayStartupMessage(byte StartupStage)
 
 defaultproperties
 {
+	bGunShakeEngineTurn=True
 	CashThrowAmount=50
 	UseSendInterval=0.100000
 	PunchDamping=9.000000

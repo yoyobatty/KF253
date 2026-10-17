@@ -1,6 +1,7 @@
 class SyringeFire extends SyringeAltFire;
 
 var KFHumanPawn PendingHealTarget;
+var() float CashPerHealth;	// a medic's pay for each point of health restored to a team-mate
 
 function DoFireEffect()
 {
@@ -11,10 +12,7 @@ function DoFireEffect()
 
 simulated function Timer()
 {
-	local PlayerReplicationInfo OtherPRI;
-	local int MedicReward;
 	local KFHumanPawn Healed;
-	local KFPlayerController PC;
 	local int HealSum; // for modifying based on perks
 
     Healed = PendingHealTarget;
@@ -23,34 +21,44 @@ simulated function Timer()
 	if( Healed!=none && Healed.Health>0 && Healed!=Instigator )
 	{
 		Weapon.ConsumeAmmo(ThisModeNum, AmmoPerFire);
-		MedicReward = Syringe(Weapon).HealBoostAmount;
-		if( (Healed.Health+MedicReward)>Healed.HealthMax )
-		{
-			MedicReward = Healed.HealthMax-Healed.Health;
-			if( MedicReward<0 )
-				MedicReward = 0;
-		}
-		
 		HealSum = Syringe(Weapon).HealBoostAmount * KFPawn(Instigator).GetVeteran().Static.GetHealPotency();
+		PayForHealing(Instigator, Restores(Healed, HealSum));
 		Healed.GiveHealth(HealSum, Healed.HealthMax);
-
-		// reward medics.
-		PC = KFPlayerController(Instigator.Controller);
-		if( MedicReward>0 && PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) )
-			PC.MyActiveStats.ReceiveHealing(MedicReward);
-
-		OtherPRI = Instigator.PlayerReplicationInfo;
-		if ( KFPlayerReplicationInfo(OtherPRI)!=None )
-		{
-			MedicReward = rand(2)+3;
-			OtherPRI.Score += MedicReward;
-			OtherPRI.Team.Score += MedicReward;
-			KFPlayerReplicationInfo(OtherPRI).ThreeSecondScore += MedicReward;
-			if( KFHumanPawn(Instigator)!=none )
-				KFHumanPawn(Instigator).AlphaAmount = 255;
-		}
-		
+		if( KFHumanPawn(Instigator)!=none )
+			KFHumanPawn(Instigator).AlphaAmount = 255;
 	}
+}
+
+// How much of a heal of HealSum Healed really gets: no more than it is missing, a heal still being paid out counted
+static function int Restores(Pawn Healed, int HealSum)
+{
+	local float Missing;
+
+	Missing = Healed.HealthMax - (Healed.Health + KFPawn(Healed).healthToGive);
+	return Max(0, Min(HealSum, int(Missing)));
+}
+
+// The medic's pay, score and stats for health restored to a team-mate (it was 3 or 4 a needle, whatever it healed, and
+// the stats counted the heal before the perk's potency)
+static function PayForHealing(Pawn Medic, int Restored)
+{
+	local KFPlayerReplicationInfo PRI;
+	local KFPlayerController PC;
+	local int Pay;
+
+	if( Medic==None || Restored<=0 )
+		return;
+	PC = KFPlayerController(Medic.Controller);
+	if( PC!=None && (PC.MyActiveStats!=None || PC.FindStatsObject()) )
+		PC.MyActiveStats.ReceiveHealing(Restored);
+	PRI = KFPlayerReplicationInfo(Medic.PlayerReplicationInfo);
+	if( PRI==None )
+		return;
+	Pay = Max(1, int(Restored * default.CashPerHealth + 0.5));
+	PRI.Score += Pay;
+	if( PRI.Team!=None )
+		PRI.Team.Score += Pay;
+	PRI.ThreeSecondScore += Pay;
 }
 function KFHumanPawn GetHealee()
 {
@@ -64,7 +72,8 @@ function KFHumanPawn GetHealee()
 	{
 		if ( KFHP.Health < KFHP.HealthMax && KFHP.Health > 0 )
 		{
-			TempDot = Dir dot (KFHP.Location - Instigator.Location);
+			// (how close to the aim; not normalised, it took the farthest team-mate anywhere in the front half)
+			TempDot = Dir dot Normal(KFHP.Location - Instigator.Location);
 			if ( TempDot > 0.7 && TempDot > BestDot )
 			{
 				BestKFHP = KFHP;
@@ -92,6 +101,7 @@ simulated function bool AllowFire()
 
 defaultproperties
 {
+     CashPerHealth=0.600000
      InjectDelay=0.360000
      FireAnim="Fire"
      FireRate=2.800000

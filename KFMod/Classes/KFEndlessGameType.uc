@@ -30,6 +30,54 @@ var float HoldoutEndTime;
 var array<class<KFMonster> > HoldoutMonsterClasses;
 var array<KFMonster> FastZEDs;
 
+// River (holdout waves): specimens come on a steady beat in rows side by side, a riot, from one or two source
+// areas that take turns; each source holds for a while and then moves (sooner if a player comes near it or is
+// about to see it). The rows keep their places across the way as far as there is room (KFMonsterController.RiotSteer).
+var() bool bRiver;                 // False: squads as before
+var() float RiverGap;              // seconds a specimen before any wave has been won (a row of four: four times that)
+var() float RiverGapPerWave;       // taken off the gap each wave
+var() float RiverMinGap;
+var() float RiverSurge;            // how far the flow swells and ebbs (0 is a steady flow)
+var() float RiverSurgePeriod;      // seconds of one swell and ebb
+var() float RiverShiftMin, RiverShiftMax;   // seconds a source holds before the river moves
+var() int RiverSources;            // 1 to 4 sources taking turns, spread round the players
+var() int RiotRowSize;             // specimens in a row (1: one at a time, no rows)
+var() float RiotSpacing;           // gap between neighbours in a row, beyond their bodies
+var() class<Monster> RiotClass;    // None: the wave's own mix; else every specimen of the river is of this kind
+var() bool bRiotRush;              // the rows sprint in (a horde's rush): nobody holds back for its row
+var() float RushSpeed;             // every holdout specimen's speed when seen, whatever its kind (0: the old speed-up)
+var() float RushHiddenSpeed;       // and when out of sight
+var ZombieVolume RiverSrc[4];
+var float RiverShiftAt[4];
+
+// Hordes: in a holdout, from its start and then every HordeEvery seconds, the beat is quickened for HordeLength
+// seconds and every source is chosen afresh round the players
+var() float HordeLength;           // seconds a horde floods in (0: no hordes)
+var() float HordeEvery;            // seconds from one horde to the next in a holdout (0: only at its start)
+var() float HordeGapScale;         // the beat is this share of the usual one during a horde
+var() float HordeSpreadAngle;      // sources at least this many degrees apart round the players, where the map allows
+var float HordeUntil, NextHordeTime;
+
+// Spread approach: each river row first makes for a path node (its first stop) in a part of the map the river has
+// not lately been through, by whatever way leads there, then closes in on the players; one that sees a player
+// charges at once. Every holdout specimen warms the 512-unit square it stands in four times a second, and the
+// warmth fades; the sides round the players taken in turn decide between squares about as cold.
+var() bool bSpreadApproach;
+var() int ApproachSides;           // how many sides round the players the rows are shared over
+var() float ApproachMinDist, ApproachMaxDist;   // the band round the players the first stops are picked from
+var() float ApproachHeatWeight;    // what a stop loses for each unit of warmth where it stands
+var() float ApproachHeatKeep;      // share of the warmth kept each quarter second
+var array<int> HeatKey;
+var array<float> HeatVal;
+var float RiverNextTime, NextRowCheck;
+var int RowsLoosed;
+var() float HoldoutChance;         // share of waves from the third on that are holdouts
+var() float HoldoutCapScale;       // specimens at once in a holdout: this times the game's Max Specimens (32 to 128)
+var() float HoldoutLength;         // seconds a holdout keeps spawning
+var() float HoldoutHealthScale;    // a holdout specimen's health (and its head's) is this share of a normal one's
+var bool bForceNextType;           // the next wave is of ForcedNextType (cheats Holdout, NextWave)
+var EEndlessWaveType ForcedNextType;
+
 event InitGame( string Options, out string Error )
 {
     Super.InitGame(Options, Error);
@@ -176,6 +224,12 @@ function EEndlessWaveType GetWaveType(int Wave)
     local int DisplayWave;
     DisplayWave = Wave + 1;
 
+    if (bForceNextType)
+    {
+        bForceNextType = false;
+        return ForcedNextType;
+    }
+
     if (DisplayWave >= 10 && (DisplayWave % 10) == 0)
         return EWT_Boss;
 
@@ -187,7 +241,7 @@ function EEndlessWaveType GetWaveType(int Wave)
             return EWT_Shade;
     }
 
-    if (DisplayWave >= 3 && Rand(4) == 0)
+    if (DisplayWave >= 3 && FRand() < HoldoutChance)
         return EWT_Holdout;
 
     return EWT_Normal;
@@ -232,6 +286,16 @@ function SetupWave()
     local float NewMaxMonsters;
 
     UpdateSwarm();
+    FastZEDs.Length = 0;
+    TrafficNode.Length = 0;
+    TrafficHeat.Length = 0;
+    HeatKey.Length = 0;
+    HeatVal.Length = 0;
+    for (i = 0; i < ArrayCount(RiverSrc); i++)
+        RiverSrc[i] = None;
+    RiverNextTime = 0;
+    NextHordeTime = 0;
+    HordeUntil = 0;
     TraderProblemLevel = 0;
     rewardFlag = false;
     ZombiesKilled = 0;
@@ -270,17 +334,18 @@ function SetupWave()
 
     if (CurrentWaveType == EWT_Holdout)
     {
-        Broadcast(Self, "--- HOLDOUT WAVE: Survive the swarm for 90 seconds! ---");
+        Broadcast(Self, "--- HOLDOUT WAVE: Survive the swarm for "$int(HoldoutLength)$" seconds! ---");
 
         // Effectively infinite pool - wave ends by timer, not by running out
         TotalMaxMonsters = 999;
         // Allow lots on screen at once for the swarm feel
-        MaxMonsters = Clamp(MaxZombiesOnce * 2, 32, 128);
+        NewMaxMonsters = float(MaxZombiesOnce) * HoldoutCapScale;
+        MaxMonsters = Clamp(int(NewMaxMonsters), 32, 128);
 
         KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = TotalMaxMonsters;
         KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn = true;
         WaveEndTime = Level.TimeSeconds + 255.0;
-        HoldoutEndTime = Level.TimeSeconds + 90.0;
+        HoldoutEndTime = Level.TimeSeconds + HoldoutLength;
 
         BuildNextSquad();
         return;
@@ -560,8 +625,8 @@ State MatchInProgress
             {
                 HandleWaveMonsterPoolExhausted();
             }
-            // Still monsters left to spawn
-            else if (Level.TimeSeconds > NextMonsterTime
+            // Still monsters left to spawn (a river is fed from Tick)
+            else if (!RiverOn() && Level.TimeSeconds > NextMonsterTime
                      && (NumMonsters + NextSpawnSquad.Length <= MaxMonsters))
             {
                 WaveEndTime = Level.TimeSeconds + 160.0;
@@ -776,53 +841,577 @@ function SetupEndlessDoors()
     }
 }
 
+function bool WaveRunning()
+{
+    return bEndlessWaveActive || bWaveBossInProgress;
+}
+
+// A holdout still spawning
+function bool HoldoutSpawning()
+{
+    return bEndlessWaveActive && CurrentWaveType == EWT_Holdout && HoldoutEndTime > 0;
+}
+
+// The next wave made of a kind: normal, siren, shade, boss or holdout. False for any other word
+function bool ForceNextWave(string Kind)
+{
+    if (Kind ~= "normal")
+        ForcedNextType = EWT_Normal;
+    else if (Kind ~= "siren" || Kind ~= "sirens")
+        ForcedNextType = EWT_Siren;
+    else if (Kind ~= "shade" || Kind ~= "shades")
+        ForcedNextType = EWT_Shade;
+    else if (Kind ~= "boss" || Kind ~= "patriarch")
+        ForcedNextType = EWT_Boss;
+    else if (Kind ~= "holdout")
+        ForcedNextType = EWT_Holdout;
+    else
+        return false;
+    bForceNextType = true;
+    return true;
+}
+
+function string WaveTypeName()
+{
+    return Mid(string(GetEnum(enum'EEndlessWaveType', CurrentWaveType)), 4);
+}
+
+function bool RiverOn()
+{
+    return bRiver && bEndlessWaveActive && !bWaveBossInProgress && CurrentWaveType == EWT_Holdout;
+}
+
+// Seconds a specimen of the river: shorter each wave, swelling and ebbing over RiverSurgePeriod
+function float RiverGapNow()
+{
+    local float G;
+
+    G = FMax(RiverGap - float(WaveNum) * RiverGapPerWave, RiverMinGap);
+    if (RiverSurgePeriod > 0)
+        G /= 1.0 + RiverSurge * Sin(2.0 * Pi * Level.TimeSeconds / RiverSurgePeriod);
+    return G;
+}
+
+// Source K, moved first if its time is up or a player has come near it or is about to see it. The best area by
+// the usual rating, not the other source's: the one just used is out of the running for a while
+function ZombieVolume RiverSourceFor(int K)
+{
+    local int i;
+
+    if (RiverSrc[K] == None || Level.TimeSeconds >= RiverShiftAt[K] || AreaClashes(RiverSrc[K]))
+    {
+        RiverSrc[K] = FindSourceApart(K);
+        if (RiverSrc[K] == None)
+            RiverSrc[K] = FindSpawningVolume();
+        for (i = 0; i < ArrayCount(RiverSrc) && RiverSrc[K] != None; i++)
+            if (i != K && RiverSrc[i] == RiverSrc[K])
+                RiverSrc[K] = None;
+        if (RiverSrc[K] != None)
+            LastSpawnLocation = RiverSrc[K].Location;
+        RiverShiftAt[K] = Level.TimeSeconds + RiverShiftMin + FRand() * (RiverShiftMax - RiverShiftMin);
+    }
+    return RiverSrc[K];
+}
+
+// A source for slot K: the best spawn area by the usual rating that is at least HordeSpreadAngle round the players
+// from every other source (one closer in angle loses out to any that is not, but is used if there is no other)
+function ZombieVolume FindSourceApart(int K)
+{
+    local ZombieVolume Z, Best;
+    local float Score, BestScore;
+    local vector Mid;
+    local int i;
+
+    Mid = PlayersMiddle();
+    BestScore = 1;
+    foreach AllActors(class'ZombieVolume', Z)
+    {
+        if (KFZombieSpawnVolume(Z) != None && !KFZombieSpawnVolume(Z).bActive)
+            continue;
+        Score = RateZombieVolume(Z);
+        if (Score <= 1)
+            continue;
+        for (i = 0; i < ArrayCount(RiverSrc); i++)
+            if (i != K && RiverSrc[i] != None)
+            {
+                if (RiverSrc[i] == Z)
+                    Score = -1;
+                else if (AngleRound(Z.Location, RiverSrc[i].Location, Mid) < HordeSpreadAngle)
+                    Score -= 6000000;
+            }
+        if (Score > BestScore)
+        {
+            BestScore = Score;
+            Best = Z;
+        }
+    }
+    return Best;
+}
+
+// The warmth of the 512-unit square Spot stands in
+function int HeatCell(vector Spot)
+{
+    return (int(Spot.X / 512.0) + 1000) * 2000 + int(Spot.Y / 512.0) + 1000;
+}
+
+function float HeatAt(vector Spot)
+{
+    local int i, K;
+
+    K = HeatCell(Spot);
+    for (i = 0; i < HeatKey.Length; i++)
+        if (HeatKey[i] == K)
+            return HeatVal[i];
+    return 0;
+}
+
+function AddHeat(vector Spot)
+{
+    local int i, K;
+
+    K = HeatCell(Spot);
+    for (i = 0; i < HeatKey.Length; i++)
+        if (HeatKey[i] == K)
+        {
+            HeatVal[i] += 1.0;
+            return;
+        }
+    HeatKey[HeatKey.Length] = K;
+    HeatVal[HeatVal.Length] = 1.0;
+}
+
+function CoolHeat()
+{
+    local int i;
+
+    for (i = HeatKey.Length - 1; i >= 0; i--)
+    {
+        HeatVal[i] *= ApproachHeatKeep;
+        if (HeatVal[i] < 0.05)
+        {
+            HeatKey.Remove(i, 1);
+            HeatVal.Remove(i, 1);
+        }
+    }
+}
+
+// Row R's first stop: a plain path node ApproachMinDist to ApproachMaxDist from the players, at about the players'
+// height, in the coldest part of the map the river has been through, nearest the bearing of side R of
+// ApproachSides round them between parts about as cold (a little give either way)
+function NavigationPoint ApproachNode(int R)
+{
+    local NavigationPoint N, Best;
+    local vector Mid, D, Want;
+    local float Ang, Dist, Score, BestScore;
+
+    Mid = PlayersMiddle();
+    if (Mid == vect(0,0,0))
+        return None;
+    Ang = 2.0 * Pi * ((R % Max(ApproachSides, 1)) + 0.6 * (FRand() - 0.5)) / float(Max(ApproachSides, 1));
+    Want.X = Cos(Ang);
+    Want.Y = Sin(Ang);
+    BestScore = -2;
+    for (N = Level.NavigationPointList; N != None; N = N.NextNavigationPoint)
+    {
+        if (N.bSpecialMove || LiftCenter(N) != None || LiftExit(N) != None || Ladder(N) != None || Door(N) != None)
+            continue;
+        if (Abs(N.Location.Z - Mid.Z) > 400)
+            continue;
+        D = N.Location - Mid;
+        D.Z = 0;
+        Dist = VSize(D);
+        if (Dist < ApproachMinDist || Dist > ApproachMaxDist)
+            continue;
+        Score = (Normal(D) Dot Want) - ApproachHeatWeight * HeatAt(N.Location) + 0.05 * FRand();
+        if (Score > BestScore)
+        {
+            BestScore = Score;
+            Best = N;
+        }
+    }
+    return Best;
+}
+
+// Where the living players are, on average
+function vector PlayersMiddle()
+{
+    local Controller C;
+    local vector Sum;
+    local int n;
+
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+        if (MonsterController(C) == None && C.Pawn != None && C.Pawn.Health > 0)
+        {
+            Sum += C.Pawn.Location;
+            n++;
+        }
+    if (n == 0)
+        return Sum;
+    return Sum / float(n);
+}
+
+// Degrees between A and B seen from Mid, across the ground
+function float AngleRound(vector A, vector B, vector Mid)
+{
+    A -= Mid;
+    B -= Mid;
+    A.Z = 0;
+    B.Z = 0;
+    if (VSize(A) < 1 || VSize(B) < 1)
+        return 180;
+    return Acos(FClamp(Normal(A) Dot Normal(B), -1.0, 1.0)) * 180.0 / Pi;
+}
+
+// A horde: every source chosen afresh round the players
+function StartHorde()
+{
+    local int i;
+
+    for (i = 0; i < Clamp(RiverSources, 1, 4); i++)
+        RiverShiftAt[i] = 0;
+    for (i = 0; i < Clamp(RiverSources, 1, 4); i++)
+        RiverSourceFor(i);
+}
+
+// The next row of the river: up to RiotRowSize specimens from the front of the squad queue, side by side across
+// the way from the source to the nearest player; each told its row and its place in it. Returns how many came
+function int RiverRow()
+{
+    local int K, i, n, Want, Row;
+    local ZombieVolume Z;
+    local vector Fwd, Right;
+    local float Off;
+    local class<Monster> C;
+    local Monster M;
+    local KFMonsterController MC;
+    local NavigationPoint Via;
+    local bool bViaTried;
+
+    K = RowsLoosed % Clamp(RiverSources, 1, 4);
+    Z = RiverSourceFor(K);
+    // (no room for this one: the first source that has one)
+    for (i = 0; Z == None && i < Clamp(RiverSources, 1, 4); i++)
+        if (i != K)
+        {
+            K = i;
+            Z = RiverSourceFor(i);
+        }
+    if (Z == None)
+        return 0;
+
+    Fwd = WayToPlayers(Z.Location);
+    Right.X = -Fwd.Y;
+    Right.Y = Fwd.X;
+    Want = Clamp(RiotRowSize, 1, 8);
+    Row = RowsLoosed % 32;
+    bStraightSpawn = true;
+    for (i = 0; i < Want && TotalMaxMonsters > 0; i++)
+    {
+        if (RiotClass != None)
+            C = RiotClass;
+        else
+        {
+            if (NextSpawnSquad.Length == 0)
+                BuildNextSquad();
+            if (NextSpawnSquad.Length == 0)
+                break;
+            C = NextSpawnSquad[0];
+        }
+        // (every other row half a place across, so that rows pack into a crowd rather than ranks)
+        Off = (float(i) - 0.5 * float(Want - 1) + 0.5 * (RowsLoosed % 2)) * (2.0 * C.default.CollisionRadius + RiotSpacing);
+        M = RowSpawn(Z, C, Off, Fwd, Right);
+        if (M == None)
+            continue;
+        if (RiotClass == None)
+            NextSpawnSquad.Remove(0, 1);
+        n++;
+        MC = KFMonsterController(M.Controller);
+        if (MC != None && Want > 1)
+        {
+            MC.RiotRow = Row;
+            MC.RiotLane = Off;
+            MC.bRiotRush = bRiotRush;
+        }
+        if (MC != None && bSpreadApproach)
+        {
+            if (Via == None && !bViaTried)
+            {
+                Via = ApproachNode(RowsLoosed);
+                bViaTried = true;
+            }
+            if (Via != None)
+            {
+                MC.InitialPathGoal = Via;
+                MC.PathFindState = 1;
+            }
+        }
+    }
+    bStraightSpawn = false;
+    if (n == 0)
+        RiverShiftAt[K] = 0;    // no room there: this source moves on the next beat
+    else
+    {
+        RowsLoosed++;
+        BoostHoldoutZeds();
+    }
+    return n;
+}
+
+// Flat way from Spot to the nearest player
+function vector WayToPlayers(vector Spot)
+{
+    local Controller C;
+    local vector Best, D;
+    local float BestDist;
+
+    BestDist = -1;
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+        if (MonsterController(C) == None && C.Pawn != None && C.Pawn.Health > 0)
+        {
+            D = C.Pawn.Location - Spot;
+            D.Z = 0;
+            if (BestDist < 0 || VSize(D) < BestDist)
+            {
+                BestDist = VSize(D);
+                Best = D;
+            }
+        }
+    if (VSize(Best) < 1)
+        Best = vect(1,0,0);
+    return Normal(Best);
+}
+
+// One of a row at its place Off across the way from the source's middle; else a step back; else the first free
+// place on two rings round the middle
+function Monster RowSpawn(ZombieVolume Z, class<Monster> C, float Off, vector Fwd, vector Right)
+{
+    local vector Spot, Dir;
+    local float R;
+    local int i;
+    local Monster M;
+
+    R = C.default.CollisionRadius;
+    for (i = 0; i < 18; i++)
+    {
+        if (i == 0)
+            Spot = Z.Location + Right * Off;
+        else if (i == 1)
+            Spot = Z.Location + Right * Off - Fwd * (2.0 * R + RiotSpacing);
+        else
+        {
+            Dir.X = Cos(float(i) * Pi / 4.0);
+            Dir.Y = Sin(float(i) * Pi / 4.0);
+            Spot = Z.Location + Dir * R * (3.0 + 3.0 * float((i - 2) / 8));
+        }
+        if (i > 0 || Abs(Off) > 1)
+        {
+            if (!FastTrace(Spot, Z.Location) || !SpotFloored(Spot))
+                continue;
+        }
+        if (SpotTaken(Spot, C))
+            continue;
+        M = Spawn(C,,, Spot, rotator(Fwd));
+        if (M != None)
+        {
+            TotalMaxMonsters--;
+            WaveMonsters++;
+            NumMonsters++;
+            Z.LastSpawnedTime = Level.TimeSeconds;
+            Z.SpawnCount++;
+            return M;
+        }
+    }
+    return None;
+}
+
+function bool SpotFloored(vector Spot)
+{
+    local vector HitL, HitN;
+
+    return Trace(HitL, HitN, Spot - vect(0,0,400), Spot, false) != None;
+}
+
+// A body in the way of one of class C at Spot. The engine tests bodies as boxes, so this does too: a spawn into
+// one would be made and then thrown away
+function bool SpotTaken(vector Spot, class<Monster> C)
+{
+    local Pawn P;
+    local vector D;
+
+    foreach CollidingActors(class'Pawn', P, 4.0 * C.default.CollisionRadius, Spot)
+    {
+        D = P.Location - Spot;
+        if (Abs(D.X) < P.CollisionRadius + C.default.CollisionRadius + 2 && Abs(D.Y) < P.CollisionRadius + C.default.CollisionRadius + 2
+            && Abs(D.Z) < P.CollisionHeight + C.default.CollisionHeight)
+            return true;
+    }
+    return false;
+}
+
+// Each riot row's average distance from its victims, for the ones ahead to ease off
+function UpdateRiotRows()
+{
+    local Controller C;
+    local KFMonsterController MC;
+    local float Sum[32];
+    local int Num[32], i;
+
+    if (RiverOn())
+    {
+        if (bSpreadApproach)
+            CoolHeat();
+        CoolTraffic();
+    }
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+    {
+        MC = KFMonsterController(C);
+        if (MC != None && MC.Pawn != None && bSpreadApproach && RiverOn())
+            AddHeat(MC.Pawn.Location);
+        if (MC != None && MC.Pawn != None && RiverOn() && KFMonster(MC.Pawn) != None && KFMonster(MC.Pawn).bFixedPace)
+            AddTraffic(NavigationPoint(MC.MoveTarget), 0.25);
+        if (MC != None && MC.RiotRow >= 0 && MC.Pawn != None && MC.Enemy != None)
+        {
+            Sum[MC.RiotRow % 32] += VSize(MC.Enemy.Location - MC.Pawn.Location);
+            Num[MC.RiotRow % 32]++;
+        }
+    }
+    for (i = 0; i < 32; i++)
+    {
+        if (Num[i] > 0)
+            RiotRowDist[i] = Sum[i] / float(Num[i]);
+        else
+            RiotRowDist[i] = 0;
+    }
+}
+
+event Tick(float DeltaTime)
+{
+    local int n;
+    local float G;
+
+    Super.Tick(DeltaTime);
+
+    if (RiverOn() && !bSpawnsPaused && TotalMaxMonsters > 0 && HordeLength > 0 && Level.TimeSeconds >= NextHordeTime)
+    {
+        HordeUntil = Level.TimeSeconds + HordeLength;
+        if (HordeEvery > 0)
+            NextHordeTime = Level.TimeSeconds + HordeEvery;
+        else
+            NextHordeTime = Level.TimeSeconds + 1000000;
+        StartHorde();
+    }
+    if (RiverOn() && !bSpawnsPaused && TotalMaxMonsters > 0 && Level.TimeSeconds >= RiverNextTime && NumMonsters + Clamp(RiotRowSize, 1, 8) <= MaxMonsters)
+    {
+        n = RiverRow();
+        G = RiverGapNow();
+        if (Level.TimeSeconds < HordeUntil)
+            G *= HordeGapScale;
+        RiverNextTime = Level.TimeSeconds + G * float(Max(n, 1));
+        WaveEndTime = Level.TimeSeconds + 160.0;
+    }
+    if (Level.TimeSeconds >= NextRowCheck)
+    {
+        NextRowCheck = Level.TimeSeconds + 0.25;
+        UpdateRiotRows();
+    }
+}
+
 // Override AddSquad to boost monster speed during holdout waves
 function bool AddSquad()
 {
-    local Controller C;
-    local KFMonster M;
     local bool Result;
-    local int i;
-    local bool AlreadyBoosted;
 
     Result = Super.AddSquad();
 
     if (Result && CurrentWaveType == EWT_Holdout)
+        BoostHoldoutZeds();
+
+    return Result;
+}
+
+function BoostHoldoutZeds()
+{
+    local Controller C;
+    local KFMonster M;
+    local int i;
+    local bool AlreadyBoosted;
+    local float F;
+
+    for (C = Level.ControllerList; C != None; C = C.NextController)
     {
-        for (C = Level.ControllerList; C != None; C = C.NextController)
+        if (MonsterController(C) != None && C.Pawn != None)
         {
-            if (MonsterController(C) != None && C.Pawn != None)
+            M = KFMonster(C.Pawn);
+            if (M != None)
             {
-                M = KFMonster(C.Pawn);
-                if (M != None)
+                AlreadyBoosted = false;
+                for (i = 0; i < FastZEDs.Length; i++)
                 {
-                    AlreadyBoosted = false;
-                    for (i = 0; i < FastZEDs.Length; i++)
+                    if (FastZEDs[i] == M)
                     {
-                        if (FastZEDs[i] == M)
-                        {
-                            AlreadyBoosted = true;
-                            break;
-                        }
+                        AlreadyBoosted = true;
+                        break;
                     }
-                    if (!AlreadyBoosted)
+                }
+                if (!AlreadyBoosted)
+                {
+                    if (RushSpeed > 0)
+                    {
+                        // (one pace for every kind: RushSpeed seen, RushHiddenSpeed out of sight)
+                        M.OriginalGroundSpeed = RushSpeed;
+                        M.SetGroundSpeed(RushSpeed);
+                        M.HiddenGroundSpeed = FMax(RushSpeed, RushHiddenSpeed);
+                        M.bFixedPace = true;
+                    }
+                    else
                     {
                         M.OriginalGroundSpeed *= 1.5 + float(WaveNum) * 0.02; // Scale speed boost with wave number for extra challenge
                         M.SetGroundSpeed(M.GroundSpeed * (1.5 + float(WaveNum) * 0.02));
                         M.HiddenGroundSpeed *= 1.5 + float(WaveNum) * 0.02;
-                        FastZEDs[FastZEDs.Length] = M;
                     }
+                    // (and frailer: a holdout is a fight to cut through)
+                    F = float(M.Health) * HoldoutHealthScale;
+                    M.Health = Max(1, int(F));
+                    M.HealthMax *= HoldoutHealthScale;
+                    M.HeadHealth *= HoldoutHealthScale;
+                    FastZEDs[FastZEDs.Length] = M;
                 }
             }
         }
     }
-
-    return Result;
 }
 
 defaultproperties
 {
     InitialCountDownValue=15
+    bRiver=True
+    RiverGap=0.370000
+    RiverGapPerWave=0.005000
+    RiverMinGap=0.150000
+    HoldoutChance=0.250000
+    HoldoutCapScale=2.000000
+    HoldoutLength=90.000000
+    HoldoutHealthScale=0.600000
+    RiverSurge=0.500000
+    RiverSurgePeriod=30.000000
+    RiverShiftMin=20.000000
+    RiverShiftMax=40.000000
+    RiverSources=4
+    HordeLength=8.000000
+    HordeEvery=30.000000
+    HordeGapScale=0.250000
+    HordeSpreadAngle=60.000000
+    bSpreadApproach=True
+    ApproachSides=6
+    ApproachMinDist=700.000000
+    ApproachMaxDist=2400.000000
+    ApproachHeatWeight=0.050000
+    ApproachHeatKeep=0.988000
+    RiotRowSize=4
+    RiotSpacing=16.000000
+    bRiotRush=True
+    RushSpeed=260.000000
+    RushHiddenSpeed=600.000000
     bUseEndGameBoss=False
     FinalWave=99999
     GameName="Endless Killing Floor"

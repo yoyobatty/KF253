@@ -17,6 +17,7 @@ var int WeightTotal;
 
 var float InitialWaitTime;
 var float ReTryWaitTime;
+var float SightRange; // players farther than this do not hold the item in place
 
 simulated function PostBeginPlay()
 {
@@ -60,11 +61,14 @@ function int GetWeightedRandClass()
 	local int Tally;
 	local int i;
 
-	RandIndex = rand(WeightTotal+1); // rand always returns a value between 0 and max-1
+	if( WeightTotal<=0 )
+		return 0;
+
+	RandIndex = rand(WeightTotal); // 0 to WeightTotal-1, so each class gets exactly its weight
 
 	Tally = PickupWeight[0];
 
-	while(Tally<RandIndex)
+	while(Tally<=RandIndex && i<NumClasses-1)
 	{
 		++i;
 		Tally+=PickupWeight[i];
@@ -124,16 +128,22 @@ function timer()
 	else SetTimer(ReTryWaitTime+ReTryWaitTime*FRand(), false);
 }
 
+// Seen from a player's eyes: the spot (raised to about the middle of an item lying there) or the item itself,
+// which may have come to rest elsewhere after falling.
 function bool PlayersCanSeeMe()
 {
     local controller C;
+    local vector Eye;
 
     for (C = Level.ControllerList; C != None; C = C.nextController)
     {
         if (C.bIsPlayer && C.Pawn != None)
         {
-            if (VSize(C.Pawn.Location - Location) < 2000 && FastTrace(C.Pawn.Location))
-                return true;  
+            Eye = C.Pawn.Location + C.Pawn.EyePosition();
+            if (VSize(Eye - Location) < SightRange && FastTrace(Location + vect(0,0,10), Eye))
+                return true;
+            if (myPickup != None && VSize(Eye - myPickup.Location) < SightRange && FastTrace(myPickup.Location, Eye))
+                return true;
         }
     }
     return false;
@@ -144,6 +154,7 @@ defaultproperties
 	bForceDefault=True
 	InitialWaitTime=20.000000
 	ReTryWaitTime=5.000000
+	SightRange=4000.000000
 	SpawnHeight=0.000000
 	DrawType=DT_Sprite
 	bStatic=False

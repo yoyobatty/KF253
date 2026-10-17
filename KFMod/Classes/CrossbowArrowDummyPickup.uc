@@ -5,7 +5,7 @@ var CrossbowArrow ArrowRef;
 
 simulated function PostBeginPlay()
 {
-    default.PickupMSG1 = "Found ("$AmmoAmount$") ";
+    // Keeps its one arrow: no random amount from KFAmmoPickup.
 }
 
 function AnnouncePickup( Pawn Receiver )

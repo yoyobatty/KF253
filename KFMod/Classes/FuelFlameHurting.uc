@@ -7,6 +7,10 @@ var () float DamageRadius;
 var () float DieDownTime;	// once the burn time is over: how long the flames alight take to burn out and the smoke to go
 var bool bDyingDown;
 var float DownLeft;
+var bool bLightShared;		// dark because a lit fire burns near it (KFFireLight); it may take that one's light later
+var float LightUpLeft;		// fading in a light handed on to it
+var int SharedBy;			// lit: how many dark fires near it share its light
+var float LitBrightness;	// lit: its brightness with them
 
 simulated function PostBeginPlay()
 {
@@ -19,8 +23,10 @@ simulated function PostBeginPlay()
 simulated function PostNetBeginPlay()
 {
 	local PlayerController PC;
+	local FuelFlameHurting Lit;
 
 	Super.PostNetBeginPlay();
+	LitBrightness = default.LightBrightness;
 
 	if ( Level.bDropDetail || (Level.DetailMode == DM_Low) )
 	{
@@ -30,27 +36,61 @@ simulated function PostNetBeginPlay()
 	else
 	{
 		PC = Level.GetLocalPlayerController();
-		if ( (Instigator != None) && (PC == Instigator.Controller) )
+		if ( (Instigator == None) || (PC != Instigator.Controller) )
 		{
-			return;
+			if ( (PC == None) || (PC.ViewTarget == None) || (VSize(PC.ViewTarget.Location - Location) > 3000) )
+			{
+				bDynamicLight = false;
+				LightType = LT_None;
+			}
 		}
-
-		if ( (PC == None) || (PC.ViewTarget == None) || (VSize(PC.ViewTarget.Location - Location) > 3000) )
+		Lit = class'KFFireLight'.static.LitNear(self);
+		if ( Lit != None )
 		{
 			bDynamicLight = false;
 			LightType = LT_None;
+			bLightShared = true;
+			Lit.Shared();
 		}
 	}
+}
+
+// A fire near by stays dark and shares this one's light: it gets brighter
+simulated function Shared()
+{
+	if ( SharedBy >= class'KFFireLight'.default.MaxShared )
+		return;
+	SharedBy++;
+	LitBrightness = default.LightBrightness * (1.0 + class'KFFireLight'.default.ShareBrighten * SharedBy);
+	if ( LightUpLeft <= 0 )
+		LightBrightness = LitBrightness;
+}
+
+// The light of a fire near by that is dying down, faded in
+simulated function TakeLight()
+{
+	bLightShared = false;
+	LightType = default.LightType;
+	bDynamicLight = true;
+	LightUpLeft = 0.6;
+	LightBrightness = 0;
+	SharedBy = 0;
+	LitBrightness = default.LightBrightness;
 }
 
 simulated function Tick(float DT)
 {
 	super.Tick(DT);
+	if( LightUpLeft > 0 && !bDyingDown )
+	{
+		LightUpLeft -= DT;
+		LightBrightness = LitBrightness * FClamp(1.0 - LightUpLeft / 0.6, 0.0, 1.0);
+	}
 	if( bDyingDown )
 	{
 		// (the light and the crackle go down with the flames)
 		DownLeft -= DT;
-		LightBrightness = default.LightBrightness * FClamp(DownLeft/(DieDownTime*0.5),0.0,1.0);
+		LightBrightness = LitBrightness * FClamp(DownLeft/(DieDownTime*0.5),0.0,1.0);
 		SoundVolume = byte(float(default.SoundVolume) * FClamp(DownLeft/(DieDownTime*0.6),0.0,1.0));
 		return;
 	}
@@ -65,10 +105,13 @@ simulated function DieDown()
 {
 	bDyingDown = true;
 	DownLeft = DieDownTime;
+	if ( LightType != LT_None && Level.NetMode != NM_DedicatedServer )
+		class'KFFireLight'.static.HandOver(self);
 	SetTimer(0.0, false);
 	Kill();
-	// (and gone for certain then, a dedicated server too, which does not run the particles that would end it)
-	LifeSpan = DieDownTime + 0.5;
+	// (and gone for certain then, a dedicated server too, which does not run the particles that would end it; not before
+	// the last smoke, which lives up to 2.5 s)
+	LifeSpan = FMax(DieDownTime, 2.5) + 0.5;
 }
 
 function Timer()

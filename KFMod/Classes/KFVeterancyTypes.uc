@@ -129,8 +129,8 @@ static function bool HealingNades()
 	Return False;
 }
 
-// Change effective range on FLamethrower
-static function int ExtraRange()
+// Change effective range on FLamethrower: the share added (0.5 is +50%)
+static function float ExtraRange()
 {
 	Return 0;
 }

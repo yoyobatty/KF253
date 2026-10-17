@@ -149,8 +149,9 @@ event HandleParameters(string Param1, string Param2)
 				{
 					AllBuyableItems.Insert(0,1);
 					AllBuyableItems[0] = new class'BuyableFirstAidKit';
-					// as KFPawn.ServerBuyFirstAid charges: the same whatever health is missing
-					AllBuyableItems[0].cost = int(AllBuyableItems[0].default.cost * Class'KFPawn'.Static.GetCostScaling(GameDifficulty));
+					// as KFPawn.ServerBuyFirstAid charges: by the health that is missing
+					AllBuyableItems[0].cost = Class'KFPawn'.Static.FirstAidCost(PlayerOwner().Pawn.HealthMax - PlayerOwner().Pawn.Health,
+					 PlayerOwner().Pawn.HealthMax, GameDifficulty);
 				}
 			}
 		}

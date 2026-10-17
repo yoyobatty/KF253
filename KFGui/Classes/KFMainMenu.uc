@@ -95,6 +95,8 @@ function InternalOnOpen()
         SetTimer(4.5,false);
 
     Controller.PerformRestore();
+    // (the screen effects, for the colour of the menu's own level; a game starts them too, if it comes first)
+    class'KFMod.KFFrameTap'.static.Of(PlayerOwner());
     /* 
     if( !PlayerOwner().level.game.IsA('cinematicgame'))
     {

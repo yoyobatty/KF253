@@ -116,6 +116,23 @@ var() float SpawnCooldownPenalty;  // Default: 8,000,000 (overwhelms the 10M bas
 var() float SpawnCooldownTime;     // Default: 30s — full eligibility restored after this long
 var() float SpawnSizeMultiplier;   // Score bonus per unit of CollisionRadius (larger volumes score higher)
 
+// Spawn distance: a spawn area nearer a player than SpawnSoftMinDist, or that a player is about to see, is used
+// only when no other will do; among the rest, areas about SpawnSweetDist from the players score best.
+var() float SpawnSoftMinDist;      // counted from the edge of the squad's spread, not the area's centre
+var() float SpawnSweetDist;
+var() float SpawnLookAhead;        // seconds of a player's running that count as "about to see"
+var() float SpawnNearPenalty;      // taken off an area that is too near or about to be seen
+var bool bStraightSpawn;           // set while spawning a specimen that should make straight for its victim
+var float RiotRowDist[32];         // each riot row's average distance from its victims (KFEndlessGameType)
+var bool bSpawnsPaused;            // no specimens spawn (cheat PauseSpawns)
+
+// Traffic (holdout rivers, KFEndlessGameType): path nodes specimens have lately been making for cost more in the
+// next one's route search, so a crowd spreads over the ways there are instead of all taking the cheapest
+var() float TrafficCost;           // route cost a node gains for each unit of traffic
+var() float TrafficKeep;           // share of the traffic kept each quarter second
+var array<NavigationPoint> TrafficNode;
+var array<float> TrafficHeat;
+
 var array<PlayerDeathMark> DeathMarkers; // For zombie eating.
 
 var array<KFPlayerStats> ActiveStats;
@@ -383,6 +400,9 @@ event InitGame( string Options, out string Error )
 	local ShopVolume SH;
 
 	Super.InitGame(Options, Error);
+
+	// everybody's tactical light is KFTorch's, with shadows; each player can turn it off for their own view
+	AddMutator("KFTorch.MutSingleTorch");
 
 	FixAFewActors();
 
@@ -1065,6 +1085,53 @@ Begin:
 
 function DoWaveEnd(){}
 
+function AddTraffic(NavigationPoint N, float Amount)
+{
+	local int i;
+
+	if( N==None )
+		return;
+	for( i=0; i<TrafficNode.Length; i++ )
+		if( TrafficNode[i]==N )
+		{
+			TrafficHeat[i] += Amount;
+			return;
+		}
+	TrafficNode[TrafficNode.Length] = N;
+	TrafficHeat[TrafficHeat.Length] = Amount;
+}
+
+function CoolTraffic()
+{
+	local int i;
+
+	for( i=TrafficNode.Length-1; i>=0; i-- )
+	{
+		TrafficHeat[i] *= TrafficKeep;
+		if( TrafficHeat[i]<0.05 || TrafficNode[i]==None )
+		{
+			TrafficNode.Remove(i,1);
+			TrafficHeat.Remove(i,1);
+		}
+	}
+}
+
+// Called right before a route search: the engine adds each node's TransientCost to it for that search alone
+function AddTrafficCosts()
+{
+	local int i;
+
+	for( i=0; i<TrafficNode.Length; i++ )
+		if( TrafficNode[i]!=None )
+			TrafficNode[i].TransientCost += int(TrafficHeat[i] * TrafficCost);
+}
+
+// A wave (or the boss) is on
+function bool WaveRunning()
+{
+	return bWaveInProgress || bWaveBossInProgress;
+}
+
 State MatchInProgress
 {
       function bool UpdateMonsterCount() // To avoid invasion errors.
@@ -1735,6 +1802,8 @@ function bool AddSquad()
 	local int numspawned;
 	local int WaveMonsterCount;
 
+	if( bSpawnsPaused )
+		return false;
 	if(LastZVol==none || NextSpawnSquad.length==0)
 	{
 		if( RecycledSquad.Length>0 )
@@ -1747,6 +1816,8 @@ function bool AddSquad()
 		if(LastZVol!=None)
 			lastSpawnLocation = LastZVol.location;
 	}
+	else if( LeftoversClash() )
+		TryToSpawnInAnotherVolume();
 
 	if(LastZVol == None)
 	{
@@ -1899,12 +1970,69 @@ function ZombieVolume FindSpawningVolume()
 	return BestZ;
 }
 
+// How far the next squad spreads round the middle of its spawn area (it is laid out in a spiral, one body apart)
+function float SquadReach()
+{
+	local int i;
+	local float R;
+
+	for( i=0; i<NextSpawnSquad.Length; i++ )
+		if( NextSpawnSquad[i]!=None )
+			R = FMax(R, NextSpawnSquad[i].default.CollisionRadius);
+	return 2 * R * Sqrt(NextSpawnSquad.Length);
+}
+
+// A spawn area at Spot against player P: 2 seen now (from the body or the eyes) or within 400, never to be used;
+// 1 nearer than SpawnSoftMinDist (from the squad's edge) or in sight of where P is running to; 0 fine
+function byte SpawnClash( vector Spot, Pawn P, float Reach )
+{
+	local float Dist;
+	local vector Ahead;
+	local bool bFogged;
+
+	Dist = VSize(Spot - P.Location);
+	bFogged = P.Region.Zone.bDistanceFog && Dist>=P.Region.Zone.DistanceFogEnd;
+	if( Dist<400 || (!bFogged && (FastTrace(Spot,P.Location) || FastTrace(Spot,P.Location+P.EyePosition()))) )
+		return 2;
+	if( Dist-Reach<SpawnSoftMinDist )
+		return 1;
+	Ahead = P.Velocity * SpawnLookAhead;
+	Ahead.Z = 0;
+	if( !bFogged && VSize(Ahead)>50 )
+	{
+		Ahead += P.Location;
+		if( FastTrace(Ahead,P.Location) && FastTrace(Spot,Ahead+P.EyePosition()) )
+			return 1;
+	}
+	return 0;
+}
+
+// The rest of a squad that did not all fit: not into an area a player has since come near or is about to see
+function bool LeftoversClash()
+{
+	return AreaClashes(LastZVol);
+}
+
+// A spawn area some player has come near, or sees, or is about to see
+function bool AreaClashes( ZombieVolume Z )
+{
+	local Controller C;
+	local float Reach;
+
+	Reach = SquadReach();
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( MonsterController(C)==None && C.Pawn!=None && SpawnClash(Z.Location, C.Pawn, Reach)!=0 )
+			return true;
+	return false;
+}
+
 function float RateZombieVolume(ZombieVolume z)
 {
 	local Controller OtherPlayer;
 	local float Score, PlayerScore;
-	local float dist;
+	local float dist, Reach, NearDist;
 	local int PlayerCount;
+	local byte Clash;
 
 	if ( z.PhysicsVolume.bWaterVolume )
 		return -10000000;
@@ -1943,6 +2071,8 @@ function float RateZombieVolume(ZombieVolume z)
 	// regardless of player count. Skip monster AI controllers.
 	PlayerScore = 0;
 	PlayerCount = 0;
+	Reach = SquadReach();
+	NearDist = SpawnSoftMinDist;
 	for ( OtherPlayer=Level.ControllerList; OtherPlayer!=None; OtherPlayer=OtherPlayer.NextController)
 	{
 		if ( MonsterController(OtherPlayer) != None || OtherPlayer.Pawn == None )
@@ -1953,26 +2083,23 @@ function float RateZombieVolume(ZombieVolume z)
 		// Prefer different angle from player than last spawn (capped contribution)
 		PlayerScore += FMin(2000 * abs(((LastSpawnLocation - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation)) - ((z.Location - OtherPlayer.Pawn.Location) dot vector(OtherPlayer.Pawn.Rotation))), 10000);
 
-		// if fog doesn't hide spawn && lineofsight possible
-		if( (!OtherPlayer.Region.Zone.bDistanceFog || (dist < OtherPlayer.Region.Zone.DistanceFogEnd)) && FastTrace(z.Location,OtherPlayer.Pawn.Location) )
-		{
-			//log(z$" dist less than distancefogend");
+		Clash = SpawnClash(z.Location, OtherPlayer.Pawn, Reach);
+		if( Clash==2 )
 			return -100;
-		}
-		else if(dist < 400)
-		{
-			//log(z$" dist less than 400");
-			return -50;
-		}
+		if( Clash==1 )
+			NearDist = FMin(NearDist, FMax(0, dist-Reach));
 
-		if(dist < 8000)
-			PlayerScore += (8000 - dist) * 2;
+		// best about SpawnSweetDist away, nothing from twice that
+		PlayerScore += 16000 * FMax(0, 1 - Abs(dist-SpawnSweetDist)/SpawnSweetDist);
 
 		PlayerCount++;
 	}
 
 	if (PlayerCount > 0)
 		Score += PlayerScore / PlayerCount;
+	// too near or about to be seen: last choice, the nearest of those last of all
+	if( NearDist<SpawnSoftMinDist )
+		Score -= SpawnNearPenalty - 1000 * NearDist;
 	if( FloorMap!=None && !FloorMap.FloorOccupied(z.GetFloor(FloorMap)) )
 		return 1;
 	// if we get here, return at least a 5
@@ -2418,6 +2545,12 @@ defaultproperties
      SpawnCooldownPenalty=8000000.0
      SpawnCooldownTime=30.0
      SpawnSizeMultiplier=20.0
+     SpawnSoftMinDist=1000.000000
+     SpawnSweetDist=1800.000000
+     SpawnLookAhead=1.000000
+     SpawnNearPenalty=9000000.000000
+     TrafficCost=80.000000
+     TrafficKeep=0.988000
      SwarmStrength=1.000000
      MonsterClasses(0)=(MClassName="KFChar.ZombieClot",Mid="A")
      MonsterClasses(1)=(MClassName="KFChar.ZombieCrawler",Mid="B")

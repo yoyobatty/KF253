@@ -28,9 +28,53 @@ var Welder ActiveWelder;
 var Frag MyGrenades;
 var Actor ShopVolumeActor;
 var Pickup PickupTarget;
-var float LastDeathRecordTime;
-var array<class<KFWeaponPickup> > LastDroppedWeaponClasses;
-var bool bTriedRecoverLastDrop;
+var float NextRecoverTime, RecoverBestDist;
+var int RecoverStalls;
+
+// Swapping a gun we carry for a better one on the floor (FindPickupSwap, state SwapForPickup).
+var KFWeaponPickup SwapPickup, LastSwapPickup, SwapBlocked;
+var array<KFWeapon> SwapDrops;
+var array< class<Inventory> > SwapThrownClasses;
+var float NextSwapCheckTime, SwapGuardTime, SwapBlockedTime, SwapBestDist;
+var int SwapStalls;
+var() float SwapSearchDist, SwapDropDist, SwapMinGain;
+
+// Perk choice (PerkFit, MaybeSwitchPerk).
+var float NextPerkSwitchTime;
+var bool bPerkCheckPending;
+var() bool bPerkSwitching;
+var() float PerkStay, PerkMedicNeed, PerkCrowd, PerkSwitchGap;
+
+// Trader: the way into the shop (FindShopEntry), steps walked in, the wave whose personality we have.
+var ShopVolume EntryShop;
+var NavigationPoint ShopEntry;
+var int ShopSteps, PersonalityWave;
+
+// Crowd sense (AloneInFight to EscapeFocus, state EscapeCrowd): the specimens known of, the path search's nodes with
+// the node before, the length and search cost of the way there and the least time to spare on it.
+struct CrowdThreat
+{
+	var KFMonster M;
+	var vector Loc;
+	var float Speed, Reach, Pad;
+};
+var array<CrowdThreat> CrowdList;
+var array<NavigationPoint> EscNode;
+var array<int> EscPrev;
+var array<float> EscLen, EscCost, EscMargin;
+var array<byte> EscDone;
+var NavigationPoint EscapeGoal;
+var KFMonster EscapeBlocker;
+var float EscapeUntil, NextEscapePlanTime, PlannedLegMargin, NextEscapeTime, EscapeGoalMargin;
+var int EscapeLegs;
+var bool bEscapeFlee;
+var() bool bCrowdEscape, bBenchDebug;	// bBenchDebug: log escape legs and shop trips (for the test bench)
+var() float CrowdSenseDist, CrowdRadius, CrowdAllyDist, CrowdEnterPressure, PincerRadius, PincerNear;
+var() float EscapeSearchDist, EscapeDangerCost, EscapeDeadEnd, EscapeAllyPull, EscapeFrontBonus, EscapeMaxTime, EscapeCooldown;
+var() float EscapeSpawnPenalty, EscapeSpawnDist, EscapeSpawnRecent, EscapeMinMargin;
+var array<ZombieVolume> SpawnAreas;
+var bool bSpawnAreasFound;
+var() int EscapeMaxNodes;
 
 var KFHumanPawn InjuredAlly;
 var KFHumanPawnZombies ReviveTarget;
@@ -72,6 +116,15 @@ var float NextDangerCheckTime;
 var vector WedgeSpot;
 var float WedgeTime, NextWedgeCheckTime;
 var int WedgeTries;
+
+// Off the path network (no anchor found): since when and where. After AnchorLostLimit seconds there, unseen, it is
+// put back on its last anchor (TeleportBackIn).
+var float AnchorLostTime;
+var vector AnchorLostSpot;
+var() float AnchorLostLimit;
+
+// Standing still in WaitingForLanding since (CheckLandedIdle).
+var float LandedIdleSince;
 
 var float NextLiftCheckTime, WaitLiftUntil;
 var NavigationPoint LiftLeaveSpot, WaitLiftExit;
@@ -130,7 +183,21 @@ function NotifyAddInventory(inventory NewItem)
 	local KFMeleeFire F;
 
 	Super.NotifyAddInventory(NewItem);
-	
+
+	// Picked a gun it had just thrown away for a better one straight back up: leave that swap alone for a while.
+	if ( NewItem != None && Level.TimeSeconds < SwapGuardTime )
+		for ( i=0; i<SwapThrownClasses.Length; i++ )
+			if ( NewItem.Class == SwapThrownClasses[i] )
+			{
+				SwapBlocked = LastSwapPickup;
+				SwapBlockedTime = Level.TimeSeconds + 30.f;
+				SwapGuardTime = 0;
+				break;
+			}
+	// A new gun may suit another perk: look at the next decision (its weight is not counted yet here).
+	if ( KFWeapon(NewItem) != None && Pawn != None && Level.TimeSeconds - Pawn.SpawnTime > 2.f )
+		bPerkCheckPending = true;
+
 	// HACK give extra melee range
 	if( KFWeapon(NewItem)!=None && KFWeapon(NewItem).bMeleeWeapon )
 	{
@@ -159,8 +226,18 @@ function TimedFireWeaponAtEnemy()
 
 function bool FireWeaponAt(Actor A)
 {
+	local Actor InWay;
+
 	if ( A == None )
 		A = Enemy;
+	// the shots land on a specimen standing in the way: make that one the target
+	InWay = SpecimenInLine(A);
+	if ( InWay != A )
+	{
+		if ( A == Enemy )
+			Enemy = Pawn(InWay);
+		A = InWay;
+	}
 	if ( A == None || !Pawn.CanAttack(A) )
 	{
 		//log("FireWeaponAt: Can attack: " $Pawn.CanAttack(A)$ " for " $Pawn.GetHumanReadableName()$ " at " $A.GetHumanReadableName());
@@ -198,6 +275,8 @@ final function TossCash( int Amount, vector TossDir )
 		CashPickup.Velocity = TossDir;
 		CashPickup.InitDroppedPickupFor(None);
 		PlayerReplicationInfo.Score -= Amount;
+		if ( PlayerReplicationInfo.Team != None )
+			PlayerReplicationInfo.Team.Score -= Amount;	// as a player's toss does: picking it up adds it back
 	}
 }
 
@@ -597,6 +676,35 @@ final function KFMonster FindNearestThreat(out float Dist, out float Margin)
 	return Best;
 }
 
+// The nearest live specimen standing in the line of fire to Tgt, short of it (where our shots would land); else Tgt.
+final function Actor SpecimenInLine( Actor Tgt )
+{
+	local Controller C;
+	local vector Dir, Off;
+	local float Along, BestAlong;
+	local Actor Best;
+
+	if ( Pawn(Tgt) == None || Pawn == None )
+		return Tgt;
+	Dir = Tgt.Location - Pawn.Location;
+	BestAlong = VSize(Dir);
+	Dir = Normal(Dir);
+	Best = Tgt;
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		if ( KFMonster(C.Pawn) == None || C.Pawn == Tgt || C.Pawn.Health <= 0 )
+			continue;
+		Off = C.Pawn.Location - Pawn.Location;
+		Along = Off dot Dir;
+		if ( Along > 0.f && Along < BestAlong && VSize(Off - Along * Dir) < C.Pawn.CollisionRadius + 10.f )
+		{
+			Best = C.Pawn;
+			BestAlong = Along;
+		}
+	}
+	return Best;
+}
+
 final function int CountThreatsWithin(float Radius)
 {
 	local Controller C;
@@ -607,6 +715,518 @@ final function int CountThreatsWithin(float Radius)
 			&& Abs(C.Pawn.Location.Z - Pawn.Location.Z) < 250.f )
 			N++;
 	return N;
+}
+
+// ---- Crowd sense ----------------------------------------------------------------------------------------------------
+// A bot on its own (no team-mate close by and in sight) that specimens are pressing on, or closing on from more than one
+// side, looks for a way out over the path network instead of stepping back from them. Every way within
+// EscapeSearchDist is rated by the time it has to spare against each specimen it knows of (the time that one needs to
+// get within reach of each node at its pace, less the time the bot needs to get there), by whether it leaves room to go
+// on (not a dead end) and, with team-mates left elsewhere, by whether it leads towards them. The bot runs the first leg
+// of the best way, shooting the specimen that most threatens it, and plans again.
+
+// No team-mate (player or bot, alive and not downed) within CrowdAllyDist and in sight: the bot is on its own.
+final function bool AloneInFight()
+{
+	local Controller C;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C != self && C.bIsPlayer && KFHumanPawn(C.Pawn) != None && C.Pawn.Health > 0
+			&& (KFHumanPawnZombies(C.Pawn) == None || !KFHumanPawnZombies(C.Pawn).bIsDowned)
+			&& VSize(C.Pawn.Location - Pawn.Location) < CrowdAllyDist && FastTrace(C.Pawn.Location, Pawn.Location) )
+			return false;
+	return true;
+}
+
+// Where the nearest team-mate elsewhere is (alive, not downed). False if there is none.
+final function bool NearestAllyLoc( out vector Loc )
+{
+	local Controller C;
+	local float D, BestD;
+	local bool bFound;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C != self && C.bIsPlayer && KFHumanPawn(C.Pawn) != None && C.Pawn.Health > 0
+			&& (KFHumanPawnZombies(C.Pawn) == None || !KFHumanPawnZombies(C.Pawn).bIsDowned) )
+		{
+			D = VSize(C.Pawn.Location - Pawn.Location);
+			if ( !bFound || D < BestD )
+			{
+				Loc = C.Pawn.Location;
+				BestD = D;
+				bFound = true;
+			}
+		}
+	return bFound;
+}
+
+// The specimens the bot knows of: in sight within CrowdSenseDist, or close enough to hear (600), on about its floor.
+final function SenseCrowd()
+{
+	local Controller C;
+	local KFMonster M;
+	local float D;
+	local int n;
+
+	CrowdList.Length = 0;
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		M = KFMonster(C.Pawn);
+		if ( M == None || M.Health <= 0 || Abs(M.Location.Z - Pawn.Location.Z) > 300.f )
+			continue;
+		D = VSize(M.Location - Pawn.Location);
+		if ( D > CrowdSenseDist || (D > 600.f && !LineOfSightTo(M)) )
+			continue;
+		n = CrowdList.Length;
+		CrowdList.Length = n + 1;
+		CrowdList[n].M = M;
+		CrowdList[n].Loc = M.Location;
+		CrowdList[n].Speed = FMax(FMax(M.GroundSpeed, VSize(M.Velocity)), 100.f);
+		CrowdList[n].Reach = ThreatReach(M);
+		CrowdList[n].Pad = ThreatPad(M);
+	}
+}
+
+// How close a specimen has to be to hurt: its melee reach, more for those that hurt from further off.
+final function float ThreatReach( KFMonster M )
+{
+	local float R;
+
+	R = M.MeleeRange * 1.4 + M.CollisionRadius + Pawn.CollisionRadius;
+	if ( M.IsA('ZombieBloat') )
+		R = FMax(R, 280.f);
+	else if ( M.IsA('ZombieSiren') )
+		R = FMax(R, 450.f);
+	else if ( M.IsA('ZombieBoss') )
+		R = FMax(R, 500.f);
+	return R;
+}
+
+// Seconds of room wanted from a specimen over and above its reach: more from the ones that kill quickly.
+final function float ThreatPad( KFMonster M )
+{
+	if ( M.IsA('ZombieFleshPound') || M.IsA('ZombieScrake') || M.IsA('ZombieBoss') )
+		return 0.6;
+	if ( M.IsA('ZombieGorefast') || M.IsA('ZombieCrawler') )
+		return 0.25;
+	return 0.f;
+}
+
+// How hard the crowd presses: 1 for each specimen within 400, half for one further out within CrowdRadius, twice that
+// for the big ones. Nearest: the distance to the nearest specimen.
+final function float CrowdPressure( out float Nearest )
+{
+	local int i;
+	local float D, W, P;
+
+	Nearest = 100000.f;
+	for ( i=0; i<CrowdList.Length; i++ )
+	{
+		D = VSize(CrowdList[i].Loc - Pawn.Location);
+		Nearest = FMin(Nearest, D);
+		if ( D < 400.f )
+			W = 1.f;
+		else if ( D < CrowdRadius )
+			W = 0.5f;
+		else
+			continue;
+		if ( CrowdList[i].Pad >= 0.6 )
+			W *= 2.f;
+		P += W;
+	}
+	return P;
+}
+
+// How the specimens within Radius of a spot spread round it: the widest gap between their bearings (65536 a full
+// turn); a full turn when there are fewer than two. N: how many there are.
+final function int CrowdGap( vector From, float Radius, out int N )
+{
+	local array<int> B;
+	local int i, j, Y, MaxGap;
+	local vector Dir;
+
+	N = 0;
+	for ( i=0; i<CrowdList.Length; i++ )
+	{
+		Dir = CrowdList[i].Loc - From;
+		Dir.Z = 0;
+		if ( VSize(Dir) > Radius )
+			continue;
+		Y = rotator(Dir).Yaw & 65535;
+		j = 0;
+		while ( j < B.Length && B[j] < Y )
+			j++;
+		B.Insert(j, 1);
+		B[j] = Y;
+		N++;
+	}
+	if ( N < 2 )
+		return 65536;
+	MaxGap = B[0] + 65536 - B[N-1];
+	for ( i=1; i<N; i++ )
+		MaxGap = Max(MaxGap, B[i] - B[i-1]);
+	return MaxGap;
+}
+
+// A pincer: specimens within PincerRadius on more than one side of us (no gap of 200 degrees between them), the
+// nearest of them within PincerNear.
+final function bool InPincer( float Nearest )
+{
+	local int N;
+
+	return ( Nearest < PincerNear && CrowdGap(Pawn.Location, PincerRadius, N) < 36409 && N >= 2 );
+}
+
+// Time to get out: on our own (and bCrowdEscape), caught in a pincer or with the crowd pressing hard
+// (CrowdEnterPressure). Specimens all on one side are left to the usual backing off while shooting. Not again for
+// EscapeCooldown after an escape. A Berserker with a blade stands unless pressed hard or hurt.
+final function bool ShouldEscapeCrowd()
+{
+	local float P, Nearest;
+
+	if ( !bCrowdEscape || Pawn == None || Pawn.Physics != PHYS_Walking || Level.TimeSeconds < NextEscapeTime
+		|| !AloneInFight() )
+		return false;
+	SenseCrowd();
+	P = CrowdPressure(Nearest);
+	if ( HoldingMelee() && GetPerkName() == "Berserker" && P < CrowdEnterPressure && Pawn.Health > 50 )
+		return false;
+	return ( P >= CrowdEnterPressure || InPincer(Nearest) );
+}
+
+// Whether there is a way out worth taking: one that gets past every specimen with EscapeMinMargin to spare. Where
+// there is none (a crowd in a corridor), running only takes the bot past them: it stays and fights. Not asked again for
+// half a second.
+final function bool EscapeOpen()
+{
+	if ( PlanEscape() && EscapeGoalMargin >= EscapeMinMargin )
+		return true;
+	NextEscapeTime = Level.TimeSeconds + 0.5;
+	return false;
+}
+
+// Whether to keep going: still on our own, and still in a pincer, pressed hard, or about to be hit; when running from
+// what is too much for us (bEscapeFlee), anything within 700.
+final function bool EscapeStillNeeded()
+{
+	local float P, Nearest;
+
+	if ( !AloneInFight() )
+		return false;
+	SenseCrowd();
+	P = CrowdPressure(Nearest);
+	if ( bEscapeFlee )
+		return ( Nearest < 700.f );
+	return ( Nearest < 200.f || P >= CrowdEnterPressure || InPincer(Nearest) );
+}
+
+// The least time to spare at a spot for a bot that gets there in T seconds: for each specimen, the time it needs to
+// get within reach of the spot at its pace, less T and the room wanted from it.
+final function float NodeMargin( vector Loc, float T )
+{
+	local int i;
+	local float Mg, Least;
+
+	Least = 10.f;
+	for ( i=0; i<CrowdList.Length; i++ )
+	{
+		Mg = FMax(VSize(CrowdList[i].Loc - Loc) - CrowdList[i].Reach, 0.f) / CrowdList[i].Speed - T - CrowdList[i].Pad;
+		if ( Mg < Least )
+			Least = Mg;
+	}
+	return Least;
+}
+
+// The specimen that has the least time to spare against us at a spot, if we can see it (the one to shoot).
+final function KFMonster MostThreatening( vector Loc, float T )
+{
+	local int i, Best;
+	local float Mg, Least;
+
+	Best = -1;
+	for ( i=0; i<CrowdList.Length; i++ )
+	{
+		Mg = FMax(VSize(CrowdList[i].Loc - Loc) - CrowdList[i].Reach, 0.f) / CrowdList[i].Speed - T - CrowdList[i].Pad;
+		if ( Best < 0 || Mg < Least )
+		{
+			Best = i;
+			Least = Mg;
+		}
+	}
+	if ( Best >= 0 && CrowdList[Best].M != None && LineOfSightTo(CrowdList[Best].M) )
+		return CrowdList[Best].M;
+	return None;
+}
+
+// A path a human-sized bot can run along: no flying, swimming, ladders, special moves, forced jumps or doors welded shut.
+final function bool UsableEscapeSpec( ReachSpec Spec )
+{
+	local NavigationPoint E;
+	local int i;
+
+	if ( Spec == None )
+		return false;
+	E = Spec.End;
+	if ( E == None || E.bBlocked || LiftCenter(E) != None || (Teleporter(E) != None && Teleporter(E).URL != "")
+		|| Spec.bForced || (Spec.reachFlags & (2|4|32|64|128)) != 0
+		|| Spec.CollisionRadius < Pawn.CollisionRadius || Spec.CollisionHeight < Pawn.CollisionHeight )
+		return false;
+	for ( i=0; i<DoorPaths.Length; i++ )
+		if ( DoorPaths[i].Path == Spec && DoorPaths[i].Door != None && DoorPaths[i].Door.bSealed && !DoorPaths[i].Door.bDoorIsDead )
+			return false;
+	return true;
+}
+
+// How much a place lies where specimens have just been coming in: a spawn area within EscapeSpawnDist that produced one
+// in the last EscapeSpawnRecent seconds (1 just now, less as it gets older). Players soon learn where they pour in from.
+final function float SpawnNearness( vector Loc )
+{
+	local ZombieVolume Z;
+	local int i;
+	local float Age, Most;
+
+	if ( !bSpawnAreasFound )
+	{
+		bSpawnAreasFound = true;
+		foreach AllActors(class'ZombieVolume', Z)
+			SpawnAreas[SpawnAreas.Length] = Z;
+	}
+	for ( i=0; i<SpawnAreas.Length; i++ )
+	{
+		Z = SpawnAreas[i];
+		if ( Z == None || Z.LastSpawnedTime <= 0 )
+			continue;
+		Age = Level.TimeSeconds - Z.LastSpawnedTime;
+		if ( Age > EscapeSpawnRecent || VSize(Z.Location - Loc) > EscapeSpawnDist )
+			continue;
+		Most = FMax(Most, 1.f - Age / EscapeSpawnRecent);
+	}
+	return Most;
+}
+
+// How many ways lead on from a node: 1 is a dead end (only the way back).
+final function int EscapeExits( NavigationPoint N )
+{
+	local int k, Links;
+
+	for ( k=0; k<N.PathList.Length; k++ )
+		if ( UsableEscapeSpec(N.PathList[k]) )
+			Links++;
+	return Links;
+}
+
+final function int EscIndex( NavigationPoint N )
+{
+	local int i;
+
+	for ( i=0; i<EscNode.Length; i++ )
+		if ( EscNode[i] == N )
+			return i;
+	return -1;
+}
+
+// Adds a node the search starts from (or a better way to it): its path length, search cost and least margin.
+final function AddEscapeNode( NavigationPoint N, int Prev, float Len, float Cost, float Mg )
+{
+	local int j;
+
+	j = EscIndex(N);
+	if ( j < 0 )
+	{
+		if ( EscNode.Length >= EscapeMaxNodes )
+			return;
+		j = EscNode.Length;
+		EscNode.Length = j + 1;
+		EscPrev.Length = j + 1;
+		EscLen.Length = j + 1;
+		EscCost.Length = j + 1;
+		EscMargin.Length = j + 1;
+		EscDone.Length = j + 1;
+		EscNode[j] = N;
+		EscDone[j] = 0;
+	}
+	else if ( EscDone[j] != 0 || Cost >= EscCost[j] )
+		return;
+	EscPrev[j] = Prev;
+	EscLen[j] = Len;
+	EscCost[j] = Cost;
+	EscMargin[j] = Mg;
+}
+
+// The nodes the way out starts from: in each of eight directions the nearest path node 100 to 700 away on about our
+// floor that we can walk straight to (not the one we stand on: running to it gets us nowhere).
+final function AddEscapeSources( float BotSpeed )
+{
+	local NavigationPoint N, Cand[8];
+	local float D, CandD[8], Mg, NM;
+	local vector Dir;
+	local int s;
+
+	for ( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+	{
+		Dir = N.Location - Pawn.Location;
+		if ( Abs(Dir.Z) > 120.f || N.bBlocked || LiftCenter(N) != None )
+			continue;
+		D = VSize(Dir);
+		if ( D > 700.f || D < 100.f )
+			continue;
+		Dir.Z = 0;
+		s = ((rotator(Dir).Yaw & 65535) + 4096) / 8192;
+		if ( s > 7 )
+			s = 0;
+		if ( Cand[s] == None || D < CandD[s] )
+		{
+			Cand[s] = N;
+			CandD[s] = D;
+		}
+	}
+	for ( s=0; s<8; s++ )
+		if ( Cand[s] != None && ActorReachable(Cand[s]) )
+		{
+			D = CandD[s];
+			NM = NodeMargin(Cand[s].Location, D / BotSpeed);
+			Mg = FMin(NM, NodeMargin(0.5 * (Cand[s].Location + Pawn.Location), 0.5 * D / BotSpeed));
+			AddEscapeNode(Cand[s], -1, D, D + EscapeDangerCost * FMax(0.f, 1.5f - Mg), Mg);
+		}
+}
+
+// The way out (see the note above). Sets MoveTarget to the node to run to now, EscapeGoal to where the way leads and
+// EscapeBlocker to the specimen that comes closest to cutting the first leg. False if there is no path node to use.
+final function bool PlanEscape()
+{
+	local NavigationPoint N, E;
+	local ReachSpec Spec;
+	local int i, k, Cur, Best, First, Second, Links, Near;
+	local float Len, Cost, NM, Mg, BotSpeed, Score, BestScore;
+	local vector Ally;
+	local bool bAlly;
+
+	if ( Pawn == None )
+		return false;
+	SenseCrowd();
+	BotSpeed = Pawn.GroundSpeed;
+	if ( KFHumanPawn(Pawn) != None && !KFHumanPawn(Pawn).bIsSprinting )
+		BotSpeed *= KFHumanPawn(Pawn).SprintMulti;
+	BotSpeed = FMax(BotSpeed, 150.f);
+	bAlly = NearestAllyLoc(Ally);
+
+	EscNode.Length = 0;
+	EscPrev.Length = 0;
+	EscLen.Length = 0;
+	EscCost.Length = 0;
+	EscMargin.Length = 0;
+	EscDone.Length = 0;
+	AddEscapeSources(BotSpeed);
+	if ( EscNode.Length == 0 )
+		return false;
+
+	// the cheapest way to each node within reach: a way costs its length and more for running close to specimens
+	while ( true )
+	{
+		Cur = -1;
+		for ( i=0; i<EscNode.Length; i++ )
+			if ( EscDone[i] == 0 && (Cur < 0 || EscCost[i] < EscCost[Cur]) )
+				Cur = i;
+		if ( Cur < 0 )
+			break;
+		EscDone[Cur] = 1;
+		if ( EscMargin[Cur] < -2.5f || EscLen[Cur] > EscapeSearchDist )
+			continue;	// cut off for good, or far enough: not gone on from
+		N = EscNode[Cur];
+		for ( k=0; k<N.PathList.Length; k++ )
+		{
+			Spec = N.PathList[k];
+			if ( !UsableEscapeSpec(Spec) )
+				continue;
+			E = Spec.End;
+			Len = EscLen[Cur] + Spec.Distance;
+			NM = FMin(NodeMargin(E.Location, Len / BotSpeed), NodeMargin(0.5 * (E.Location + N.Location), (Len - 0.5 * Spec.Distance) / BotSpeed));
+			Mg = FMin(EscMargin[Cur], NM);
+			Cost = EscCost[Cur] + Spec.Distance + EscapeDangerCost * FMax(0.f, 1.5f - NM);
+			AddEscapeNode(E, Cur, Len, Cost, Mg);
+		}
+	}
+
+	// the best place to make for: time to spare on the way there first, then a way on from it, then team-mates
+	Best = -1;
+	for ( i=0; i<EscNode.Length; i++ )
+	{
+		if ( EscLen[i] < 250.f )
+			continue;
+		Score = FClamp(EscMargin[i], -3.f, 3.f) + 0.25 * FMin(EscLen[i], 1500.f) / 1500.f;
+		Links = EscapeExits(EscNode[i]);
+		if ( Links <= 1 )
+			Score -= EscapeDeadEnd;
+		else if ( Links >= 3 )
+			Score += 0.15;
+		// from there they are all on one side (spread over 160 degrees at most): a place to stand and fight from
+		if ( EscMargin[i] > -0.5 && CrowdGap(EscNode[i].Location, 1000.f, Near) >= 36409 )
+			Score += EscapeFrontBonus;
+		// not towards where they have just been coming in
+		if ( EscapeSpawnPenalty > 0 )
+			Score -= EscapeSpawnPenalty * SpawnNearness(EscNode[i].Location);
+		if ( bAlly )
+			Score += EscapeAllyPull * (1.f - FMin(VSize(Ally - EscNode[i].Location) / 3000.f, 1.f));
+		if ( Best < 0 || Score > BestScore )
+		{
+			Best = i;
+			BestScore = Score;
+		}
+	}
+	if ( Best < 0 )
+	{
+		// nowhere far enough: the start node with the most room
+		for ( i=0; i<EscNode.Length; i++ )
+			if ( EscPrev[i] < 0 && (Best < 0 || EscMargin[i] > EscMargin[Best]) )
+				Best = i;
+		if ( Best < 0 )
+			return false;
+	}
+	EscapeGoal = EscNode[Best];
+	EscapeGoalMargin = EscMargin[Best];
+	// the first leg: the node the way starts from, or the one after it when we are all but there
+	First = Best;
+	Second = -1;
+	while ( EscPrev[First] >= 0 )
+	{
+		Second = First;
+		First = EscPrev[First];
+	}
+	if ( Second >= 0 && VSize(EscNode[First].Location - Pawn.Location) < 120.f && ActorReachable(EscNode[Second]) )
+		First = Second;
+	MoveTarget = EscNode[First];
+	PlannedLegMargin = EscMargin[First];
+	EscapeBlocker = MostThreatening(MoveTarget.Location, VSize(MoveTarget.Location - Pawn.Location) / BotSpeed);
+	return true;
+}
+
+// The leg we are on is about to be cut: a specimen will now get within reach of its end well before we do, more than
+// was planned.
+final function bool LegCutOff()
+{
+	local int i;
+	local float T, Mg;
+
+	if ( MoveTarget == None )
+		return false;
+	T = VSize(MoveTarget.Location - Pawn.Location) / FMax(Pawn.GroundSpeed, 150.f);
+	for ( i=0; i<CrowdList.Length; i++ )
+	{
+		if ( CrowdList[i].M == None || CrowdList[i].M.Health <= 0 )
+			continue;
+		Mg = FMax(VSize(CrowdList[i].M.Location - MoveTarget.Location) - CrowdList[i].Reach, 0.f) / CrowdList[i].Speed - T - CrowdList[i].Pad;
+		if ( Mg < 0.3 && Mg < PlannedLegMargin - 0.6 )
+			return true;
+	}
+	return false;
+}
+
+// What to look at while running: the enemy while we can see it (we back off firing), else the way.
+final function Actor EscapeFocus()
+{
+	if ( Enemy != None && Enemy.Health > 0 && VSize(Enemy.Location - Pawn.Location) < 1500.f && LineOfSightTo(Enemy) )
+		return Enemy;
+	return MoveTarget;
 }
 
 // True while we are inside the blast of the grenade we just threw.
@@ -1148,6 +1768,7 @@ function Tick(float DeltaTime)
 		CheckBile();
 		CheckSurprise();
 		CheckLift();
+		CheckLandedIdle();
 	}
 }
 
@@ -1267,6 +1888,24 @@ function bool FindInventoryGoal(float BestWeight)
 	bFound = Super.FindInventoryGoal(BestWeight);
 	SetLiftsBlocked(false);
 	return bFound;
+}
+
+// WaitingForLanding ends the tick after landing. A bot standing still in it for over a second has lost its state code
+// (seen twice after a teleport onto a node, cause not found): decide again.
+final function CheckLandedIdle()
+{
+	if ( Pawn == None || Pawn.Physics == PHYS_Falling || VSize(Pawn.Velocity) > 50.f || !IsInState('WaitingForLanding') )
+	{
+		LandedIdleSince = 0;
+		return;
+	}
+	if ( LandedIdleSince == 0 )
+		LandedIdleSince = Level.TimeSeconds;
+	else if ( Level.TimeSeconds - LandedIdleSince > 1.f )
+	{
+		LandedIdleSince = 0;
+		WhatToDoNext(172);
+	}
 }
 
 // A pawn that an opening door has pressed against a wall can be left resting on the door's edge: falling physics,
@@ -1430,6 +2069,11 @@ function ExecuteWhatToDoNext()
 		warn(GetHumanReadableName()$" WhatToDoNext with no pawn");
 		return;
 	}
+	if ( bPerkCheckPending )
+	{
+		bPerkCheckPending = false;
+		MaybeSwitchPerk();
+	}
 	if ( Enemy == None )
 	{
 		if ( Level.Game.TooManyBots(self) )
@@ -1456,8 +2100,8 @@ function ExecuteWhatToDoNext()
 		return;
 	if (Pawn.Physics == PHYS_None)
 		Pawn.SetMovementPhysics();
-	if ( Pawn.FindAnchorFailedTime == Level.TimeSeconds && Pawn.LastValidAnchorTime > 10.f && TeleportBackIn() ) // Maps are buggy, unstick ourselves
-		return;
+	if ( Pawn.FindAnchorFailedTime == Level.TimeSeconds && AnchorLostTooLong() ) // Maps are buggy, unstick ourselves
+		TeleportBackIn();
 	if ( (Pawn.Physics == PHYS_Falling) && DoWaitForLanding() )
 		return;
 	if ( (StartleActor != None) && !StartleActor.bDeleteMe && (VSize(StartleActor.Location - Pawn.Location) < StartleActor.CollisionRadius)  )
@@ -1503,12 +2147,25 @@ function ExecuteWhatToDoNext()
 		return;
 	}
 
+	if ( Enemy == None && ShouldRecoverDroppedWeapon() )
+	{
+		GoalString = "RECOVER_DROP";
+		GotoState('RecoverDroppedWeapons');
+		return;
+	}
 	if( Enemy==none && ((ShouldGoShopping() && GoShopping()) || ShouldBegForCash()) )
 		Return;
 	if( LastHealTime<Level.TimeSeconds && FindInjuredAlly() && (!EnemyReallyScary() && StartleActor==None) && GoHealing() )
 		return;
 	else
 	{
+		// A better gun on the floor close by that we cannot carry as we are: swap one for it while nothing is close.
+		if ( (Threat == None || ThreatMargin > 150.f) && FindPickupSwap() )
+		{
+			GoalString = "Swap "$SwapText();
+			GotoState('SwapForPickup');
+			return;
+		}
 		if ( Enemy == None && HuntRemainingSpecimens() )
 			return;
 		if ( AssignSquadResponsibility() )
@@ -1520,11 +2177,6 @@ function ExecuteWhatToDoNext()
 		}
 		if ( ShouldPerformScript() )
 			return;
-		if(ThrowAwayBadWeaponForBetterPickup())
-		{
-			GoalString = "ExecuteWhatToDoNext - Picking up better weapon";
-			return;
-		}
 		if ( Enemy != None )
 			ChooseAttackMode();
 		else
@@ -1753,118 +2405,285 @@ Begin:
 	WhatToDoNext(41);
 }
 
-//Tosses out the worst weapon in our inventory, or the specified weapon
-final function bool ThrowAwayBadWeapon(KFWeapon WeapToThrow)
+// The best trade within SwapSearchDist (and about our floor) of guns we carry for a gun on the floor that we cannot
+// carry as we are: the guns to leave are the fewest and least worth that make room (PlanSwapDrops), and the new gun
+// must be worth more than all of them together (TradeWorth, PickupWorth) by SwapMinGain. Three empty guns are worth
+// next to nothing, so a Commando out of ammo takes a LAW; a loaded Bullpup and Deagle outweigh one. Sets SwapPickup
+// and SwapDrops. Looked for every two seconds at most.
+final function bool FindPickupSwap()
 {
-	local vector TossVel, X,Y,Z;
+	local KFHumanPawn P;
+	local KFWeaponPickup Pk;
+	local array<KFWeapon> Drops;
+	local class<KFWeapon> WC;
+	local float Gain, BestGain;
+	local int i;
 
-	if( WeapToThrow!=none )
+	if ( Level.TimeSeconds < NextSwapCheckTime )
+		return false;
+	NextSwapCheckTime = Level.TimeSeconds + 2.f;
+	P = KFHumanPawn(Pawn);
+	if ( P == None )
+		return false;
+	SwapPickup = None;
+	SwapDrops.Length = 0;
+	foreach Pawn.CollidingActors(class'KFWeaponPickup', Pk, SwapSearchDist)
 	{
-		if ( Pawn.Weapon != WeapToThrow )
+		WC = class<KFWeapon>(Pk.InventoryType);
+		if ( WC == None || Pk.bHidden || !Pk.ReadyToPickup(0) || (Pk == SwapBlocked && Level.TimeSeconds < SwapBlockedTime)
+			|| Abs(Pk.Location.Z - Pawn.Location.Z) > 150.f || P.CanCarry(WC.default.Weight) || Pawn.FindInventoryType(WC) != None
+			|| !PlanSwapDrops(WC.default.Weight, Drops) )
+			continue;
+		Gain = PickupWorth(Pk);
+		for ( i=0; i<Drops.Length; i++ )
+			Gain -= TradeWorth(Drops[i]);
+		if ( Gain > SwapMinGain && (SwapPickup == None || Gain > BestGain) )
 		{
-			Pawn.PendingWeapon = WeapToThrow;
-			Pawn.ChangedWeapon();
-			if ( Pawn.Weapon != WeapToThrow )
-				return false;	// can't switch right now (reloading, mid-fire): try again another time
+			SwapPickup = Pk;
+			SwapDrops = Drops;
+			BestGain = Gain;
 		}
-		Pawn.SetRotation(Pawn.GetViewRotation() + rot(0,7000,0));
-		TossVel = Vector(Pawn.GetViewRotation());
-		TossVel = TossVel * ((Velocity Dot TossVel) + 500) + Vect(0,0,200);
-		WeapToThrow.Velocity = TossVel;
-		GetAxes(GetViewRotation(),X,Y,Z);
-		WeapToThrow.DropFrom(Pawn.Location + 0.8 * Pawn.CollisionRadius * X - 0.5 * Pawn.CollisionRadius * Y);
-		SwitchToBestWeapon();
-		return true;
 	}
-  	return false;
+	if ( SwapPickup == None || (!ActorReachable(SwapPickup) && !FindBestPathToward(SwapPickup, true, false)) )
+	{
+		SwapPickup = None;
+		SwapDrops.Length = 0;
+		return false;
+	}
+	return true;
 }
 
-final function bool ThrowAwayBadWeaponForBetterPickup()
+// The guns to leave behind to make room for one of this weight: the least worth first, as few as it takes (one taken
+// early is put back if a heavier one made it unneeded). False if even all of them would not make room. The 9mm, knife,
+// syringe, welder and grenades are never left, so the bot is never left unarmed.
+final function bool PlanSwapDrops( float Weight, out array<KFWeapon> Drops )
 {
-    local KFHumanPawn      HP;
-	local Inventory 	   Inv;
-    local KFWeapon         W, BestDrop, CurBestDrop;
-	local KFWeaponPickup   GroundPk, BestPk;
-    local float            NewWWeight;
-	local float 		   GroundRating, CurWRating, BestWRating, CurBestDropRating;
-	local bool 		   	   bAlreadyOwn;
+	local Inventory Inv;
+	local KFWeapon W;
+	local array<KFWeapon> Cand;
+	local KFHumanPawn P;
+	local float Load;
+	local int i, j;
 
-    HP = KFHumanPawn(Pawn);
-    if (HP == None)
-        return false;
-
-	foreach DynamicActors(class'KFWeaponPickup',GroundPk) // Scan ground pickups
+	Drops.Length = 0;
+	P = KFHumanPawn(Pawn);
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
 	{
-        if (GroundPk == None || GroundPk.InventoryType == None || !GroundPk.ReadyToPickup(0) || !ActorReachable(GroundPk) || VSize(GroundPk.Location - Pawn.Location) > 400.f)
-            continue;
-
-		NewWWeight = GroundPk.Default.Weight;
-		if(HP.CanCarry(NewWWeight)) // Already fits, no drop needed
+		W = KFWeapon(Inv);
+		if ( W == None || W.bKFNeverThrow || !W.bCanThrow )
 			continue;
-
-		GroundRating = class<KFWeapon>(GroundPk.InventoryType).default.AIRating;
-		if(WeaponIsForPerk(GroundPk.Class)) // Perk weapons get a bump
-			GroundRating *= 1.5;
-
-        bAlreadyOwn        = false;
-        CurBestDrop        = None;
-        CurBestDropRating  = 0.0;
-
-		for (Inv = Pawn.Inventory; Inv != None; Inv = Inv.Inventory) // Compare against inventory
-		{
-			W = KFWeapon(Inv);
-			if (W == None || W.bKFNeverThrow) // Must be real and throwable
-				continue;
-
-			//SendChatMsg("Considering dropping my "$W.GetHumanReadableName()$" for pickup "$GroundPk.GetHumanReadableName()$".");
-
-            if (W.Class == class<KFWeapon>(GroundPk.InventoryType))
-            {
-                bAlreadyOwn = true;
-                break;
-            }
-
-			CurWRating = W.default.AIRating;
-			if(WeaponIsForPerk(class<KFWeaponPickup>(W.PickupClass))) // Perk weapon bump
-				CurWRating *= 1.5; 
-
-			if ( GroundRating <= CurWRating ) // Pickup isn't better, skip
-				continue;
-
-			if ((HP.CurrentWeight - W.Weight) + NewWWeight > HP.MaxCarryWeight) // Still wouldn't fit after dropping, skip
-				continue;
-
-            if (!bAlreadyOwn && (CurBestDrop == None || CurWRating < CurBestDropRating))
-            {
-                CurBestDrop       = W;
-                CurBestDropRating = CurWRating;
-            }
-		}
-		if (bAlreadyOwn) // Already have it, skip
-            continue; 
-
-		// Best trade so far?
-        if (CurBestDrop != None && (BestPk == None || GroundRating - CurBestDropRating > GroundRating - BestWRating))
-        {
-            BestPk      = GroundPk;
-            BestDrop    = CurBestDrop;
-            BestWRating = CurBestDropRating;
-        }
+		j = 0;
+		while ( j < Cand.Length && TradeWorth(Cand[j]) <= TradeWorth(W) )
+			j++;
+		Cand.Insert(j, 1);
+		Cand[j] = W;
 	}
-    if (BestPk != None && BestDrop != None)
-    {
-		FindBestPathToward(BestPk,true,false); 
-		if(MoveTarget != None && VSize(MoveTarget.Location - Pawn.Location) < 200.f) 
+	Load = P.CurrentWeight;
+	for ( i=0; i<Cand.Length && Load + Weight > P.MaxCarryWeight; i++ )
+	{
+		Drops[Drops.Length] = Cand[i];
+		Load -= Cand[i].Weight;
+	}
+	if ( Load + Weight > P.MaxCarryWeight )
+	{
+		Drops.Length = 0;
+		return false;
+	}
+	for ( i=Drops.Length-1; i>=0; i-- )
+		if ( Load + Drops[i].Weight + Weight <= P.MaxCarryWeight )
 		{
-			GoToState('Fallback');
-			if (BestDrop != None && ThrowAwayBadWeapon(BestDrop))
-			{	
-				GoalString = "WhatToDoNext - Dropping bad weapon for better pickup";
-				return true;
-			}
+			Load += Drops[i].Weight;
+			Drops.Remove(i, 1);
 		}
-    }
-    return false;
+	return ( Drops.Length > 0 );
+}
+
+// What a gun on the floor would be worth to this bot (as TradeWorth for one it carries): next to nothing if it was
+// dropped empty.
+final function float PickupWorth( KFWeaponPickup Pk )
+{
+	local class<KFWeapon> WC;
+	local float R;
+
+	WC = class<KFWeapon>(Pk.InventoryType);
+	R = WC.default.AIRating;
+	if ( WeaponIsForPerk(Pk.Class) )
+		R *= 1.5;
+	if ( Pk.bDropped && Pk.AmmoAmount[0] <= 0 && !WC.default.bMeleeWeapon )
+		R *= 0.1;
+	return R;
+}
+
+// The guns a swap leaves behind are all still ours.
+final function bool SwapDropsHeld()
+{
+	local int i;
+
+	if ( SwapDrops.Length == 0 )
+		return false;
+	for ( i=0; i<SwapDrops.Length; i++ )
+		if ( SwapDrops[i] == None || SwapDrops[i].bDeleteMe || SwapDrops[i].Owner != Pawn )
+			return false;
+	return true;
+}
+
+// What a swap is for, for GoalString: "Bullpup, Deagle for LAW".
+final function string SwapText()
+{
+	local string S;
+	local int i;
+
+	for ( i=0; i<SwapDrops.Length; i++ )
+	{
+		if ( i > 0 )
+			S = S $ ", ";
+		if ( SwapDrops[i] != None )
+			S = S $ SwapDrops[i].ItemName;
+	}
+	if ( SwapPickup != None )
+		S = S $ " for " $ SwapPickup.ItemName;
+	return S;
+}
+
+// Throws the SwapDrops back the way we came, spread a little, away from SwapPickup, without taking them out first (as
+// CheckCarryWeight drops guns). The thrown guns are no longer this bot's own, so it does not come back for them
+// between waves.
+final function bool DropForSwap()
+{
+	local vector Away, Side, Dir, StartLoc;
+	local sound OldAmbient;
+	local bool bHeld;
+	local KFWeaponPickup Pk;
+	local class<Inventory> DropClass;
+	local KFWeapon W;
+	local int i;
+
+	if ( SwapPickup == None || !SwapDropsHeld() )
+		return false;
+	Away = Pawn.Location - SwapPickup.Location;
+	Away.Z = 0;
+	Away = Normal(Away);
+	Side = Away cross vect(0,0,1);
+	if ( FRand() < 0.5 )
+		Side *= -1;
+	OldAmbient = Pawn.AmbientSound;
+	SwapThrownClasses.Length = 0;
+	for ( i=0; i<SwapDrops.Length; i++ )
+	{
+		W = SwapDrops[i];
+		if ( W == None || !W.bCanThrow )
+			continue;
+		if ( Pawn.Weapon == W )
+			bHeld = true;
+		Dir = Normal(Away + (0.5 - 0.6 * i) * Side);
+		DropClass = W.Class;
+		StartLoc = Pawn.Location + Dir * Pawn.CollisionRadius * 0.8;
+		W.Velocity = Pawn.Velocity + Dir * 300.f + vect(0,0,180);
+		W.DropFrom(StartLoc);
+		foreach Pawn.CollidingActors(class'KFWeaponPickup', Pk, 150.f, StartLoc)
+			if ( Pk.Owner == Self && Pk.InventoryType == DropClass )
+				Pk.SetOwner(None);
+		SwapThrownClasses[SwapThrownClasses.Length] = DropClass;
+	}
+	// dropping a gun that is not in hand must not silence the one that is (DropFrom clears the pawn's sound)
+	if ( !bHeld )
+		Pawn.AmbientSound = OldAmbient;
+	SwapGuardTime = Level.TimeSeconds + 5.f;
+	LastSwapPickup = SwapPickup;
+	if ( bHeld || Pawn.Weapon == None )
+		SwitchToBestWeapon();
+	return true;
+}
+
+// ---- Perk choice ----------------------------------------------------------------------------------------------------
+// Players may change perk whenever they like (KFPlayerController.SelectVeterancy); a bot does too when it makes sense:
+// when the guns it carries suit another perk clearly better, or the team has no medic. Looked at on each trader visit
+// and after a gun is picked up, at most once in PerkSwitchGap seconds. Never to a perk with less carry weight than the
+// bot carries (the game would make it drop guns).
+
+// How well a perk suits the bot as it is: the rating of each gun it carries that is that perk's (next to nothing if out
+// of ammo; the 9mm and knife everyone has do not count), PerkMedicNeed for a medic when the team has none,
+// PerkStay for keeping the perk it has, less PerkCrowd for each team-mate on it.
+final function float PerkFit( class<KFVeterancyTypes> V )
+{
+	local Inventory Inv;
+	local KFWeapon W;
+	local class<KFWeaponPickup> PC;
+	local float Fit;
+
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W == None || W.bKFNeverThrow || W.default.AIRating <= 0 )
+			continue;
+		PC = class<KFWeaponPickup>(W.PickupClass);
+		if ( PC == None || PC.default.CorrespondingVeterancyName != V.default.VeterancyName )
+			continue;
+		if ( !W.bMeleeWeapon && !W.HasAmmo() )
+			Fit += 0.1 * W.default.AIRating;
+		else
+			Fit += W.default.AIRating;
+	}
+	if ( V.default.VeterancyName == "Field Medic" && TeamOnPerk(V) == 0 )
+		Fit += PerkMedicNeed;
+	if ( V == KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill )
+		Fit += PerkStay;
+	// a team does better with a spread of perks: a little less for each team-mate who has it already
+	return Fit - PerkCrowd * TeamOnPerk(V);
+}
+
+// How many other living team-mates (players or bots) have this perk.
+final function int TeamOnPerk( class<KFVeterancyTypes> V )
+{
+	local Controller C;
+	local KFPlayerReplicationInfo PRI;
+	local int N;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		PRI = KFPlayerReplicationInfo(C.PlayerReplicationInfo);
+		if ( C != self && C.bIsPlayer && PRI != None && PRI.ClientVeteranSkill == V && C.Pawn != None && C.Pawn.Health > 0 )
+			N++;
+	}
+	return N;
+}
+
+// Takes the perk that fits best (PerkFit) if it is not the one it has. True if it changed.
+final function bool MaybeSwitchPerk()
+{
+	local KFGameType G;
+	local KFPlayerReplicationInfo PRI;
+	local KFHumanPawn P;
+	local class<KFVeterancyTypes> V, Best;
+	local float Fit, BestFit;
+	local int i;
+
+	G = KFGameType(Level.Game);
+	PRI = KFPlayerReplicationInfo(PlayerReplicationInfo);
+	P = KFHumanPawn(Pawn);
+	if ( !bPerkSwitching || G == None || !G.bPerksEnabled || PRI == None || P == None || P.Health <= 0
+		|| Level.TimeSeconds < NextPerkSwitchTime )
+		return false;
+	for ( i=0; i<G.LoadedSkills.Length; i++ )
+	{
+		V = G.LoadedSkills[i];
+		if ( V == None || P.default.MaxCarryWeight + V.static.AddCarryMaxWeight() < P.CurrentWeight )
+			continue;
+		Fit = PerkFit(V);
+		if ( Best == None || Fit > BestFit )
+		{
+			Best = V;
+			BestFit = Fit;
+		}
+	}
+	if ( Best == None || Best == PRI.ClientVeteranSkill )
+		return false;
+	PRI.ClientVeteranSkill = Best;
+	P.CheckCarryWeight();
+	NextPerkSwitchTime = Level.TimeSeconds + PerkSwitchGap;
+	SendChatMsg("Switching to "$Best.default.VeterancyName$".");
+	log(PlayerReplicationInfo.PlayerName$" switched perk to "$Best.default.VeterancyName);
+	return true;
 }
 
 function array<class<Pickup> > GetLegalPurchases()
@@ -1891,39 +2710,6 @@ function array<class<Pickup> > GetLegalPurchases()
 	return RetList;
 }
 
-function bool CanAfford(class<Pickup> aItem)
-{
-	local class<kfWeaponPickup> aWeapon;
-	local actor InvIt;
-	local KFWeapon Weap;
-	local bool bFoundInInventory;
-
-	aWeapon = class<kfWeaponPickup>(aItem);
-
-	if(aWeapon!=none)
-	{
-		bFoundInInventory=false;
-		for(InvIt=pawn; InvIt!=none; InvIt=InvIt.Inventory)
-		{
-			Weap = KFWeapon(InvIt);
-			if(Weap!=none)
-			{
-				bFoundInInventory=true;
-				if(Weap.AmmoClass[0]!=none && Weap.Class==aWeapon.default.InventoryType)
-				{
-					if( PlayerReplicationInfo.score>aWeapon.default.ammocost )
-						return true;
-				}
-			}
-		}
-
-		// if we didn't find it above, we need to see if we can buy the whole gun, not just ammo
-		if(!bFoundInInventory && aWeapon.default.Cost < self.PlayerReplicationInfo.score && aWeapon.default.weight < (KFHumanPawn(pawn).MaxCarryWeight - KFHumanPawn(pawn).CurrentWeight) )
-			return true;
-	}
-	return false;
-}
-
 function KFWeapon FindWeaponInInv(Class<KFWeaponPickup> TargetClass)
 {
 	local actor InvIt;
@@ -1942,10 +2728,19 @@ function KFWeapon FindWeaponInInv(Class<KFWeaponPickup> TargetClass)
 
 final function bool SellWeapon( KFWeapon W )
 {
+	local Single S;
+
 	if( W==None || W.bKFNeverThrow )
 		return false;
 	PlayerReplicationInfo.Score+=GetWeaponWorth(W);
 	log(PlayerReplicationInfo.PlayerName$" Sold weapon: " $ W.GetHumanReadableName() $ " for " $ GetWeaponWorth(W));
+	// as a player's sale does (KFPawn.ServerSellWeapon): Dualies give the one 9mm back
+	if ( Dualies(W) != None && Pawn.FindInventoryType(class'Single') == None )
+	{
+		S = Spawn(class'Single');
+		if ( S != None )
+			S.GiveTo(Pawn);
+	}
 	W.Destroy();
 	return true;
 }
@@ -2068,7 +2863,7 @@ function bool FindRoamDest()
 				{
 					if (TeleportBackIn())
 						return true;
-					else
+					else if ( BackInSpot() == None )
 					{
 							// Last resort, waste this man
 							Pawn.Health = 0;
@@ -2141,252 +2936,326 @@ function bool FindRoamDest()
 	return false;
 }
 
-function bool TeleportBackIn()
+// Where a bot stuck off the path network goes back to: its last anchor, else a player start.
+final function NavigationPoint BackInSpot()
 {
 	local NavigationPoint N, TeleNav;
 
 	if(Pawn.LastAnchor != None)
-		TeleNav = Pawn.LastAnchor;
-	else 
+		return Pawn.LastAnchor;
+	for (N = Level.NavigationPointList; N != None; N = N.nextNavigationPoint)
 	{
-		for (N = Level.NavigationPointList; N != None; N = N.nextNavigationPoint)
-		{
-			if(PlayerStart(N)!= None)
-				TeleNav = N;
-		}
+		if(PlayerStart(N)!= None)
+			TeleNav = N;
 	}
-	if (TeleNav != None)
-	{
-		Pawn.SetLocation(TeleNav.Location);
-		GoalString = "Teleported to location: "$TeleNav$" after being stuck.";
-		NumRandomJumps = 0;
-		return true;
-	}
-	return false;
+	return TeleNav;
 }
 
+// Puts a bot stuck off the path network back on BackInSpot. False if a player would see it go or arrive (try again
+// later), or there is nowhere to put it.
+function bool TeleportBackIn()
+{
+	local NavigationPoint TeleNav;
+
+	TeleNav = BackInSpot();
+	if ( !TeleportUnseen(TeleNav) )
+		return false;
+	log(PlayerReplicationInfo.PlayerName$" was stuck off the paths, put back on "$TeleNav);
+	GoalString = "Teleported to location: "$TeleNav$" after being stuck.";
+	NumRandomJumps = 0;
+	return true;
+}
+
+// Moves the bot to Spot when no player can see it leave or arrive.
+final function bool TeleportUnseen( NavigationPoint Spot )
+{
+	if ( Spot == None || HumanCanSee(Pawn.Location) || HumanCanSee(Spot.Location) || !Pawn.SetLocation(Spot.Location) )
+		return false;
+	Pawn.FindAnchorFailedTime = 0;	// let this decision's path searches find the new anchor
+	AnchorLostTime = Level.TimeSeconds;
+	AnchorLostSpot = Pawn.Location;
+	return true;
+}
+
+// The path search found no anchor: true once that has gone on for AnchorLostLimit seconds without the bot getting
+// anywhere (it starts over after a valid anchor or a move of 200).
+final function bool AnchorLostTooLong()
+{
+	if ( AnchorLostTime <= Pawn.LastValidAnchorTime || VSize(Pawn.Location - AnchorLostSpot) > 200.f )
+	{
+		AnchorLostTime = Level.TimeSeconds;
+		AnchorLostSpot = Pawn.Location;
+	}
+	return ( Level.TimeSeconds - AnchorLostTime >= AnchorLostLimit );
+}
+
+// Armour at the price a player pays (KFPawn.ServerBuyKevlar): scaled by difficulty for anyone with a perk.
 final function BuyKevlar()
 {
-	local int Cost;
+	local float Cost, Scale;
 	local int UnitsAffordable;
 
-	if ( UnrealPawn(Pawn).ShieldStrength>=100 )
+	if ( Pawn.ShieldStrength>=100 )
 		Return;
 
-	Cost = class'Vest'.default.ItemCost * ((100.0 - UnrealPawn(Pawn).ShieldStrength) / 100.0);
+	Scale = 1.f;
+	if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != None && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != None )
+		Scale = class'KFPawn'.static.GetCostScaling(Level.Game.GameDifficulty);
+	Cost = class'Vest'.default.ItemCost * ((100.0 - Pawn.ShieldStrength) / 100.0) * Scale;
 
 	if ( PlayerReplicationInfo.Score >= Cost )
 	{
 		PlayerReplicationInfo.Score -= Cost;
-		UnrealPawn(Pawn).ShieldStrength = 100;
+		Pawn.ShieldStrength = 100;
 	}
-	else if ( UnrealPawn(Pawn).ShieldStrength>0 )
+	else if ( Pawn.ShieldStrength>0 )
 	{
-		Cost = class'Vest'.default.ItemCost/100.f;
-
-		UnitsAffordable = PlayerReplicationInfo.Score / Cost;
-		PlayerReplicationInfo.Score -= Cost * UnitsAffordable;
-		UnrealPawn(Pawn).ShieldStrength += UnitsAffordable;
+		Cost = class'Vest'.default.ItemCost * Scale / 100.0;
+		UnitsAffordable = int(PlayerReplicationInfo.Score / Cost);
+		PlayerReplicationInfo.Score -= int(Cost * UnitsAffordable);
+		Pawn.ShieldStrength += UnitsAffordable;
 	}
-	PlayerReplicationInfo.Score = PlayerReplicationInfo.Score;
 }
 
+// One visit to the trader. Ammo for the perk guns first, then up to three guns in order of wish, then the other guns'
+// ammo, then armour. A bot whose perk has guns of its own and who cannot get the one it wants most yet saves for it:
+// no off-perk guns, and armour only when it is down to half.
 function DoTrading()
 {
-	local KFWeapon Weap;
-	local class<KFWeaponPickup> BuyWeapClass;
-	local int OldCash;
-	local int Cost;
-	local byte LCount, LCountB, LCountC;
-	local KFHumanPawn P;
+	local array<class<KFWeaponPickup> > Wish;
+	local class<KFWeaponPickup> Saving;
+	local int i, Bought;
+	local bool bAny;
 
-	P = KFHumanPawn(Pawn);
-	if( P==None )
+	if( KFHumanPawn(Pawn)==None )
 		return;
-	//log(PlayerReplicationInfo.PlayerName$" Starting Trading. Cash available: " $PlayerReplicationInfo.Score);
-    ShoppingAttempts = 0;
+	ShoppingAttempts = 0;
 	if (KFEndlessGameType(Level.Game) != None)
 		LastShopTime = Level.TimeSeconds + 120 + 120*FRand();
 	else LastShopTime = Level.TimeSeconds + 60 + 60*FRand();
-	OldCash = PlayerReplicationInfo.Score + 1;
 
-	while ( (PlayerReplicationInfo.Score > 20) && PlayerReplicationInfo.Score!=OldCash && LCount++<10 )
+	MaybeSwitchPerk();	// before buying, as a player picks his perk at the trader
+	BuyAmmoFor(true);
+	for ( Bought=0; Bought<3; Bought++ )
 	{
-		OldCash = PlayerReplicationInfo.Score;
-
-		BuyWeapClass = class<KFWeaponPickup>(GetBestPurchase());
-		if( BuyWeapClass==None )
-			Continue;
-		Cost = BuyWeapClass.default.Cost;
-		Weap = FindWeaponInInv(BuyWeapClass);
-		if(Weap!=none) // already own gun, buy ammo
+		GetShoppingWishes(Wish);
+		bAny = false;
+		for ( i=0; i<Wish.Length && !bAny; i++ )
 		{
-			FillAllAmmo(Weap.GetAmmoClass(0),1.f);
-			// debugf;
+			if ( Saving != None && !WeaponIsForPerk(Wish[i]) )
+				continue;
+			if ( BuyWeapon(Wish[i]) )
+				bAny = true;
+			else if ( Saving == None && PerkPicky() && WeaponIsForPerk(Wish[i]) && FitsAfterSales(Wish[i]) )
+				Saving = Wish[i];
 		}
-		else // buy that gun
-		{
-			// Must sell off inventory to get a perk weapon
-			if( WeaponIsForPerk(BuyWeapClass) )
-			{
-				//log(GetHumanReadableName()$" Bot WeaponIsForPerk check for sellmostundesired " $BuyWeapClass);
-				while( !P.CanCarry(BuyWeapClass.default.Weight) && ++LCountB<10 && SellMostUndesired() )
-				{}
-				if( !P.CanCarry(BuyWeapClass.default.Weight) ) // Could not get perk weapon, no matter what.
-				{
-					++OldCash;
-					//log(GetHumanReadableName()$" could not get perk weapon no matter what " $BuyWeapClass);
-					continue;
-				}
-				if( Cost > PlayerReplicationInfo.Score && P.CanCarry(BuyWeapClass.default.weight) ) // Can't afford, try selling.
-				{
-					while( Cost > PlayerReplicationInfo.Score && ++LCountC<5 && SellMostUndesired() ) // Sell up to 5 non-perk weapons to afford.
-					{
-						//SendChatMsg("Selling unwanted weapon to afford perk weapon: " $ BuyWeapClass);
-						log(PlayerReplicationInfo.PlayerName$" Selling unwanted weapon to afford perk weapon: " $ BuyWeapClass);
-					}
-				}
-			}
-			if( Cost <= PlayerReplicationInfo.Score && P.CanCarry(BuyWeapClass.default.weight) )
-			{
-				//Cost *= (GetVet().Static.GetCostScaling(KFPlayerReplicationInfo(PlayerReplicationInfo),BuyWeapClass) * Mute.BotWeaponCostScale);
-				Weap = KFWeapon(Spawn(BuyWeapClass.default.InventoryType));
-				//SendChatMsg("Buying weapon: " $ BuyWeapClass $ " for " $ Cost);
-				log(PlayerReplicationInfo.PlayerName@"of perk"@GetPerkName()@"Buying weapon: " $ BuyWeapClass $ " for " $ Cost);
-				//log(GetHumanReadableName()$" Tried to buy a weapon: "$Weap);
-				if( Weap!=None )
-				{
-					Weap.UpdateMagCapacity(PlayerReplicationInfo);
-					Weap.FillToInitialAmmo();
-					Weap.GiveTo(Pawn);
-					FillAllAmmo(Weap.GetAmmoClass(0),1.f); //buy ammo too
-					PlayerReplicationInfo.Score -= Cost;
-					log(GetHumanReadableName()$" Purchased weapon: "$Weap$" New Cash: " $PlayerReplicationInfo.Score);
-					continue;
-				}
-			} 
-		}
+		if ( !bAny )
+			break;
 	}
-	PlayerReplicationInfo.Score = Max(PlayerReplicationInfo.Score,0);
-	if( PlayerReplicationInfo.Score>0 ) // Also purchase armor.
-	{
-		// debugf;
+	BuyAmmoFor(false);
+	PlayerReplicationInfo.Score = FMax(PlayerReplicationInfo.Score,0);
+	if( PlayerReplicationInfo.Score>0 && (Saving == None || Pawn.ShieldStrength < 50) )
 		BuyKevlar();
-	}
 	SwitchToBestWeapon();
 	LastShopCash = PlayerReplicationInfo.Score;
-	log(PlayerReplicationInfo.PlayerName$" Finished Trading. Cash left: " $PlayerReplicationInfo.Score);
+	log(PlayerReplicationInfo.PlayerName$" Finished Trading. Cash left: "$int(PlayerReplicationInfo.Score)$" armour "$int(Pawn.ShieldStrength)$" saving for "$Saving$" in shop "$InShop());
 }
 
-final function class<Pickup> GetBestPurchase()
+// What a gun costs: what a player pays (KFPawn.ServerBuyWeapon), the list price scaled by difficulty.
+final function int WeaponPrice( class<KFWeaponPickup> PC )
 {
-	local int i;
-	local class<Pickup> BestBuy;
-	local class<KFWeaponPickup> AmmoWeapClass;
-	local KFWeapon WeapAmmo;
-	local float Des,BestDes;
-	local array<class<Pickup> > ShoppingList;
-
-	if( ShoppingList.Length==0 )
-		ShoppingList = GetLegalPurchases();
-	for(i=0; i<ShoppingList.Length; i++ )
-	{
-		if( GetBuyDesire(ShoppingList[i],Des) && (BestBuy==None || BestDes<Des) )
-		{
-			//log(PlayerReplicationInfo.PlayerName@"Considering purchase of: "$ShoppingList[i]$" with desire: "$Des);
-			BestBuy = ShoppingList[i];
-			BestDes = Des;
-		}
-		//Have to do this again so it fills up even guns we just have in our inventory
-		AmmoWeapClass = class<KFWeaponPickup>(ShoppingList[i]);
-		WeapAmmo = FindWeaponInInv(AmmoWeapClass);
-		if(WeapAmmo!=none)
-		{
-			FillAllAmmo(WeapAmmo.GetAmmoClass(0),1.f);
-			// Fill secondary ammo (e.g. explosive shells) if the weapon has a distinct secondary ammo type
-			if (WeapAmmo.GetAmmoClass(1) != None && WeapAmmo.GetAmmoClass(1) != WeapAmmo.GetAmmoClass(0))
-				FillAllAmmo(WeapAmmo.GetAmmoClass(1),1.f);
-		}
-	}
-	return BestBuy;
+	return int(float(PC.default.Cost) * class'KFPawn'.static.GetCostScaling(Level.Game.GameDifficulty));
 }
 
-final function bool GetBuyDesire( class<Pickup> aItem, out float Desire )
+// The perks that have guns of their own. For the others (and with no perk) every gun counts as a perk gun.
+final function bool PerkPicky()
 {
-	local class<kfWeaponPickup> aWeapon;
-	local Inventory InvIt;
-	local int Cost;
+	local string P;
 
-	aWeapon = class<KFWeaponPickup>(aItem);
-	if (aWeapon != None)
-	{
-		for(InvIt=Pawn.Inventory; InvIt!=none; InvIt=InvIt.Inventory)
-		{
-			if( InvIt.PickupClass==aWeapon )
-			{
-				Desire = 0.f; // Already have it
-				//log(PlayerReplicationInfo.PlayerName@"Desire is 0, already have it: "$aWeapon);
-				return false;
-			}
-		}
-		Desire = aWeapon.Default.MaxDesireability;
-		//log(PlayerReplicationInfo.PlayerName@"Base Desire for: "$aWeapon$" is: " $ Desire);
-		Desire*=(FRand()*0.5+1.f); 
-		//log(PlayerReplicationInfo.PlayerName@"Desire after random factor: " $ Desire);
-		if( WeaponIsForPerk(aWeapon) )
-			Desire *= 4.f; // More desire for perk weapons
-		//SendChatMsg("Considering purchase of: "$aWeapon$" with desire: "$Desire);
-		//log(PlayerReplicationInfo.PlayerName$"Considering purchase of: "$aWeapon$" with desire: "$Desire);
-		Cost = aWeapon.default.Cost;
-		if( Cost<=PlayerReplicationInfo.Score && (KFHumanPawn(Pawn).CanCarry(aWeapon.default.weight)) || WeaponIsForPerk(aWeapon) )
-			return true;
-	}
-	return false;
+	P = GetPerkName();
+	return ( P != "" && P != "Field Medic" && P != "Sergeant" );
 }
 
-final function bool SellMostUndesired()
+// What a gun the bot carries is worth to it in a trade: its rating, half again for a perk gun, next to nothing when
+// it is out of ammo.
+final function float TradeWorth( KFWeapon W )
 {
-	local Inventory I;
-	local KFWeapon W,Best;
-	local class<KFWeaponPickup> WP;
-	local float Score,BestScore;
-	
-	for( I=Pawn.Inventory; I!=none; I=I.Inventory )
+	local float R;
+
+	R = W.default.AIRating;
+	if ( class<KFWeaponPickup>(W.PickupClass) != None && WeaponIsForPerk(class<KFWeaponPickup>(W.PickupClass)) )
+		R *= 1.5;
+	if ( !W.bMeleeWeapon && !W.HasAmmo() )
+		R *= 0.1;
+	return R;
+}
+
+// The guns on sale here that the bot does not have, the one it wants most first: perk guns far ahead, then by how
+// much a bot wants such a gun, with some chance in it so that bots do not all buy alike.
+final function GetShoppingWishes( out array<class<KFWeaponPickup> > Wish )
+{
+	local array<class<Pickup> > L;
+	local array<float> Des;
+	local class<KFWeaponPickup> PC;
+	local float D;
+	local int i, j;
+
+	Wish.Length = 0;
+	L = GetLegalPurchases();
+	for ( i=0; i<L.Length; i++ )
 	{
-		W = KFWeapon(I);
-		if( W!=None && !W.bKFNeverThrow )
-		{
-			WP = class<KFWeaponPickup>(W.PickupClass);
-			Score = 5.f + (WP.Default.Weight * 0.1f) + (FRand()*2.f) * (1.5f - FClamp(float(WP.Default.PowerValue) * 0.0025f,0.f,1.f));
-			if( Best==None || Score>BestScore )
-			{
-				Best = W;
-				BestScore = Score;
-				//log(PlayerReplicationInfo.PlayerName$" Considering selling weapon: " $ W.GetHumanReadableName() $ " with score: " $ Score);
-			}
-		}
+		PC = class<KFWeaponPickup>(L[i]);
+		if ( PC == None || class<KFWeapon>(PC.default.InventoryType) == None || Pawn.FindInventoryType(PC.default.InventoryType) != None )
+			continue;
+		D = PC.default.MaxDesireability * (1.f + FRand() * 0.5f);
+		if ( WeaponIsForPerk(PC) )
+			D *= 4.f;
+		j = 0;
+		while ( j < Des.Length && Des[j] >= D )
+			j++;
+		Wish.Insert(j, 1);
+		Des.Insert(j, 1);
+		Wish[j] = PC;
+		Des[j] = D;
 	}
-	if( Best==None || WeaponIsForPerk(class<KFWeaponPickup>(Best.PickupClass)) )
+}
+
+// Buys a gun the way a player does (KFPawn.PurchaseWeapon) and fills its ammo. For a perk gun it cannot afford or carry
+// it first sells off-perk guns, but only when the sales cover both its price and its weight (see PlanSales).
+final function bool BuyWeapon( class<KFWeaponPickup> PC )
+{
+	local class<KFWeapon> WC;
+	local array<KFWeapon> Plan;
+	local KFWeapon W;
+	local int Price, i;
+
+	WC = class<KFWeapon>(PC.default.InventoryType);
+	if ( WC == None || KFHumanPawn(Pawn) == None )
+		return false;
+	Price = WeaponPrice(PC);
+	if ( Price > PlayerReplicationInfo.Score || !KFHumanPawn(Pawn).CanCarry(WC.default.Weight) )
 	{
+		if ( !WeaponIsForPerk(PC) || !PlanSales(Price, WC.default.Weight, Plan) )
+			return false;
+		for ( i=0; i<Plan.Length; i++ )
+			SellWeapon(Plan[i]);
+	}
+	if ( !KFHumanPawn(Pawn).PurchaseWeapon(WC, Price) )
+		return false;
+	W = KFWeapon(Pawn.FindInventoryType(WC));
+	if ( W != None )
+	{
+		FillAllAmmo(W.GetAmmoClass(0),1.f);
+		if ( W.GetAmmoClass(1) != None && W.GetAmmoClass(1) != W.GetAmmoClass(0) )
+			FillAllAmmo(W.GetAmmoClass(1),1.f);
+	}
+	log(PlayerReplicationInfo.PlayerName@"of perk"@GetPerkName()@"Bought weapon: "$PC$" for "$Price$" cash left "$int(PlayerReplicationInfo.Score));
+	return true;
+}
+
+// Off-perk guns to sell for a perk gun of this price and weight: the least useful first, as many as it takes and no
+// more. False, with nothing planned, if even all of them would not cover it. Perk guns are never on the list.
+final function bool PlanSales( int Price, float Weight, out array<KFWeapon> Plan )
+{
+	local Inventory Inv;
+	local KFWeapon W;
+	local array<KFWeapon> Cand;
+	local KFHumanPawn P;
+	local float Cash, Load;
+	local int i, j;
+
+	Plan.Length = 0;
+	P = KFHumanPawn(Pawn);
+	if ( P == None )
+		return false;
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W == None || W.bKFNeverThrow || class<KFWeaponPickup>(W.PickupClass) == None
+			|| WeaponIsForPerk(class<KFWeaponPickup>(W.PickupClass)) )
+			continue;
+		j = 0;
+		while ( j < Cand.Length && TradeWorth(Cand[j]) <= TradeWorth(W) )
+			j++;
+		Cand.Insert(j, 1);
+		Cand[j] = W;
+	}
+	Cash = PlayerReplicationInfo.Score;
+	Load = P.CurrentWeight;
+	for ( i=0; i<Cand.Length && (Cash < Price || Load + Weight > P.MaxCarryWeight); i++ )
+	{
+		Plan[Plan.Length] = Cand[i];
+		Cash += GetWeaponWorth(Cand[i]);
+		Load -= Cand[i].Weight;
+	}
+	if ( Cash < Price || Load + Weight > P.MaxCarryWeight )
+	{
+		Plan.Length = 0;
 		return false;
 	}
-	SellWeapon(Best);
+	// a gun taken early may not be needed once a bigger one is on the list
+	for ( i=Plan.Length-1; i>=0; i-- )
+		if ( Cash - GetWeaponWorth(Plan[i]) >= Price && Load + Plan[i].Weight + Weight <= P.MaxCarryWeight )
+		{
+			Cash -= GetWeaponWorth(Plan[i]);
+			Load += Plan[i].Weight;
+			Plan.Remove(i, 1);
+		}
 	return true;
+}
+
+// Whether this gun would fit if every off-perk gun were sold (what saving up for it needs).
+final function bool FitsAfterSales( class<KFWeaponPickup> PC )
+{
+	local Inventory Inv;
+	local KFWeapon W;
+	local KFHumanPawn P;
+	local float Load;
+
+	P = KFHumanPawn(Pawn);
+	if ( P == None || class<KFWeapon>(PC.default.InventoryType) == None )
+		return false;
+	Load = P.CurrentWeight;
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W != None && !W.bKFNeverThrow && class<KFWeaponPickup>(W.PickupClass) != None
+			&& !WeaponIsForPerk(class<KFWeaponPickup>(W.PickupClass)) )
+			Load -= W.Weight;
+	}
+	return ( Load + class<KFWeapon>(PC.default.InventoryType).default.Weight <= P.MaxCarryWeight );
+}
+
+// Fills the ammo of the guns on sale here that the bot carries: its perk guns, or the others.
+final function BuyAmmoFor( bool bPerkGuns )
+{
+	local array<class<Pickup> > L;
+	local class<KFWeaponPickup> PC;
+	local KFWeapon W;
+	local int i;
+
+	L = GetLegalPurchases();
+	for ( i=0; i<L.Length; i++ )
+	{
+		PC = class<KFWeaponPickup>(L[i]);
+		if ( PC == None || WeaponIsForPerk(PC) != bPerkGuns )
+			continue;
+		W = FindWeaponInInv(PC);
+		if ( W == None )
+			continue;
+		FillAllAmmo(W.GetAmmoClass(0),1.f);
+		// secondary ammo (e.g. explosive shells) if the weapon has a distinct secondary ammo type
+		if ( W.GetAmmoClass(1) != None && W.GetAmmoClass(1) != W.GetAmmoClass(0) )
+			FillAllAmmo(W.GetAmmoClass(1),1.f);
+	}
 }
 
 function bool GoShopping()
 {
-    if (ShouldRecoverDroppedWeapon())
-    {
-		GoalString = "RECOVER_DROP";
-        GotoState('RecoverDroppedWeapons');
-        return true;
-    }
 	if( !GetNearestShop() )
 		Return false;
 	GoalString = "SHOPPING";
 	GotoState('Shopping');
-	LastDroppedWeaponClasses.Length = 0; // Clear out the last dropped weapon list after shopping
 	return true;
 }
 
@@ -2416,6 +3285,17 @@ function bool GetNearestShop()
 	}
 	if( Sp==None )
 		return false;
+	if( Sp.MyTrader!=None )
+		ShopVolumeActor = Sp.MyTrader;
+	else ShopVolumeActor = Sp;
+	// Where to walk to: a path node inside the shop, else the one nearest the trader with a clear line to him (the
+	// last steps in are walked straight, see Shopping). Only then the spots players are put out to when it closes.
+	ShoppingPath = FindShopEntry(Sp, ShopVolumeActor);
+	if ( bBenchDebug )
+		log("SHOP"@PlayerReplicationInfo.PlayerName@Sp@"trader="$ShopVolumeActor@"entry="$ShoppingPath@"inside="$(ShoppingPath != None && Sp.Encompasses(ShoppingPath))
+			@"d="$int(VSize(Sp.Location - Pawn.Location))@"shops="$KFGT.ShopList.Length);
+	if( ShoppingPath!=None )
+		return true;
 	if( Sp.TelList.Length>0 )
 		ShoppingPath = Sp.TelList[Rand(Sp.TelList.Length)];
 	else
@@ -2428,11 +3308,66 @@ function bool GetNearestShop()
 		}
 		ShoppingPath = Sp.BotPoint;
 	}
-	if( Sp.MyTrader!=None )
-		ShopVolumeActor = Sp.MyTrader;
-	else ShopVolumeActor = Sp;
-
 	return true;
+}
+
+// A path node inside the shop, the one nearest the trader T; with none inside, the nearest outside that has a clear
+// line to him. Remembered per shop.
+final function NavigationPoint FindShopEntry( ShopVolume S, Actor T )
+{
+	local NavigationPoint N, BestIn, BestOut;
+	local float D, BestInD, BestOutD;
+
+	if ( S == EntryShop )
+		return ShopEntry;
+	for ( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+	{
+		if ( N.bBlocked || (PathNode(N) == None && PlayerStart(N) == None && InventorySpot(N) == None) )
+			continue;
+		D = VSize(N.Location - T.Location);
+		// (inside the shop counts wherever it is: a shop with no trader has only its brush origin to measure from)
+		if ( S.Encompasses(N) )
+		{
+			if ( BestIn == None || D < BestInD )
+			{
+				BestIn = N;
+				BestInD = D;
+			}
+		}
+		else if ( D <= 1500.f && (BestOut == None || D < BestOutD) && FastTrace(N.Location, T.Location) )
+		{
+			BestOut = N;
+			BestOutD = D;
+		}
+	}
+	EntryShop = S;
+	if ( BestIn != None )
+		ShopEntry = BestIn;
+	else ShopEntry = BestOut;
+	return ShopEntry;
+}
+
+// Inside the shop, where a player can buy.
+final function bool InShop()
+{
+	return ( KFPawn(Pawn) != None && KFPawn(Pawn).CanBuyNow() );
+}
+
+// Whether a living player could see this spot (from his eyes, whichever way he faces), or is watching this bot.
+final function bool HumanCanSee( vector Spot )
+{
+	local Controller C;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		if ( PlayerController(C) == None )
+			continue;
+		if ( PlayerController(C).ViewTarget == Pawn && Pawn != None )
+			return true;
+		if ( C.Pawn != None && C.Pawn.Health > 0 && FastTrace(Spot, C.Pawn.Location + C.Pawn.EyeHeight * vect(0,0,1)) )
+			return true;
+	}
+	return false;
 }
 final function NavigationPoint FindShopPoint( ShopVolume S )
 {
@@ -2451,35 +3386,60 @@ final function NavigationPoint FindShopPoint( ShopVolume S )
 	return BN;
 }
 
+// The nearest of this bot's own guns on the floor (dropped at death, or put down for being too heavy) that it still
+// wants and has room for. A gun it threw away for a better one is no longer its own (see DropForSwap).
 function Pickup FindBestDroppedPickupNear()
 {
-    local KFWeaponPickup Pk;
+	local KFWeaponPickup Pk, Best;
+	local float D, BestD;
 
-    foreach DynamicActors(class'KFWeaponPickup', Pk)
-    {
-        if (Pk == None || Pk.bHidden || Pk.bDeleteMe)
-            continue;
-
-		if (Pk.BotDesireability(Pawn) <= 0.0)
-			continue; 
-
-		if(Pk.Owner == Self)
+	foreach DynamicActors(class'KFWeaponPickup', Pk)
+	{
+		if ( Pk.Owner != Self || Pk.bHidden || Pk.bDeleteMe || Pk.BotDesireability(Pawn) <= 0.0 )
+			continue;
+		D = VSize(Pk.Location - Pawn.Location);
+		if ( Best == None || D < BestD )
 		{
-			//SendChatMsg("Found dropped weapon pickup matching last dropped: " $ Pk);
-			return Pk;
+			Best = Pk;
+			BestD = D;
 		}
 	}
-	return none;
+	return Best;
 }
 
+// Time to fetch a gun of ours from the floor: the trader is open (between waves; always in Endless), and there is one
+// we want with time to get to it. Looked for every few seconds; after a try, not again for half a minute.
 function bool ShouldRecoverDroppedWeapon()
 {
-    PickupTarget = FindBestDroppedPickupNear();
-    // Only try once per shopping session, skip if wave ends soon unless it's close and roughly our floor
-    if (bTriedRecoverLastDrop || (KFEndlessGameType(Level.Game) == None && KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20 && (PickupTarget != None && ((VSize(Pawn.Location - PickupTarget.Location) > 800) || (Pawn.Location.Z - PickupTarget.Location.Z) > 500))))
-        return false;
+	if ( Level.TimeSeconds < NextRecoverTime || KFGameType(Level.Game) == None || KFGameType(Level.Game).bWaveInProgress )
+		return false;
+	PickupTarget = FindBestDroppedPickupNear();
+	if ( PickupTarget == None || !RecoverTimeOK(PickupTarget) )
+	{
+		PickupTarget = None;
+		NextRecoverTime = Level.TimeSeconds + 5.f;
+		return false;
+	}
+	return true;
+}
 
-    return (PickupTarget != None);
+// Time before the next wave to go and get something lying here: always in Endless; else the run there (half as far
+// again as the straight line, more on another floor, at a sprint) and 5 seconds to spare fit in the trader time left.
+final function bool RecoverTimeOK( Actor A )
+{
+	local KFGameReplicationInfo GRI;
+	local float Speed, Way;
+
+	GRI = KFGameReplicationInfo(Level.Game.GameReplicationInfo);
+	if ( KFEndlessGameType(Level.Game) != None || GRI == None )
+		return true;
+	Speed = FMax(Pawn.GroundSpeed, 150.f);
+	if ( KFHumanPawn(Pawn) != None && !KFHumanPawn(Pawn).bIsSprinting )
+		Speed *= KFHumanPawn(Pawn).SprintMulti;
+	Way = 1.5 * VSize(A.Location - Pawn.Location);
+	if ( Abs(A.Location.Z - Pawn.Location.Z) > 300.f )
+		Way *= 1.7;
+	return ( GRI.TimeToNextWave > Way / Speed + 5.f );
 }
 
 function bool GoHealing()
@@ -2547,9 +3507,12 @@ function PawnDied(Pawn P)
     LastShopTime = 0;
     LastHealTime = 0;
     LastEnemyEncounter = 0;
-    bTriedRecoverLastDrop = false;
-    LastDroppedWeaponClasses.Length = 0;
+    NextRecoverTime = 0;
+    SwapPickup = None;
+    SwapDrops.Length = 0;
+    SwapGuardTime = 0;
     ShoppingAttempts = 0;
+    AnchorLostTime = 0;
 
 	Super.PawnDied(P);
 }
@@ -2653,7 +3616,7 @@ ignores WaitForMover;
 	{
 		local vector V;
 		local WeaponFire F;
-		local int MedicReward,HealSum;
+		local int HealSum;
 		local KFPlayerReplicationInfo PRI;
 
 		if( InjuredAlly==None || InjuredAlly.Health<=0 )
@@ -2668,22 +3631,14 @@ ignores WaitForMover;
 		NextMedicFireTime = Level.TimeSeconds+F.FireRate;
 		PRI = KFPlayerReplicationInfo(PlayerReplicationInfo);
 		MySyringe.ConsumeAmmo(0, F.AmmoPerFire);
-		MedicReward = MySyringe.HealBoostAmount;
+		HealSum = MySyringe.HealBoostAmount;
 
 		if ( PRI!=None && PRI.ClientVeteranSkill!=none )
-			MedicReward *= PRI.ClientVeteranSkill.Static.GetHealPotency();
-			
-		HealSum = MedicReward;
+			HealSum *= PRI.ClientVeteranSkill.Static.GetHealPotency();
 
-		if ( (InjuredAlly.Health + InjuredAlly.healthToGive + MedicReward) > InjuredAlly.HealthMax )
-			MedicReward = Max(InjuredAlly.HealthMax - (InjuredAlly.Health + InjuredAlly.healthToGive),0);
-
+		// (paid as a player is: it worked out a reward and then gave none)
+		class'SyringeFire'.static.PayForHealing(Pawn, class'SyringeFire'.static.Restores(InjuredAlly, HealSum));
 		InjuredAlly.GiveHealth(HealSum, InjuredAlly.HealthMax);
-
-		if ( PRI != None )
-		{
-			MedicReward = int((FMin(float(MedicReward),InjuredAlly.HealthMax)/InjuredAlly.HealthMax) * 60);
-		}
 		MySyringe.PlayOwnedSound(Sound'KFWeaponSound.SyringeFire',SLOT_Interact,F.TransientSoundVolume,,F.TransientSoundRadius,,false);
 		MySyringe.IncrementFlashCount(0);
 		return true;
@@ -3391,6 +4346,14 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 		DoRetreat();
 		return;
 	}
+	// On our own with the crowd pressing, or specimens closing from more than one side: take the way out it leaves.
+	if ( ShouldEscapeCrowd() && EscapeOpen() )
+	{
+		GoalString = "Escape the crowd";
+		bEscapeFlee = false;
+		GotoState('EscapeCrowd');
+		return;
+	}
 	// Heal when nothing can reach us while we do it (was: only with fewer than two specimens in sight within 800).
 	if (Pawn.Health < GetMinHealingValue() && (Threat == None || ThreatMargin > 150.f) && StartleActor == None && TryToHealSelf() )
 		return;
@@ -3726,6 +4689,82 @@ Begin:
 	WhatToDoNext(154);
 }
 
+// Running from a crowd along the way out the crowd sense finds (PlanEscape), a leg at a time, planning again after each
+// leg and when the leg is about to be cut. Fires at what most threatens the way. Ends when the crowd no longer presses.
+state EscapeCrowd
+{
+	ignores SeePlayer, HearNoise, EnemyNotVisible;
+
+	function BeginState()
+	{
+		SetBotSprinting(true);
+		Pawn.bWantsToCrouch = false;
+		EscapeUntil = Level.TimeSeconds + EscapeMaxTime;
+		NextEscapePlanTime = Level.TimeSeconds + 0.5;
+	}
+	function EndState()
+	{
+		SetBotSprinting(false);
+		EscapeBlocker = None;
+		if ( !bEscapeFlee )
+			NextEscapeTime = Level.TimeSeconds + EscapeCooldown;
+		bEscapeFlee = false;
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		if ( EscapeBlocker != None && EscapeBlocker != Enemy && EscapeBlocker.Health > 0 )
+			Enemy = EscapeBlocker;
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+		if ( Level.TimeSeconds > NextEscapePlanTime && LegCutOff() )
+		{
+			if ( bBenchDebug )
+				log("ESC cut t="$Level.TimeSeconds@PlayerReplicationInfo.PlayerName);
+			NextEscapePlanTime = Level.TimeSeconds + 0.5;
+			GotoState('EscapeCrowd', 'Moving');
+		}
+	}
+Begin:
+	WaitForLanding();
+	EscapeLegs = 0;
+Moving:
+	if ( EscapeLegs > 0 && (Level.TimeSeconds > EscapeUntil || !EscapeStillNeeded()) )
+		WhatToDoNext(170);
+	// no way out with time to spare (any more): stand and fight, or run the old way when fleeing
+	if ( !PlanEscape() || EscapeGoalMargin < EscapeMinMargin )
+	{
+		if ( EscapeLegs == 0 && bEscapeFlee )
+		{
+			NextEscapeTime = Level.TimeSeconds + 0.5;
+			GotoState('Retreating');
+		}
+		else
+			WhatToDoNext(171);
+	}
+	EscapeLegs++;
+	// hurt, and nothing can reach us for a while: heal now; with a second or so to spare, reload
+	// (the state change is a statement of its own: one inside a condition leaves the rest of the condition to be read
+	// from the new state's code, and the script engine stops the actor with "Unknown code token")
+	if ( Pawn.Health < GetMinHealingValue() && NodeMargin(Pawn.Location, 0.f) > 2.f && MySyringe != None && MySyringe.ChargeBar() >= 0.99f )
+		GotoState('GoHealSelf');
+	if ( NodeMargin(Pawn.Location, 0.f) > 1.5f )
+		ReloadIfLow();
+	LastFallbackMoveTime = Level.TimeSeconds;
+	if ( bBenchDebug )
+		log("ESC t="$Level.TimeSeconds@PlayerReplicationInfo.PlayerName@"leg="$EscapeLegs@"to="$MoveTarget@"d="$int(VSize(MoveTarget.Location - Pawn.Location))
+			@"goal="$EscapeGoal@"m="$PlannedLegMargin@"nodes="$EscNode.Length@"crowd="$CrowdList.Length@"flee="$bEscapeFlee@"spd="$int(VSize(Pawn.Velocity)));
+	MoveToward(MoveTarget, EscapeFocus(),, true);
+	if ( bBenchDebug )
+		log("ESC done t="$Level.TimeSeconds@PlayerReplicationInfo.PlayerName@"left="$int(VSize(MoveTarget.Location - Pawn.Location))@"took="$(Level.TimeSeconds - LastFallbackMoveTime));
+	if ( Level.TimeSeconds - LastFallbackMoveTime < 0.1 )
+		Sleep(0.1);
+	Goto('Moving');
+}
+
 // One leg of a fighting retreat along the path network (see PickPathAwayFromThreats).
 state FallBackOnPath
 {
@@ -3754,6 +4793,44 @@ Begin:
 	if ( MoveTarget != None )
 		MoveToward(MoveTarget, Enemy,, true);
 	WhatToDoNext(155);
+}
+
+// The stock state with one change: its own DoWaitForLanding (asked for when the last line's decision finds the bot
+// falling again, as after a teleport onto a node in mid-air) only reset the state, and with its code run out the bot
+// stood there for good. Now it waits again.
+state WaitingForLanding
+{
+	function bool DoWaitForLanding()
+	{
+		if ( bJustLanded )
+			return false;
+		BeginState();
+		GotoState('WaitingForLanding', 'Wait');
+		return true;
+	}
+
+Begin:
+	if ( Pawn.PhysicsVolume.bWaterVolume )
+		WhatToDoNext(150);
+	if ( Pawn.PhysicsVolume.Gravity.Z > 0.9 * Pawn.PhysicsVolume.Default.Gravity.Z )
+	{
+		if ( (MoveTarget == None) || (MoveTarget.Location.Z > Pawn.Location.Z) )
+		{
+			NotifyMissedJump();
+			if ( MoveTarget != None )
+				MoveToward(MoveTarget,Focus,,true);
+		}
+		else if (Physics != PHYS_Falling)
+			WhatToDoNext(151);
+		else
+		{
+			Sleep(0.5);
+			Goto('Begin');
+		}
+	}
+Wait:
+	WaitForLanding();
+	WhatToDoNext(50);
 }
 
 // Standing in Bloat bile, or just hit by it: leave. The damage keeps coming for as long as a pawn stays in or
@@ -4110,6 +5187,14 @@ final function bool IsPingPonging()
  
 function DoRetreat()
 {
+	// On our own: run along the way out the crowd sense finds (state EscapeCrowd), not a node at a time.
+	// Not again straight after it found none (NextEscapeTime).
+	if ( bCrowdEscape && Enemy != None && Pawn.Physics == PHYS_Walking && Level.TimeSeconds >= NextEscapeTime && AloneInFight() )
+	{
+		bEscapeFlee = true;
+		GotoState('EscapeCrowd');
+		return;
+	}
 	GotoState('Retreating');
 }
 
@@ -4121,7 +5206,9 @@ ignores SeePlayer, HearNoise;
 	{
 		SetBotSprinting(true);
 		Pawn.bWantsToCrouch = false;
-		SetTimer(0.1,true);
+		// (a running fire timer re-armed on every entry never fires when the bot comes back here each tick)
+		if ( TimerRate <= 0.f || TimerRate > 0.1f )
+			SetTimer(0.1,true);
 	}
 
 	function Timer()
@@ -4178,6 +5265,12 @@ Moving:
 		if( MoveTarget==None )
 		{
 			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location,Enemy);
+			// nowhere to back off to (the move ended at once): stand and shoot, not decide to retreat again every tick
+			if( Enemy!=None && Level.TimeSeconds - LastFallbackMoveTime < 0.15 )
+			{
+				GoalString = "Cornered: stand and shoot";
+				DoRangedAttackOn(Enemy);
+			}
 			break;
 		}
 		else
@@ -4702,6 +5795,8 @@ final function FindBetterTarget()
 			Best = Cost;
 		}
 	}
+	if( BP!=None )
+		BP = KFMonster(SpecimenInLine(BP));
 	if( BP!=None && BP!=Enemy )
 	{
 		Enemy = BP;
@@ -4932,6 +6027,46 @@ ignores SeePlayer, HearNoise;
 	{
 		TimedFireWeaponAtEnemy();
 		GotoState('TacticalMove','Begin');
+	}
+	// A wall in the way: slide along it (stock decided again here, and the decision mostly picked the same move into the
+	// same wall, many times a second). No room along it, or a second wall: fall back along the paths, or stand and shoot.
+	function bool NotifyHitWall(vector HitNormal, actor Wall)
+	{
+		local vector Dir, Along, Start, Extent, HitLocation, WallNormal;
+
+		if ( Pawn.Physics == PHYS_Falling || Enemy == None || Vehicle(Wall) != None )
+			return Super.NotifyHitWall(HitNormal, Wall);
+		HitNormal.Z = 0;
+		HitNormal = Normal(HitNormal);
+		Dir = Destination - Pawn.Location;
+		Dir.Z = 0;
+		Along = Dir - (Dir dot HitNormal) * HitNormal;
+		if ( !bChangeDir && VSize(Along) > 60.f )
+		{
+			bChangeDir = true;
+			Extent = Pawn.GetCollisionExtent();
+			Extent.Z = FMax(6, Pawn.CollisionHeight - MAXSTEPHEIGHT);
+			Start = Pawn.Location + 2 * HitNormal;	// off the wall, so the trace does not begin against it
+			if ( Trace(HitLocation, WallNormal, Start + Along, Start, false, Extent) != None )
+				Along = HitLocation - Start;
+			if ( VSize(Along) > 60.f )
+			{
+				Destination = Start + Along;
+				return true;
+			}
+		}
+		Focus = Enemy;
+		if ( PickPathAwayFromThreats() )
+		{
+			GoalString = "Against a wall: fall back along the path";
+			GotoState('FallBackOnPath');
+		}
+		else
+		{
+			GoalString = "Against a wall: stand and shoot";
+			DoRangedAttackOn(Enemy);
+		}
+		return true;
 	}
 	function EnemyNotVisible()
 	{
@@ -5193,14 +6328,43 @@ state Shopping extends MoveToGoalNoEnemy
 {
 	ignores EnemyNotVisible;
 
-	function EndState()
+	// A step of the way in from where the path ends: straight towards the trader, or a little to either side, as far
+	// as the bot can walk. False once it is at the trader or can get no closer.
+	final function bool NextShopStep()
 	{
-		Super.EndState();
-		bTriedRecoverLastDrop = false;
+		local vector Dir, Try;
+		local rotator R;
+		local int i;
+
+		if ( ShopVolumeActor == None )
+			return false;
+		Dir = ShopVolumeActor.Location - Pawn.Location;
+		Dir.Z = 0;
+		if ( VSize(Dir) < Pawn.CollisionRadius + ShopVolumeActor.CollisionRadius + 40.f )
+			return false;
+		for ( i=0; i<3; i++ )
+		{
+			R = rotator(Dir);
+			if ( i == 1 )
+				R.Yaw += 5000;
+			else if ( i == 2 )
+				R.Yaw -= 5000;
+			Try = Pawn.Location + vector(R) * FMin(160.f, VSize(Dir));
+			if ( pointReachable(Try) )
+			{
+				Destination = Try;
+				return true;
+			}
+		}
+		return false;
 	}
 Begin:
 	WaitForLanding();
-	AssignPersonality(); // Gain new personality on new wave.
+	if ( KFGameType(Level.Game) != None && KFGameType(Level.Game).WaveNum != PersonalityWave )
+	{
+		PersonalityWave = KFGameType(Level.Game).WaveNum;
+		AssignPersonality(); // Gain new personality on new wave.
+	}
 	SwitchToBestWeapon();
 	BestShopDist = 9999.f; //Need to set this up first
 KeepMoving:
@@ -5227,8 +6391,11 @@ KeepMoving:
         {
             ShoppingAttempts = 0;
             LastShopTime = Level.TimeSeconds + 1.0;
-            if ( RouteCache[1] != None )
+            // Some places hold bots with no way out on the paths (KF-Offices' third floor by the breakable glass):
+            // jump a step along the route, but never where a player could see it; else try again a little later.
+            if ( RouteCache[1] != None && !HumanCanSee(Pawn.Location) && !HumanCanSee(RouteCache[1].Location) )
                 Pawn.SetLocation(RouteCache[1].Location);
+            else LastShopTime = Level.TimeSeconds + 4.0;
             WhatToDoNext(151);
         }
         MoveToward(MoveTarget,FaceActor(1),,false );
@@ -5239,11 +6406,17 @@ KeepMoving:
         LastShopTime = level.TimeSeconds+8+FRand()*10;
         WhatToDoNext(151);
     }
+	// Where no path node is inside the shop: walk the last steps in.
+	ShopSteps = 0;
+	while ( ShopSteps++ < 12 && !InShop() && NextShopStep() )
+		MoveTo(Destination, ShopVolumeActor);
+	if ( bBenchDebug )
+		log("SHOP at"@PlayerReplicationInfo.PlayerName@"in="$InShop()@"steps="$ShopSteps@"to trader="$int(VSize(ShopVolumeActor.Location - Pawn.Location))
+			@"to entry="$int(VSize(ShoppingPath.Location - Pawn.Location))@"loc="$Pawn.Location);
 	Focus = ShopVolumeActor;
 	Pawn.Acceleration = vect(0,0,0);
 	DoTrading();
 	Sleep(0.5);
-	MoveToward(ShoppingPath,ShoppingPath,,ShouldStrafeTo(MoveTarget));
 	WhatToDoNext(152);
 	if ( bSoaking )
 		SoakStop("STUCK IN SHOPPING!");
@@ -5253,40 +6426,153 @@ state RecoverDroppedWeapons extends MoveToGoalNoEnemy
 {
 	ignores EnemyNotVisible;
 
-    function EndState()
-    {
+	function EndState()
+	{
 		Super.EndState();
-        bTriedRecoverLastDrop = true;
-        PickupTarget = None;
-    }
+		PickupTarget = None;
+		NextRecoverTime = Level.TimeSeconds + 30.f;
+	}
+	// Still there, still wanted, still time for it; and we have come closer within the last few legs.
+	final function bool KeepGoing()
+	{
+		local float D;
+
+		if ( PickupTarget == None || PickupTarget.bHidden || PickupTarget.bDeleteMe || PickupTarget.BotDesireability(Pawn) <= 0
+			|| !RecoverTimeOK(PickupTarget) )
+			return false;
+		D = VSize(PickupTarget.Location - Pawn.Location);
+		if ( D < RecoverBestDist - 48.f )
+		{
+			RecoverBestDist = D;
+			RecoverStalls = 0;
+		}
+		else if ( ++RecoverStalls > 8 )
+			return false;
+		return true;
+	}
 
 Begin:
-    WaitForLanding();
+	WaitForLanding();
 	SwitchToBestWeapon();
-
+	RecoverBestDist = 1000000.f;
+	RecoverStalls = 0;
 KeepMoving:
-    if (PickupTarget == None || PickupTarget.bHidden || (KFEndlessGameType(Level.Game) == None && KFGameReplicationInfo(Level.Game.GameReplicationInfo).TimeToNextWave < 20))
-	{	
-		bTriedRecoverLastDrop = true;
-        WhatToDoNext(37);
-	}
-    if (ActorReachable(PickupTarget))
-        MoveToward(PickupTarget, MoveTarget,, true);
-    else if (FindBestPathToward(PickupTarget, true, false))
-    {
-        MoveToward(MoveTarget, MoveTarget,, false);
-		Goto('KeepMoving');
-    }
-	else 
+	// (the next try is held off before deciding again: the decision could otherwise pick this same gun at once,
+	// and a state chosen again starts over without BeginState)
+	if ( !KeepGoing() )
 	{
-		bTriedRecoverLastDrop = true;
+		NextRecoverTime = Level.TimeSeconds + 30.f;
+		WhatToDoNext(37);
+	}
+	else if ( ActorReachable(PickupTarget) )
+	{
+		MoveToward(PickupTarget, PickupTarget);
+		Goto('KeepMoving');
+	}
+	else if ( FindBestPathToward(PickupTarget, true, false) )
+	{
+		MoveToward(MoveTarget, FaceActor(1));
+		Goto('KeepMoving');
+	}
+	else
+	{
+		NextRecoverTime = Level.TimeSeconds + 30.f;
 		WhatToDoNext(38);
 	}
-    Sleep(0.5);
-	bTriedRecoverLastDrop = true;
-    WhatToDoNext(39);
 	if(bSoaking)
 		SoakStop("RECOVER DROPPED WEAPON FAILED");
+}
+
+// Walking over to a better gun on the floor to swap one we carry for it (see FindPickupSwap). At a spot just short of
+// it the worse gun is thrown back the way we came (DropForSwap), then we step onto the new one. Fires on the way.
+state SwapForPickup extends MoveToGoalWithEnemy
+{
+	ignores EnemyNotVisible;
+
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+	}
+	function EndState()
+	{
+		SwapPickup = None;
+		SwapDrops.Length = 0;
+	}
+	// The pickup is still there and the gun to leave still ours; and we have come closer within the last few legs.
+	final function bool KeepGoing()
+	{
+		local float D;
+
+		if ( SwapPickup == None || SwapPickup.bDeleteMe || SwapPickup.bHidden || !SwapDropsHeld() )
+			return false;
+		D = VSize(SwapPickup.Location - Pawn.Location);
+		if ( D < SwapBestDist - 32.f )
+		{
+			SwapBestDist = D;
+			SwapStalls = 0;
+		}
+		else if ( ++SwapStalls > 6 )
+			return false;
+		return true;
+	}
+	// Where to stand while the old gun goes: SwapDropDist this side of the pickup. Not on it: a pickup the bot is
+	// already touching is not picked up when room is made for it, only one it walks into.
+	final function bool DropSpot()
+	{
+		local vector Dir;
+		local float D;
+
+		Dir = Pawn.Location - SwapPickup.Location;
+		Dir.Z = 0;
+		D = VSize(Dir);
+		if ( D < 1.f )
+		{
+			Dir = -vector(Pawn.Rotation);
+			Dir.Z = 0;
+		}
+		if ( D > 0.7 * SwapDropDist && D <= SwapDropDist )
+		{
+			Destination = Pawn.Location;
+			return true;
+		}
+		Destination = SwapPickup.Location + Normal(Dir) * SwapDropDist;
+		Destination.Z = Pawn.Location.Z;
+		return pointReachable(Destination);
+	}
+Begin:
+	WaitForLanding();
+	SwapBestDist = 1000000.f;
+	SwapStalls = 0;
+Moving:
+	if ( !KeepGoing() )
+	{
+		NextSwapCheckTime = Level.TimeSeconds + 6.f;
+		WhatToDoNext(60);
+	}
+	else if ( ActorReachable(SwapPickup) && DropSpot() )
+	{
+		if ( VSize(Destination - Pawn.Location) > 16.f )
+			MoveTo(Destination, SwapPickup);
+		if ( SwapPickup != None && !SwapPickup.bDeleteMe && DropForSwap() )
+			MoveToward(SwapPickup, SwapPickup);
+		NextSwapCheckTime = Level.TimeSeconds + 6.f;
+		WhatToDoNext(61);
+	}
+	else if ( FindBestPathToward(SwapPickup, true, false) )
+	{
+		MoveToward(MoveTarget, FaceActor(1),, ShouldStrafeTo(MoveTarget));
+		Goto('Moving');
+	}
+	else
+	{
+		NextSwapCheckTime = Level.TimeSeconds + 6.f;
+		WhatToDoNext(62);
+	}
 }
 
 state Roaming
@@ -5406,12 +6692,12 @@ Begin:
 			}
 			else if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
 			{
-				if (Pawn.SetLocation(FindNavNear(Squad.SquadLeader.Pawn).Location))
+				if ( TeleportUnseen(FindNavNear(Squad.SquadLeader.Pawn)) )
 				{
 					log(self$" Roaming failed, teleporting near squad leader");
 				}
 				else if (RouteCache[1] != None)
-					Pawn.SetLocation(RouteCache[1].Location);
+					TeleportUnseen(NavigationPoint(RouteCache[1]));
 			}
             WhatToDoNext(157);
         }
@@ -5427,7 +6713,7 @@ Begin:
 			RoamingAttempts = 0;
 			if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None )
 			{
-				if (Pawn.SetLocation(FindNavNear(Squad.SquadLeader.Pawn).Location))
+				if ( TeleportUnseen(FindNavNear(Squad.SquadLeader.Pawn)) )
 					log(self$" Roaming failed (no path), teleporting near squad leader");
 			}
 			WhatToDoNext(157);
@@ -5514,4 +6800,32 @@ defaultproperties
 	bAdrenalineEnabled=False
 	PawnClass=Class'KFMod.KFHumanPawn'
 	SmoothTurnSpeed=1.000000
+	SwapSearchDist=400.000000
+	SwapDropDist=110.000000
+	SwapMinGain=0.050000
+	bPerkSwitching=True
+	PerkStay=0.400000
+	PerkMedicNeed=0.500000
+	PerkCrowd=0.150000
+	PerkSwitchGap=90.000000
+	bCrowdEscape=True
+	CrowdSenseDist=1500.000000
+	CrowdRadius=700.000000
+	CrowdAllyDist=900.000000
+	CrowdEnterPressure=4.000000
+	PincerRadius=600.000000
+	PincerNear=450.000000
+	EscapeSearchDist=2500.000000
+	EscapeDangerCost=300.000000
+	EscapeDeadEnd=0.600000
+	EscapeAllyPull=0.600000
+	EscapeFrontBonus=0.400000
+	EscapeMaxTime=4.000000
+	EscapeCooldown=1.000000
+	EscapeSpawnPenalty=0.800000
+	EscapeSpawnDist=800.000000
+	EscapeSpawnRecent=15.000000
+	EscapeMinMargin=1.000000
+	EscapeMaxNodes=64
+	AnchorLostLimit=10.000000
 }

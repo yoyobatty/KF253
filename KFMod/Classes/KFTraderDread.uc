@@ -38,6 +38,15 @@ simulated function PostBeginPlay()
 	for( N=Level.NavigationPointList; N!=None; N=N.NextNavigationPoint )
 		Spots[Spots.Length] = N;
 	SetTimer(0.25, true);
+	// (the settings are written to the user ini, so they can be changed there: a network client may not use set)
+	StaticSaveConfig();
+}
+
+// (and kept when the level ends, with anything set in the console meanwhile)
+simulated function Destroyed()
+{
+	StaticSaveConfig();
+	Super.Destroyed();
 }
 
 simulated function PlayerController Listener()

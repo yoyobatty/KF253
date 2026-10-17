@@ -3,6 +3,18 @@ class CrawlerController extends KFMonsterController;
 var float LastPounceTime;
 var	bool	bDoneSpottedCheck;
 
+// Pounce lead: the leap is aimed where the victim is going
+var() float PounceLeadShare;	// share of the full lead (0 leaps straight at the victim, as before)
+var() float PounceLeadMaxTime;	// seconds ahead it looks at most
+
+// Where a leap at A should go: ahead of a moving victim, by as far as it moves while the leap gets there
+function vector PounceSpot( Actor A )
+{
+	if( Pawn(A)==None || ZombieCrawler(Pawn)==None )
+		Return A.Location;
+	Return InterceptSpot(Pawn(A), ZombieCrawler(Pawn).PounceSpeed, PounceLeadMaxTime, PounceLeadShare);
+}
+
 state ZombieHunt
 {
 	event SeePlayer(Pawn SeenPlayer)
@@ -99,4 +111,6 @@ function bool NotifyLanded(vector HitNormal)
 
 defaultproperties
 {
+     PounceLeadShare=0.500000
+     PounceLeadMaxTime=1.000000
 }

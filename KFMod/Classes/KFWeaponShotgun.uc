@@ -28,13 +28,30 @@ function float GetAIRating()
 		return AIRating * 0.5;
 	return AIRating;
 }
-// AI should avoid reloading if they have no ammo left or have recently been seen by an enemy
+// AI should avoid reloading if they have no ammo left or have recently been seen by an enemy, and carry another
+// loaded gun to use instead (with none, loading shells beats drawing a blade, and a gun put away empty never reloads)
 function bool DiscourageReload()
 {
 	local float   ReloadMulti;
 	if ( KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo) != none && KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill != none )
 		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
-	return ReloadMulti <= 1.0 && ClipLeft < 1 && AIController(Instigator.Controller).Enemy != None && (Level.TimeSeconds - AIController(Instigator.Controller).LastSeenTime < 0.5 || AmmoAmount(0) < 1);
+	return ReloadMulti <= 1.0 && ClipLeft < 1 && AIController(Instigator.Controller) != None && AIController(Instigator.Controller).Enemy != None
+		&& (Level.TimeSeconds - AIController(Instigator.Controller).LastSeenTime < 0.5 || AmmoAmount(0) < 1) && OtherGunLoaded();
+}
+
+// Another gun carried with a round in it (not a blade, tool, grenade or rocket).
+function bool OtherGunLoaded()
+{
+	local Inventory Inv;
+	local KFWeapon W;
+
+	for ( Inv=Instigator.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W != None && W != self && !W.bMeleeWeapon && Frag(W) == None && LAW(W) == None && W.ClipLeft > 0 && W.HasAmmo() )
+			return true;
+	}
+	return false;
 }
 
 function float SuggestAttackStyle()

@@ -4,6 +4,8 @@ var automated GUIButton b_Buy,b_Cancel,b_Complete,b_AutoAll,b_Fill;
 var automated GUIButton spacer1,spacer2;
 var automated GUILabel l_score,l_weight;
 var automated GUIImage i_cash;	// the HUD's pound sign: the menu's font has none
+var() string MinCaption;		// a button with a shorter caption is sized as if it had this one
+var() string BuyMinCaption;		// the same for Buy (Sell, Clip), the button used most
 
 // Laid out again each frame from the buttons shown: they fit their captions, which change (the refill's price),
 // and the fill button comes and goes. (They were laid out once, in fixed slots, the hidden ones keeping theirs empty.)
@@ -120,7 +122,7 @@ function bool ButtonsSized(Canvas C)
 				else
 					b.SizingCaption = str;
 			}
-			else b.SizingCaption = "";
+			else b.SizingCaption = SizeAs(C, b);
 
 			bResult = bResult && b.bPositioned;
 			if ( bFullHeight )
@@ -179,6 +181,24 @@ function float GetButtonLeft()
 		return (AL + AW - FooterMargin / 2) - TotalWidth;
 
 	return AL + (FooterMargin / 2);
+}
+
+// (short captions are sized as a longer one, so that Buy, Sell or Fill Up are not slivers beside the refill)
+function string SizeAs( Canvas C, GUIButton B )
+{
+	local string Least;
+	local float XL, LL, YL;
+
+	Least = MinCaption;
+	if( B==b_Buy )
+		Least = BuyMinCaption;
+	if( C==None || B.Style==None || Least=="" )
+		return "";
+	B.Style.TextSize(C, B.MenuState, B.Caption, XL, YL, B.FontScale);
+	B.Style.TextSize(C, B.MenuState, Least, LL, YL, B.FontScale);
+	if( LL>XL )
+		return Least;
+	return "";
 }
 
 // Finds the longest caption of all the buttons
@@ -367,6 +387,8 @@ defaultproperties
      End Object
      l_weight=GUILabel'KFGui.GUIBuyMenuFooter.WeightLabel'
 
+     MinCaption="Complete"
+     BuyMinCaption="Refill ammo"
      bFixedWidth=False
      Padding=0.070000
      Spacer=0.008000

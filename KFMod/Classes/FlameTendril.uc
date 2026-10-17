@@ -6,12 +6,14 @@ class FlameTendril extends ShotgunBullet;
 var bool bRing,bHitWater,bWaterStart;
 var Effects Corona;
 var Emitter FlameTrail;
-var byte KillCalculator;
+var float FlightStart;		// when it left the nozzle
+var() float FlightTime;		// how long it flies before it burns out; the perk's ExtraRange adds a share of it
 
 simulated function PostBeginPlay()
 {
 	SetTimer(0.2, true);
-    
+	FlightStart = Level.TimeSeconds;
+
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 
 	if ( Level.NetMode != NM_DedicatedServer )
@@ -59,7 +61,23 @@ simulated function PostNetBeginPlay()
 
 simulated function Landed( vector HitNormal )
 {
+	Scorch(HitNormal);
 	Explode(Location,HitNormal);
+}
+
+// How long a tendril fired by P flies
+static function float FlightFor(Pawn P)
+{
+	if ( KFPawn(P) != None )
+		return default.FlightTime * (1.0 + KFPawn(P).GetVeteran().Static.ExtraRange());
+	return default.FlightTime;
+}
+
+// A scorch mark on the floor or wall it hit, aimed into it (it was aimed along the shot: smeared on a floor)
+simulated function Scorch(vector HitNormal)
+{
+	if ( ExplosionDecal != None && EffectIsRelevant(Location,false) )
+		Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
 }
 
 simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
@@ -69,7 +87,8 @@ simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
 
     foreach RadiusActors(class'FuelFlameHurting', F, Radius, Location)
     {
-        if (F.Instigator == Instigator)
+        // (one dying down does no harm any more: counted, it kept the spot under a held stream dark for 3 s)
+        if (F.Instigator == Instigator && !F.bDyingDown)
         {
             Count++;
             if (Count >= MaxPerArea)
@@ -81,20 +100,13 @@ simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
 
 simulated function Explode(vector HitLocation,vector HitNormal)
 {
-    local FuelFlameHurting F;
     local bool bRelevant;
 
     if ( Role == ROLE_Authority )
         HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
     bRelevant = EffectIsRelevant(Location,false);
-    if ( bRelevant )
-        Spawn(ExplosionDecal,self,, Location);
     if ( (bRelevant || Level.NetMode != NM_Client) && CanSpawnFuelFlameNear(3, 36.0) )
-    {
-        F = Spawn(class'FuelFlameHurting',Instigator,,Location + vect(0,0,1));
-        if ( F != None )
-            F.BurnTime = 3.0;
-    }
+        Spawn(class'FlameGroundFire',Instigator,,Location + vect(0,0,1));
     SetCollisionSize(0.0, 0.0);
     Destroy();
 }
@@ -143,8 +155,6 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 
 simulated singular function HitWall(vector HitNormal, actor Wall)
 {
-	local PlayerController PC;
-
 	if ( Role == ROLE_Authority )
 	{
 		if ( !Wall.bStatic && !Wall.bWorldGeometry )
@@ -156,23 +166,15 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 		}
 		MakeNoise(1.0);
 	}
+	Scorch(HitNormal);
 	Explode(Location + ExploWallOut * HitNormal, HitNormal);
-	if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer)  )
-	{
-		if ( ExplosionDecal.Default.CullDistance != 0 )
-		{
-			PC = Level.GetLocalPlayerController();
-			if ( !PC.BeyondViewDistance(Location, ExplosionDecal.Default.CullDistance) )
-				Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
-			else if ( (Instigator != None) && (PC == Instigator.Controller) && !PC.BeyondViewDistance(Location, 2*ExplosionDecal.Default.CullDistance) )
-				Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
-		}
-	}
 	HurtWall = None;
 }
 
 simulated function Timer()
 {
+	local float Left;
+
 	Velocity =  Default.Speed * Normal(Velocity);
 
 	if (Trail != none)
@@ -182,12 +184,17 @@ simulated function Timer()
 	}
 	if (FlameTrail != none)
 		FlameTrail.SetDrawScale(FlameTrail.DrawScale * 1.5);
-	if( (KillCalculator++)>=2+KFPawn(Instigator).GetVeteran().Static.ExtraRange() )
+	// Burnt out after its flight time (the last step shortened to land on it: whole 0.2 s steps made the Firebug's +50% a +33%)
+	Left = FlightFor(Instigator) - (Level.TimeSeconds - FlightStart);
+	if ( Left < 0.01 )
 		Explode(Location,VRand());
+	else if ( Left < 0.2 )
+		SetTimer(Left, false);
 }
 
 defaultproperties
 {
+     FlightTime=0.600000
      MaxPenetrations=3
      PenDamageReduction=0.750000
      HeadShotDamageMult=1.000000

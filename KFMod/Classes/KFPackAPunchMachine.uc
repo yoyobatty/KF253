@@ -60,5 +60,5 @@ defaultproperties
 	NotEnoughPointsMessage="Not enough dosh!"
 	CantUpgradeMessage="This weapon can't be upgraded."
 	UpgradedMessage="Weapon upgraded! It hits twice as hard."
-	PurchaseSound=Sound'CODSounds.1s_powerup01'
+	PurchaseSound=Sound'GameSounds.ComboActivated'
 }

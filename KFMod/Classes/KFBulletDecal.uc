@@ -34,8 +34,10 @@ function PostBeginPlay()
 
     if ( Level.bDropDetail )
 		LifeSpan *= 0.5;
-    //AbandonProjector(LifeSpan*Level.DecalStayScale);
-    //Destroy();
+	// (attached once and left to the engine for its life, as stock scorch marks are: it used to detach and attach again
+	// every frame through the moving-projector path, about 5 us a frame each, 70 to 90 at a time in a big wave)
+	AbandonProjector(LifeSpan);
+	Destroy();
 }
 
 
@@ -56,12 +58,6 @@ simulated event PreBeginPlay()
 		ProjTexture = Marks[Rand(Marks.Length)];
 }
 
-function Tick(float DeltaTime)
-{
-	DetachProjector();
-	AttachProjector();
-}
-
 defaultproperties
 {
     bGradient=false
@@ -74,7 +70,7 @@ defaultproperties
 	bProjectStaticMesh=true
     bNoDelete=false
 	//bHidden=false
-	bDynamicAttach=True
+	bClipBSP=True
 	bDetailAttachment=true
 	bHardAttach=True
 	bLightChanged=True

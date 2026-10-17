@@ -43,7 +43,7 @@ defaultproperties
 {
 	BlinkTime=6.000000
 	BlinkInterval=0.250000
-	PickupSound=Sound'CODSounds.1s_powerup01'
+	PickupSound=Sound'PickupSounds.UDamagePickup'
 	DrawType=DT_StaticMesh
 	RemoteRole=ROLE_SimulatedProxy
 	bAlwaysRelevant=True

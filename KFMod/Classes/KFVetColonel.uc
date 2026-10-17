@@ -74,9 +74,9 @@ static function float GetBodyArmorDamageModifier()
 }
 
 // Change effective range on FLamethrower
-static function int ExtraRange()
+static function float ExtraRange()
 {
-	Return 2; // he he
+	Return 0.67; // he he (the 1.0 s flight it had)
 }
 
 static function float GetReloadSpeedModifier( KFWeapon Other )

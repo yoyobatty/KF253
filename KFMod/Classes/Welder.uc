@@ -135,7 +135,9 @@ simulated function Tick(float dt)
 		if( ScriptedScreen.Revision>10 )
 			ScriptedScreen.Revision = 1;
 	}
-	else if (WeldFire(FireMode[FireModeArray]).LastHitActor == none || WeldFire(FireMode[FireModeArray]).LastHitActor != none && VSize(WeldFire(FireMode[FireModeArray]).LastHitActor.Location - Owner.Location) > (MeleeWeaponRange * 1.5) && !bNoTarget  )
+	// Out of reach: the screen blanked and the welder back to idle, once (this ran every frame while nothing had been
+	// hit yet, and its PlayIdle cut the raise and lower animations short)
+	else if ( !bNoTarget || ScriptedScreen==None )
 	{
 		if( ScriptedScreen==None )
 			InitMaterials();
@@ -143,7 +145,7 @@ simulated function Tick(float dt)
 		if( ScriptedScreen.Revision>10 )
 			ScriptedScreen.Revision = 1;
 		bNoTarget = true;
-		if( ClientState != WS_Hidden && Level.NetMode != NM_DedicatedServer && Instigator != none && Instigator.IsLocallyControlled() )
+		if( ClientState == WS_ReadyToFire && Level.NetMode != NM_DedicatedServer && Instigator != none && Instigator.IsLocallyControlled() )
 		{
 		  PlayIdle();
 		}

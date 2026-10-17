@@ -159,6 +159,9 @@ var float DesaturationFactor, DarknessFactor;
 var		float					LastDoorBarHealthUpdate;
 var 	array<KFDoorMover>		DoorCache;
 
+var string CriticalPrompt;      // (Zombies) a use prompt kept up as a critical message, while it lasts
+var float CriticalPromptFade;   // that message fades out over this long once the prompt goes
+
 simulated function PostBeginPlay()
 {
 	if( MyColorMod==None )
@@ -762,6 +765,36 @@ simulated function DrawZombiesPerk(Canvas C, bool bHasPerk, string Label, byte R
 	X += Size + 4;
 }
 
+// A use prompt shown as KF's critical messages are, kept at full strength while it lasts and faded out over
+// CriticalPromptFade once it goes. A critical message of the game's own keeps the place until it has faded.
+simulated function ShowCriticalPrompt( string S )
+{
+	local int i;
+	local bool bOldBeep;
+
+	For( i=0; i<ArrayCount(LocalMessages); i++ )
+	{
+		if( LocalMessages[i].Message!=class'KFCriticalEventPlus' )
+			Continue;
+		if( LocalMessages[i].StringMessage==S )
+		{
+			LocalMessages[i].LifeTime = CriticalPromptFade;
+			LocalMessages[i].EndOfLife = Level.TimeSeconds + CriticalPromptFade;
+			Return;
+		}
+		if( LocalMessages[i].StringMessage!=CriticalPrompt )
+			Return;
+		Break;
+	}
+
+	// (no beep: it is put up again after every message of the game's own)
+	CriticalPrompt = S;
+	bOldBeep = bMessageBeep;
+	bMessageBeep = false;
+	LocalizedMessage(class'KFCriticalEventPlus', 0, None, None, None, S);
+	bMessageBeep = bOldBeep;
+}
+
 simulated function DrawZombiesHUD(Canvas C)
 {
 	local KFGameReplicationInfo ZGRI;
@@ -817,8 +850,13 @@ simulated function DrawZombiesHUD(Canvas C)
 
 	if( ZP.UsePrompt!="" && !ZP.bIsDowned )
 	{
-		C.SetDrawColor(255,255,255,255);
-		DrawZombiesText(C, ZP.UsePrompt, CentreX, C.ClipY*0.62);
+		if( ZP.bUsePromptCritical )
+			ShowCriticalPrompt(ZP.UsePrompt);
+		else
+		{
+			C.SetDrawColor(255,255,255,255);
+			DrawZombiesText(C, ZP.UsePrompt, CentreX, C.ClipY*0.62);
+		}
 	}
 
 	if( ZP.bIsDowned )
@@ -836,13 +874,6 @@ simulated function DrawZombiesHUD(Canvas C)
 			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.40+YL+4, BarW, BarH, float(ZP.ReviveByte)/255.0, 60,220,60);
 		else
 			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.40+YL+4, BarW, BarH, float(ZP.BleedoutByte)/255.0, 220,40,40);
-	}
-	else if( ZP.CurrentStamina<ZP.MaxStamina )
-	{
-		if( ZP.bStaminaExhausted )
-			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.93, BarW, BarH, ZP.CurrentStamina/ZP.MaxStamina, 220,40,40);
-		else
-			DrawZombiesBar(C, CentreX-BarW*0.5, C.ClipY*0.93, BarW, BarH, ZP.CurrentStamina/ZP.MaxStamina, 230,230,230);
 	}
 
 	For( i=0; i<ZGRI.PRIArray.Length; i++ )
@@ -1781,7 +1812,9 @@ simulated function DrawHudPassC(Canvas C)
 
 		C.SetPos(-PortraitWidth*PortraitX,0.5*(C.ClipY-PortraitHeight));
 		C.Font = GetFontSizeIndex(C,-2);
-		PortraitString = PortraitPRI.PlayerName;
+		// (the talker's record can be gone while the picture is still up)
+		if ( PortraitPRI != None )
+			PortraitString = PortraitPRI.PlayerName;
 		C.StrLen(PortraitString,XL,YL);
 		if ( XL > PortraitWidth )
 		{
@@ -2346,6 +2379,7 @@ defaultproperties
      ClockDigits=0.850000
      NameHold=3.000000
      NameFade=1.000000
+     CriticalPromptFade=1.000000
      Edge8X(0)=1.000000
      Edge8X(1)=1.000000
      Edge8X(3)=-1.000000

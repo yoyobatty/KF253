@@ -159,7 +159,9 @@ simulated function SpawnIncendiaryGroundFires(vector BlastLoc)
 function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector momentum, class<DamageType> damageType)
 {
     // Don't allow hits on poeple on the same team
-    if( Instigator.Controller.SameTeamAs(instigatedBy.Controller) && instigatedBy != Instigator && instigatedBy != None && Instigator != None )
+    // (thrower and shooter tested before they are used: either may be gone)
+    if( Instigator != None && instigatedBy != None && instigatedBy != Instigator && Instigator.Controller != None
+     && Instigator.Controller.SameTeamAs(instigatedBy.Controller) )
         return;
     Explode(HitLocation, vect(0,0,0));
 }

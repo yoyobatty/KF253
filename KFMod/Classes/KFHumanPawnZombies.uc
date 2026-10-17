@@ -35,11 +35,12 @@ var float PerkHealthBonus;
 
 var string UsePrompt;
 var float UsePromptExpireTime;
+var bool bUsePromptCritical;	// the prompt is drawn as KF's critical messages are (a door's)
 
 replication
 {
 	reliable if( bNetDirty && (Role==ROLE_Authority) && bNetOwner )
-		CurrentStamina, bStaminaExhausted, UsePrompt;
+		CurrentStamina, bStaminaExhausted, UsePrompt, bUsePromptCritical;
 
 	reliable if( bNetDirty && (Role==ROLE_Authority) )
 		bSelfReviving, BleedoutByte, ReviveByte, PerkHealthBonus;
@@ -168,10 +169,12 @@ function SetPerkHealthBonus( float Bonus )
 	HealthMax = Default.HealthMax + PerkHealthBonus;
 }
 
-function SetUsePrompt( string S )
+function SetUsePrompt( string S, optional bool bCritical )
 {
 	if( UsePrompt!=S )
 		UsePrompt = S;
+	if( bUsePromptCritical!=bCritical )
+		bUsePromptCritical = bCritical;
 	UsePromptExpireTime = Level.TimeSeconds + 1.0;
 }
 

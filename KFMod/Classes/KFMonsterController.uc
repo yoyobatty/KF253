@@ -35,6 +35,19 @@ var bool bLiftPass;
 var float NextFloorCheck,StrandedTime;
 var() float StrandedDelay;
 
+// Riot: one of a row of specimens let loose side by side (KFEndlessGameType). It keeps its place across the way,
+// as far as there is room at each path node, until it is near its victim; one ahead of its row eases off.
+var int RiotRow;				// its row, -1 when in none
+var float RiotLane;				// its place across the way: units right of the row's middle, negative to the left
+var NavigationPoint LaneNode, LanePrevNode;
+var vector LanePoint, LaneDir;
+var bool bLane, bEased;
+var bool bRiotRush;				// its row rushes in: nobody eases off to keep the row together
+var float LaneOffUntil, LaneStuck, NextDirectLane;
+var() float RiotReleaseDist;	// this near its victim it leaves the row, and the swarm takes over
+var() float RiotAheadSlack;		// this much nearer its victim than its row's average, it eases off
+var() float RiotEaseSpeed;		// share of full speed while easing off
+
 function Restart()
 {
 	KFM = KFMonster(Pawn);
@@ -43,6 +56,9 @@ function Restart()
 	// (the harder the game and the stronger the swarm, the more of them make for their victim at once and not
 	// first for a random place)
 	if( Swarm!=None && FRand()<Swarm.StraightShare*Swarm.Strength )
+		PathFindState = 2;
+	// (one of a river of specimens: no detour, so that they come on in a column)
+	if( KFGameType(Level.Game)!=None && KFGameType(Level.Game).bStraightSpawn )
 		PathFindState = 2;
 	if( !KFM.bStartUpDisabled )
 		Super.Restart();
@@ -446,6 +462,240 @@ function float PreyDistance( Pawn Other )
 	if( Swarm==None )
 		Return EnemyDistance(Other);
 	Return EnemyDistance(Other) + Swarm.PreyBias(Other,Other==Enemy);
+}
+// A holdout specimen's route search sees the ways the crowd has lately taken as dearer (KFGameType traffic)
+function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
+{
+	if( !bCheckedReach && ActorReachable(A) )
+	{
+		MoveTarget = A;
+		return true;
+	}
+	if( KFM!=None && KFM.bFixedPace && KFGameType(Level.Game)!=None )
+		KFGameType(Level.Game).AddTrafficCosts();
+	return Super.FindBestPathToward(A, true, bAllowDetour);
+}
+
+// Called by a riot specimen's pawn every tick, after this controller has steered it at its path node
+function RiotSteer( float DeltaTime )
+{
+	local NavigationPoint N;
+	local vector Want;
+	local float D;
+
+	if( Enemy==None || Pawn.Physics!=PHYS_Walking || KFM==None || KFM.bShotAnim )
+		return;
+	D = VSize(Enemy.Location - Pawn.Location);
+	if( D<RiotReleaseDist )
+	{
+		RiotRow = -1;
+		if( bEased )
+			Pawn.DesiredSpeed = Pawn.MaxDesiredSpeed;
+		bEased = false;
+		return;
+	}
+	HoldRow(D);
+
+	if( bAdjusting || Level.TimeSeconds<LaneOffUntil || VSize(Pawn.Acceleration)<1 )
+		return;
+	N = NavigationPoint(MoveTarget);
+	if( N==None )
+	{
+		// straight at its victim, or at a spot: its place across the way from here to there
+		if( MoveTarget==Enemy )
+			DirectLane(Enemy.Location);
+		else if( MoveTarget==None )
+			DirectLane(Destination);
+		else return;
+		if( !bLane )
+			return;
+		Want = LanePoint - Pawn.Location;
+		Want.Z = 0;
+	}
+	else
+	{
+		if( !PlainNode(N) )
+			return;
+		if( N!=LaneNode )
+			LayLane(N);
+		if( !bLane )
+			return;
+		Want = LanePoint - Pawn.Location;
+		Want.Z = 0;
+		// level with the node: on to the next one of the route, from the side
+		if( VSize(Want)<1.5*Pawn.CollisionRadius || ((N.Location - Pawn.Location) Dot LaneDir)<Pawn.CollisionRadius )
+		{
+			NextLegNode();
+			return;
+		}
+	}
+	Pawn.Acceleration = Normal(Want) * VSize(Pawn.Acceleration);
+	// pressed against something: the plain way for a while
+	if( VSize(Pawn.Velocity)<40 )
+	{
+		LaneStuck += DeltaTime;
+		if( LaneStuck>0.75 )
+		{
+			LaneStuck = 0;
+			bLane = false;
+			LaneOffUntil = Level.TimeSeconds + 3.0;
+		}
+	}
+	else LaneStuck = 0;
+}
+
+// One well ahead of its row's average eases off till the rest come up
+function HoldRow( float D )
+{
+	local float Avg;
+
+	if( KFGameType(Level.Game)==None || bRiotRush )
+		return;
+	Avg = KFGameType(Level.Game).RiotRowDist[RiotRow % 32];
+	if( Avg>0 && D<Avg-RiotAheadSlack )
+	{
+		Pawn.DesiredSpeed = RiotEaseSpeed * Pawn.MaxDesiredSpeed;
+		bEased = true;
+	}
+	else if( bEased )
+	{
+		Pawn.DesiredSpeed = Pawn.MaxDesiredSpeed;
+		bEased = false;
+	}
+}
+
+// A node a lane may pass beside: not a lift, ladder, door or special move
+function bool PlainNode( NavigationPoint N )
+{
+	return !N.bSpecialMove && LiftCenter(N)==None && LiftExit(N)==None && Ladder(N)==None && Door(N)==None;
+}
+
+// This specimen's lane past node N: its place across the way from the last node to N, narrowed to the room there
+// (a wall on that side, no floor, or no clear way from here narrow it by half, then to the middle)
+function LayLane( NavigationPoint N )
+{
+	local vector From, Right, HitL, HitN, Spot;
+	local float Off, R;
+	local int i;
+
+	LanePrevNode = LaneNode;
+	LaneNode = N;
+	bLane = false;
+	if( LanePrevNode!=None )
+		From = LanePrevNode.Location;
+	else From = Pawn.Location;
+	LaneDir = N.Location - From;
+	LaneDir.Z = 0;
+	if( VSize(LaneDir)<1 )
+		Return;
+	LaneDir = Normal(LaneDir);
+	Right.X = -LaneDir.Y;
+	Right.Y = LaneDir.X;
+	R = Pawn.CollisionRadius;
+	Off = RiotLane;
+	if( Abs(Off)<0.5*R )
+		Return;
+	if( Off>0 )
+		Spot = N.Location + Right * (Off + R + 8);
+	else Spot = N.Location + Right * (Off - R - 8);
+	if( Trace(HitL, HitN, Spot, N.Location, false)!=None )
+	{
+		if( Off>0 )
+			Off = FMax(0, VSize(HitL - N.Location) - R - 8);
+		else Off = -FMax(0, VSize(HitL - N.Location) - R - 8);
+	}
+	for( i=0; i<2 && Abs(Off)>=0.5*R; i++ )
+	{
+		Spot = N.Location + Right * Off;
+		if( FloorUnder(Spot) && FastTrace(Spot, Pawn.Location) )
+		{
+			LanePoint = Spot;
+			bLane = true;
+			Return;
+		}
+		Off *= 0.5;
+	}
+}
+
+// Its lane on the way straight to Goal, looked at afresh every quarter second: Goal moved across by its place,
+// if the way there is clear
+function DirectLane( vector Goal )
+{
+	local vector Dir, Right, Spot;
+
+	if( LaneNode==None && Level.TimeSeconds<NextDirectLane )
+		return;
+	LaneNode = None;
+	NextDirectLane = Level.TimeSeconds + 0.25;
+	bLane = false;
+	if( Abs(RiotLane)<0.5*Pawn.CollisionRadius )
+		return;
+	Dir = Goal - Pawn.Location;
+	Dir.Z = 0;
+	if( VSize(Dir)<1 )
+		return;
+	Dir = Normal(Dir);
+	Right.X = -Dir.Y;
+	Right.Y = Dir.X;
+	Spot = Goal + Right * RiotLane;
+	if( FastTrace(Spot, Pawn.Location) )
+	{
+		LanePoint = Spot;
+		bLane = true;
+	}
+}
+
+function bool FloorUnder( vector Spot )
+{
+	local vector HitL, HitN;
+
+	return Trace(HitL, HitN, Spot - vect(0,0,150), Spot, false)!=None;
+}
+
+// Level with its node: the next node of its route becomes its goal, if it is in a straight line from here,
+// else it goes to the node itself
+function NextLegNode()
+{
+	local int i;
+	local NavigationPoint Next;
+
+	for( i=0; i<ArrayCount(RouteCache)-1; i++ )
+		if( RouteCache[i]==MoveTarget )
+			break;
+	if( i<ArrayCount(RouteCache)-1 )
+		Next = NavigationPoint(RouteCache[i+1]);
+	if( Next!=None && PlainNode(Next) && Abs(Next.Location.Z - Pawn.Location.Z)<150 && FastTrace(Next.Location, Pawn.Location) )
+	{
+		MoveTarget = Next;
+		MoveTimer = VSize(Next.Location - Pawn.Location) / FMax(Pawn.GroundSpeed, 1) + 1.0;
+	}
+	else bLane = false;
+}
+
+// Where E will be when this specimen, moving at Speed, gets there: E's ground velocity times the time to get there
+// (worked out twice, the second time to the first answer), scaled by Share, the time at most MaxTime seconds.
+// E's own place when a wall stands in E's way or this specimen's.
+final function vector InterceptSpot( Pawn E, float Speed, float MaxTime, float Share )
+{
+	local vector Flat, Gap, Spot;
+	local float T;
+	local int i;
+
+	Spot = E.Location;
+	Flat = E.Velocity;
+	Flat.Z = 0;
+	if( Speed<=0 || Share<=0 || VSize(Flat)<10 )
+		Return Spot;
+	for( i=0; i<2; i++ )
+	{
+		Gap = Spot - Pawn.Location;
+		Gap.Z = 0;
+		T = FMin(MaxTime, VSize(Gap)/Speed);
+		Spot = E.Location + Flat*(T*Share);
+	}
+	if( !FastTrace(Spot,E.Location) || !FastTrace(Spot,Pawn.Location) )
+		Return E.Location;
+	Return Spot;
 }
 function FightEnemy(bool bCanCharge)
 {
@@ -1485,6 +1735,10 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
+	RiotRow=-1
+	RiotReleaseDist=700.000000
+	RiotAheadSlack=60.000000
+	RiotEaseSpeed=0.600000
 	MoanGapMin=8.000000
 	MoanGapMax=18.000000
 	StrafingAbility=0.000000

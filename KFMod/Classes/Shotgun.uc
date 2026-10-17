@@ -30,10 +30,20 @@ function bool RecommendLongRangedAttack()
     return true;
 }
 
+// Explosive shells are on offer only while FireModeClass(1) is ShotgunExplosiveFire (off for now: NoFire).
+// With NoFire right-click does nothing, the trader does not sell the shells and bots do not buy them.
+simulated function bool ExplosiveShellsOn()
+{
+    return ShotgunExplosiveFire(FireMode[1]) != None;
+}
+
 function byte BestMode()
 {
     local Bot B;
     local float Dist;
+
+    if (!ExplosiveShellsOn())
+        return 0;
 
     B = Bot(Instigator.Controller);
     if (B == None || B.Enemy == None)
@@ -68,7 +78,7 @@ simulated function DoToggle()
 {
     local PlayerController PC;
 
-    if (IsFiring())
+    if (IsFiring() || !ExplosiveShellsOn())
         return;
 
     PC = Level.GetLocalPlayerController();
@@ -157,7 +167,7 @@ simulated function InsertBullet()
 
 function ServerChangeShotgunMode(bool bNewExplosiveMode)
 {
-    if (bExplosiveMode == bNewExplosiveMode)
+    if (bExplosiveMode == bNewExplosiveMode || (bNewExplosiveMode && !ExplosiveShellsOn()))
         return;
     bExplosiveMode = bNewExplosiveMode;
     ApplyExplosiveMode(bExplosiveMode);
@@ -203,7 +213,7 @@ defaultproperties
     Weight=8.000000
     UpKick=900
     FireModeClass(0)=Class'KFMod.ShotgunFire'
-    FireModeClass(1)=Class'KFMod.ShotgunExplosiveFire'
+    FireModeClass(1)=Class'KFMod.NoFire' // Class'KFMod.ShotgunExplosiveFire' turns the explosive shells back on
     PutDownAnim="PutDown"
     SelectSound=Sound'KFPlayerSound.getweaponout'
     AIRating=0.600000

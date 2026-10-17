@@ -2,19 +2,17 @@
 class WeldFire extends KFMeleeFire;
 
 var Actor LastHitActor;
+var float NextMessageTime;
 
 simulated function PlayFiring()
 {
+	// (the first tick of a press plays Fire: the else was the mesh check's, so it played nothing for 0.2 s)
 	if ( Weapon.Mesh != None )
 	{
-		if ( FireCount > 0 )
-		{
-			if ( Weapon.HasAnim(FireLoopAnim) )
-				Weapon.PlayAnim(FireLoopAnim, FireLoopAnimRate, 0.0);
-			else Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
-		}
+		if ( FireCount > 0 && Weapon.HasAnim(FireLoopAnim) )
+			Weapon.PlayAnim(FireLoopAnim, FireLoopAnimRate, 0.0);
+		else Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
 	}
-	else Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
 	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,Default.FireAnimRate/FireAnimRate,false);
 	ClientPlayForceFeedback(FireForce);  // jdf
 	FireCount++;
@@ -60,7 +58,9 @@ simulated Function Timer()
 			AdjustedLocation = Hitlocation;
 			AdjustedLocation.Z = (Hitlocation.Z - 0.15 * Instigator.collisionheight);
 
-			if( Level.NetMode!=NM_Client )
+			// (only a door: whoever stepped into the beam was burned too, a team-mate at full damage whatever the
+			// friendly fire, as the game lets welder damage through)
+			if( Level.NetMode!=NM_Client && KFDoorMover(HitActor)!=None )
 				HitActor.TakeDamage(MyDamage, Instigator, HitLocation , vector(PointRot),hitDamageClass);
 			Spawn(class'KFWelderHitEffect',,, AdjustedLocation, rotator(HitLocation - StartTrace));
 		}
@@ -91,17 +91,29 @@ simulated function bool AllowFire()
 	if(WeldTarget == none)
 		return false;
 
-	// if(!WeldTarget.bClosed)
-	//  return false;
-
 	if(WeldTarget.bDisallowWeld || KFElevatorTrigger(WeldTarget.MyTrigger)!=None)
 	{
-		if( PlayerController(Instigator.controller)!=None )
-			PlayerController(Instigator.controller).ClientMessage("You cannot weld this door.", 'CriticalEvent');
+		WeldMessage("You cannot weld this door.");
+		return false;
+	}
+
+	// (an open door took the fuel and the sparks and was never welded)
+	if(!WeldTarget.bClosed)
+	{
+		WeldMessage("Close the door to weld it.");
 		return false;
 	}
 
 	return Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire ;
+}
+
+// A line to the player holding the welder, on that player's own machine and not every time the button is tried
+simulated function WeldMessage(string S)
+{
+	if( PlayerController(Instigator.Controller)==None || !Instigator.IsLocallyControlled() || Level.TimeSeconds<NextMessageTime )
+		return;
+	NextMessageTime = Level.TimeSeconds + 2.0;
+	PlayerController(Instigator.Controller).ClientMessage(S, 'CriticalEvent');
 }
 
 defaultproperties

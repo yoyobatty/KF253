@@ -116,6 +116,7 @@ function bool TryPurchaseDoor(Pawn user)
 {
 	local PlayerController PC;
 	local int i, Needed;
+	local KFHumanPawnZombies ZP;
 
 	if( !bBuyableDoor || bDoorPurchased )
 		Return false;
@@ -142,6 +143,11 @@ function bool TryPurchaseDoor(Pawn user)
 		PC.PlayerReplicationInfo.Score -= DoorCost;
 	bDoorPurchased = true;
 
+	// the door's prompt goes with it, for everyone at it
+	ForEach TouchingActors(class'KFHumanPawnZombies', ZP)
+		if( ZP.bUsePromptCritical )
+			ZP.UsePrompt = "";
+
 	For( i=0; i<DoorOwners.Length; i++ )
 		DoorOwners[i].UnsealForPurchase();
 
@@ -166,7 +172,7 @@ function ShowBuyPrompt( Pawn P )
 	if( KFHumanPawnZombies(P)!=None )
 	{
 		if( !KFHumanPawnZombies(P).bIsDowned )
-			KFHumanPawnZombies(P).SetUsePrompt("[USE] Open Door -" @ DoorCost);
+			KFHumanPawnZombies(P).SetUsePrompt("[USE] Open Door -" @ DoorCost, true);
 	}
 	else if( LastMessageTimer<Level.TimeSeconds )
 	{

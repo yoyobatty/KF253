@@ -994,7 +994,8 @@ simulated function WeaponTick(float DT)
 		if (FlashLight.bHasLight)
 		{
 			battery = KFHumanPawn(Instigator).TorchBatteryLife;
-			if (battery <= 100)
+			// (a dedicated server has no glow to dim)
+			if (Flashlight.TacLightGlow != None && battery <= 100)
 			{
 				t = 1.0 - float(battery) / 100.0;
 				baseBrightness = Flashlight.TacLightGlow.default.LightBrightness * float(battery) / 100.0;
@@ -1006,7 +1007,7 @@ simulated function WeaponTick(float DT)
 				Flashlight.TacLightGlow.LightHue = byte(20.0 * t);
 				Flashlight.TacLightGlow.LightSaturation = byte(255.0 - 155.0 * t);
 			}
-			else
+			else if (Flashlight.TacLightGlow != None)
 			{
 				Flashlight.TacLightGlow.LightBrightness = Flashlight.TacLightGlow.default.LightBrightness;
 				Flashlight.TacLightGlow.LightHue = Flashlight.TacLightGlow.default.LightHue;
@@ -1819,7 +1820,7 @@ simulated function float DesireAmmo(class<Inventory> NewAmmoClass, bool bDetour)
 				return -100;
 			curr = AmmoAmount(i);
 			if ( curr == 0 )
-				return 1;
+				return 2;	// (was 1: an empty gun wanted ammo half as much as one with a round left)
 			max = MaxAmmo(i);
 			return 2.0 * (max - curr) / max; //Thanks Epic for breaking this function in the first place
 		}

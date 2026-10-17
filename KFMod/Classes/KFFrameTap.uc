@@ -10,6 +10,10 @@
 // as long as the game runs. So this keeps one blur through every level, puts
 // it on the view once at the start even if no effect is on, and nothing else
 // in the mod may use a MotionBlur of its own.
+//
+// Direct3D only (8, 9 and 11). Tested 2026-10-16: on the OpenGL renderers
+// (OpenGL and Anti) bloom and the shading do nothing and the hit blur blacks
+// out the view; on 3369's OpenGL every effect washes the level out.
 //=============================================================================
 class KFFrameTap extends Interaction;
 
@@ -17,6 +21,7 @@ var MotionBlur		Blur;
 var BitmapMaterial	Frame;
 var KFScreenFX		FX;				// this level's
 var int				Seeks, SeekWait, SpawnWait;
+var bool			bDeviceRead, bDeviceFits;	// (whether this machine draws with Direct3D, read once)
 
 static function KFFrameTap Of(PlayerController PC)
 {
@@ -26,6 +31,13 @@ static function KFFrameTap Of(PlayerController PC)
 		return None;
 	// (the engine's blur does not work there)
 	if (PC.PlatformIsMacOS() || PC.PlatformIsUnix())
+		return None;
+	if (!default.bDeviceRead)
+	{
+		default.bDeviceFits = InStr(Caps(PC.ConsoleCommand("get ini:Engine.Engine.RenderDevice Class")), "D3D") >= 0;
+		default.bDeviceRead = true;
+	}
+	if (!default.bDeviceFits)
 		return None;
 	for (i = 0; i < PC.Player.LocalInteractions.Length; i++)
 		if (KFFrameTap(PC.Player.LocalInteractions[i]) != None)
@@ -55,19 +67,21 @@ event NotifyLevelChange()
 
 function Attend(PlayerController PC)
 {
-	if (FX != None && !FX.bDeleteMe && FX.Level == PC.Level)
-		return;
-	FX = None;
-	// only in a game: this lives on into the main menu's level after a round, and that is not to glow
-	if (HUDKillingFloor(PC.myHUD) == None)
-		return;
-	if (SpawnWait > 0)
+	if (FX == None || FX.bDeleteMe || FX.Level != PC.Level)
 	{
-		SpawnWait--;
-		return;
+		FX = None;
+		if (SpawnWait > 0)
+		{
+			SpawnWait--;
+			return;
+		}
+		FX = PC.Spawn(class'KFScreenFX', PC);
+		SpawnWait = 60;
+		if (FX == None)
+			return;
 	}
-	FX = PC.Spawn(class'KFScreenFX', PC);
-	SpawnWait = 60;
+	// (where there is no game's HUD, as in the main menu's level, more colour only: the menu is not to glow)
+	FX.bMenu = (HUDKillingFloor(PC.myHUD) == None);
 }
 
 function PreRender(Canvas C)

@@ -960,8 +960,12 @@ simulated function AddHealth()
         if(Health < HealthMax)
         {
             tempHeal = int(10 * (level.TimeSeconds - lastHealTime)) ;
+            if( tempHeal > HealthToGive )
+              tempHeal = int(HealthToGive + 0.999) ;
+            // (the part of a point not paid yet is kept for the next payment: dropped, the 10 a second came out
+            // at 7 to 10 by the frame or server tick rate)
             if(tempHeal>0)
-              lastHealTime = level.TimeSeconds ;
+              lastHealTime += 0.1 * tempHeal ;
 
             Health = Min(Health+tempHeal, HealthMax);
             HealthToGive -= tempHeal ;
@@ -2134,17 +2138,27 @@ function ServerBuyKevlar()
     }
 }
 
+// What healing to full costs: the kit's price for the share of health missing, as armour is priced by what is missing
+simulated static function int FirstAidCost( float Missing, float MaxHealth, float Difficulty )
+{
+	if( Missing<=0 || MaxHealth<=0 )
+		return 0;
+	return Max(1, int(150*GetCostScaling(Difficulty)*FMin(Missing,MaxHealth)/MaxHealth + 0.5));
+}
+
 function ServerBuyFirstAid()
 {
-	local float Cost;
+	local int Cost, Missing;
 
-	if( !CanBuyNow() || Health==100 )
+	// (health still on its way from a syringe is not sold again)
+	Missing = int(HealthMax - Health - HealthToGive);
+	if( !CanBuyNow() || Missing<=0 )
 		Return;
-	Cost = int(150*GetCostScaling(Level.Game.GameDifficulty));
+	Cost = FirstAidCost(Missing, HealthMax, Level.Game.GameDifficulty);
 	if( PlayerReplicationInfo.Score<Cost )
 		Return;
 	PlayerReplicationInfo.Score-=Cost;
-	GiveHealth(100,100);
+	GiveHealth(Missing, HealthMax);
 }
 
 function ServerBuyAmmo( Class<Ammunition> AClass, bool bOnlyClip )

@@ -44,9 +44,9 @@ static function float GetMagCapacityMod(KFWeapon Other)
 }
 
 // Change effective range on FLamethrower
-static function int ExtraRange()
+static function float ExtraRange()
 {
-	Return 1.5; // he he
+	Return 0.5; // +50% (as an int this 1.5 was 1: +33%)
 }
 
 static function float GetReloadSpeedModifier( KFWeapon Other )

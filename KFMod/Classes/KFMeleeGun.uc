@@ -119,9 +119,9 @@ simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 function bool CanAttack(Actor Other)
 {
     local vector PredictedLoc;
-    local vector EnemyVel;
-    local float PredictedDist;
-	
+    local vector EnemyVel, Rel, RelVel;
+    local float PredictedDist, T;
+
     if (Other == None || Instigator == None)
         return false;
 
@@ -129,7 +129,18 @@ function bool CanAttack(Actor Other)
     if (Pawn(Other) != None)
         EnemyVel = Pawn(Other).Velocity;
 
-    PredictedLoc = Other.Location + (EnemyVel - Instigator.Velocity) * DamDelay; 
+    // Closing in and within reach at some point of the wind-up: it stops against us there, where a straight-line
+    // guess would carry it on through us and out of reach (and the axe winds up for 0.8 s)
+    Rel = Other.Location - Instigator.Location;
+    RelVel = EnemyVel - Instigator.Velocity;
+    if ( (Rel dot RelVel) < 0 )
+    {
+        T = FMin(-(Rel dot RelVel) / (RelVel dot RelVel), DamDelay);
+        if ( VSize(Rel + RelVel * T) <= MeleeWeaponRange )
+            return true;
+    }
+
+    PredictedLoc = Other.Location + (EnemyVel - Instigator.Velocity) * DamDelay;
 
     // Check if predicted location will be in range
     PredictedDist = VSize(PredictedLoc - Instigator.Location);

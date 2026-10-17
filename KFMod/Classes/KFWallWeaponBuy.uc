@@ -94,5 +94,5 @@ defaultproperties
 	NotEnoughPointsMessage="Not enough dosh!"
 	AlreadyOwnedMessage="You already have this weapon."
 	NoAmmoBoughtMessage="Ammo is full, or you can't afford any."
-	PurchaseSound=Sound'CODSounds.ui_buygeneric01'
+	PurchaseSound=Sound'KFWeaponSound.GunPickupKF'
 }

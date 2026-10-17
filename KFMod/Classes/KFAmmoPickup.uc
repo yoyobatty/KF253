@@ -3,7 +3,6 @@ class KFAmmoPickup extends UTAmmoPickup;
 var() Material KFPickupImage;
 var Bool ShowPickup;
 var Controller OtherPlayer;
-var() localized string PickupMSG1;
 var bool bfound;
 
 function RespawnEffect(); // Get rid of the Yellow puff. It's not welcome here.
@@ -148,7 +147,18 @@ function PostRender(Canvas C)
 simulated function PostBeginPlay()
 {
     AmmoAmount = (rand(0.5 * default.AmmoAmount) + default.AmmoAmount);
-    default.PickupMSG1 = "Found ("$AmmoAmount$") ";
+}
+
+// The message carries this box's amount as its switch; the stock route (HandlePickup) sends none.
+function AnnouncePickup( Pawn Receiver )
+{
+    if ( Receiver != None && PlayerController(Receiver.Controller) != None )
+    {
+        Receiver.MakeNoise(0.2);
+        PlayerController(Receiver.Controller).ReceiveLocalizedMessage(MessageClass, AmmoAmount,,, Class);
+        PlaySound(PickupSound, SLOT_Interact);
+    }
+    else Super.AnnouncePickup(Receiver);
 }
 
 static function string GetLocalString(
@@ -157,7 +167,9 @@ static function string GetLocalString(
     optional PlayerReplicationInfo RelatedPRI_2
     )
 {
-    return default.PickupMSG1$default.PickupMessage;
+    if ( Switch > 0 )
+        return "Found ("$Switch$") "$default.PickupMessage;
+    return default.PickupMessage;
 }
 
 defaultproperties

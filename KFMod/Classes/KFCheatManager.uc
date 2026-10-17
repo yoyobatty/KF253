@@ -291,7 +291,7 @@ exec function StartWave()
 {
     if (!areCheatsEnabled()) return;
 
-    if(!KFGameType(Level.Game).bWaveInProgress)
+    if(!KFGameType(Level.Game).WaveRunning())
         KFGameType(Level.Game).WaveCountDown = 6;
     else return;
 
@@ -302,16 +302,23 @@ exec function StartWave()
 exec function EndWave()
 {
     local KFMonster LevelMonster;
+    local KFGameType G;
 
     if (!areCheatsEnabled()) return;
 
-    if(!KFGameType(Level.Game).bWaveInProgress)
+    G = KFGameType(Level.Game);
+    if(!G.WaveRunning())
         return;
 
+    // (nothing more to come: an endless wave or a holdout would otherwise go on spawning)
+    G.TotalMaxMonsters = 0;
+    G.NextSpawnSquad.Length = 0;
+    if (KFEndlessGameType(G) != None)
+        KFEndlessGameType(G).HoldoutEndTime = 0;
     forEach DynamicActors(class 'KFMonster', LevelMonster)
         LevelMonster.KilledBy(Pawn);
 
-    KFGameType(Level.Game).DoWaveEnd();
+    G.DoWaveEnd();
 
     ReportCheat("EndWave");
     ClientMessage("Wave ended.");
@@ -321,15 +328,396 @@ exec function ExtraTime(optional float ExtraSeconds)
 {
     if (!areCheatsEnabled()) return;
 
+    if (ExtraSeconds <= 0)
+        ExtraSeconds = 10.0;
+
     if(KFGameType(Level.Game).WaveCountDown >= 1)
         KFGameType(Level.Game).WaveCountDown += ExtraSeconds;
     else return;
 
-    if (ExtraSeconds <= 0)
-        ExtraSeconds = 10.0;
-
     ReportCheat("ExtraTime");
     ClientMessage("Extra "$ExtraSeconds$" seconds of trader time!");
+}
+
+// The next wave is wave N (between waves)
+exec function SetWave(int N)
+{
+    local KFGameType G;
+
+    if (!areCheatsEnabled()) return;
+
+    G = KFGameType(Level.Game);
+    if (G.WaveRunning())
+    {
+        ClientMessage("End the wave first (EndWave), then SetWave.");
+        return;
+    }
+    N = Max(N, 1);
+    if (KFEndlessGameType(G) == None)
+        N = Min(N, G.FinalWave + 1);
+    G.WaveNum = N - 1;
+    InvasionGameReplicationInfo(G.GameReplicationInfo).WaveNumber = G.WaveNum;
+
+    ReportCheat("SetWave");
+    ClientMessage("Next wave: "$N$". StartWave to begin it now.");
+}
+
+// Only N more specimens to come this wave
+exec function ZedsLeft(int N)
+{
+    local KFGameType G;
+
+    if (!areCheatsEnabled()) return;
+
+    G = KFGameType(Level.Game);
+    G.TotalMaxMonsters = Max(N, 0);
+    if (N <= 0)
+        G.NextSpawnSquad.Length = 0;
+    KFGameReplicationInfo(G.GameReplicationInfo).MaxMonsters = G.TotalMaxMonsters + G.NumMonsters;
+
+    ReportCheat("ZedsLeft");
+    ClientMessage(G.TotalMaxMonsters$" more specimens to come this wave.");
+}
+
+// At most N specimens at once, for the rest of this wave
+exec function ZedCap(int N)
+{
+    if (!areCheatsEnabled()) return;
+
+    KFGameType(Level.Game).MaxMonsters = Clamp(N, 1, 600);
+
+    ReportCheat("ZedCap");
+    ClientMessage("At most "$KFGameType(Level.Game).MaxMonsters$" specimens at once until the next wave.");
+}
+
+// Specimen spawning stopped, or started again
+exec function PauseSpawns()
+{
+    local KFGameType G;
+
+    if (!areCheatsEnabled()) return;
+
+    G = KFGameType(Level.Game);
+    G.bSpawnsPaused = !G.bSpawnsPaused;
+
+    ReportCheat("PauseSpawns");
+    if (G.bSpawnsPaused)
+        ClientMessage("Spawning paused (PauseSpawns again to go on).");
+    else
+        ClientMessage("Spawning goes on.");
+}
+
+exec function WaveInfo()
+{
+    local KFGameType G;
+    local KFEndlessGameType E;
+    local string S;
+
+    G = KFGameType(Level.Game);
+    E = KFEndlessGameType(G);
+    S = "Wave "$(G.WaveNum + 1);
+    if (E != None)
+        S = S$" ("$E.WaveTypeName()$")";
+    if (G.WaveRunning())
+        S = S$", running";
+    else
+        S = S$", next starts in "$G.WaveCountDown$" s";
+    ClientMessage(S$". Alive "$G.NumMonsters$", still to come "$G.TotalMaxMonsters$", at most "$G.MaxMonsters$" at once"$Pick(G.bSpawnsPaused, ", SPAWNING PAUSED", "")$".");
+    if (E == None)
+        return;
+    if (E.HoldoutSpawning())
+        ClientMessage("Holdout: "$int(E.HoldoutEndTime - Level.TimeSeconds)$" s of spawning left.");
+    ClientMessage("Holdouts: "$int(E.HoldoutLength)$" s, chance "$E.HoldoutChance$", cap "$E.HoldoutCapScale$" x Max Specimens, health "$int(100.0 * E.HoldoutHealthScale)$"%. River "$E.bRiver
+        $": rows of "$E.RiotRowSize$", "$E.RiverSources$" source(s), kind "$Pick(E.RiotClass == None, "mixed", string(E.RiotClass))
+        $", rush "$E.bRiotRush$", pace "$int(E.RushSpeed)$" seen / "$int(E.RushHiddenSpeed)$" hidden, gap "$E.RiverGap$" s.");
+}
+
+// Endless: the next wave is a holdout, starting in 5 seconds when between waves
+exec function Holdout()
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+    {
+        ClientMessage("Holdouts are an Endless mode wave.");
+        return;
+    }
+    E.ForceNextWave("holdout");
+    if (!E.WaveRunning())
+        E.WaveCountDown = 6;
+
+    ReportCheat("Holdout");
+    if (E.WaveRunning())
+        ClientMessage("The next wave is a holdout.");
+    else
+        ClientMessage("Holdout starting in 5 seconds.");
+}
+
+// Endless: the next wave's kind (normal, siren, shade, boss or holdout)
+exec function NextWave(string Kind)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+    {
+        ClientMessage("NextWave is for Endless mode (SetWave picks the wave elsewhere).");
+        return;
+    }
+    if (!E.ForceNextWave(Kind))
+    {
+        ClientMessage("NextWave normal, siren, shade, boss or holdout.");
+        return;
+    }
+    ReportCheat("NextWave");
+    ClientMessage("The next wave is a "$Kind$" wave.");
+}
+
+// Endless: during a holdout, N seconds of spawning left; between waves, how long holdouts last
+exec function HoldoutTime(float N)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    N = FMax(N, 0);
+    if (E.HoldoutSpawning())
+    {
+        E.HoldoutEndTime = Level.TimeSeconds + N;
+        ClientMessage("This holdout spawns for "$int(N)$" more seconds.");
+    }
+    else
+    {
+        E.HoldoutLength = FMax(N, 5);
+        ClientMessage("Holdouts last "$int(E.HoldoutLength)$" seconds.");
+    }
+    ReportCheat("HoldoutTime");
+}
+
+// Endless: holdout specimens' health as a share of a normal one's (HoldoutHealth 0.5), from the next ones spawned
+exec function HoldoutHealth(float Share)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    E.HoldoutHealthScale = FClamp(Share, 0.05, 5.0);
+    ReportCheat("HoldoutHealth");
+    ClientMessage("Holdout specimens have "$int(100.0 * E.HoldoutHealthScale)$"% of their health.");
+}
+
+// Endless: the holdout stops spawning now (kill the rest to end it)
+exec function EndHoldout()
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None || !E.HoldoutSpawning())
+    {
+        ClientMessage("No holdout is spawning.");
+        return;
+    }
+    E.HoldoutEndTime = Level.TimeSeconds;
+    ReportCheat("EndHoldout");
+}
+
+// Endless: every specimen of the river of one kind (RiotZed clot, crawler, gorefast, stalker, wretch, ... or a class
+// path), or the wave's own mix (RiotZed mix)
+exec function RiotZed(string Kind)
+{
+    local KFEndlessGameType E;
+    local class<Monster> C;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    if (Kind == "" || Kind ~= "mix" || Kind ~= "none")
+    {
+        E.RiotClass = None;
+        ClientMessage("Riots of the wave's own mix.");
+    }
+    else
+    {
+        if (InStr(Kind, ".") >= 0)
+            C = class<Monster>(DynamicLoadObject(Kind, class'Class', true));
+        else
+            C = class<Monster>(DynamicLoadObject("KFChar.Zombie"$Kind, class'Class', true));
+        if (C == None)
+        {
+            ClientMessage("No specimen called "$Kind$" (try clot, crawler, gorefast, stalker, wretch, bloat, siren, scrake, fleshpound).");
+            return;
+        }
+        E.RiotClass = C;
+        ClientMessage("Riots of "$C.Name$" only.");
+    }
+    ReportCheat("RiotZed");
+}
+
+exec function RiotRows(int N)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    E.RiotRowSize = Clamp(N, 1, 8);
+    ReportCheat("RiotRows");
+    ClientMessage("Riot rows of "$E.RiotRowSize$Pick(E.RiotRowSize == 1, " (one at a time: a plain river)", "")$".");
+}
+
+exec function RiotSources(int N)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    E.RiverSources = Clamp(N, 1, 4);
+    ReportCheat("RiotSources");
+    ClientMessage("Riots from "$E.RiverSources$" source(s).");
+}
+
+// Endless: the rows rush in or keep together (Rush on, Rush off, Rush 280 for that speed, Rush alone switches it)
+exec function Rush(optional string Arg)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    if (Arg ~= "on")
+        E.bRiotRush = true;
+    else if (Arg ~= "off")
+        E.bRiotRush = false;
+    else if (float(Arg) > 0)
+    {
+        E.bRiotRush = true;
+        E.RushSpeed = float(Arg);
+    }
+    else
+        E.bRiotRush = !E.bRiotRush;
+    ReportCheat("Rush");
+    ClientMessage("Rush "$Pick(E.bRiotRush, "on at "$int(E.RushSpeed), "off")$" (rows let loose from now on).");
+}
+
+// Endless: a dense crowd of one kind for the holdouts (rows of eight packed close, one source, a fast steady beat,
+// three times Max Specimens at once): Crowd, or Crowd crawler and the like
+exec function Crowd(optional string Kind)
+{
+    local KFEndlessGameType E;
+    local float Cap;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    if (Kind == "")
+        Kind = "clot";
+    RiotZed(Kind);
+    E.RiotRowSize = 8;
+    E.RiotSpacing = 6;
+    E.RiverSources = 1;
+    E.RiverGap = 0.1;
+    E.RiverMinGap = 0.06;
+    E.RiverSurge = 0;
+    E.HoldoutCapScale = 3.0;
+    if (E.HoldoutSpawning())
+    {
+        Cap = float(E.MaxZombiesOnce) * E.HoldoutCapScale;
+        E.MaxMonsters = Clamp(int(Cap), 32, 128);
+    }
+    ReportCheat("Crowd");
+    ClientMessage("Holdouts bring a dense crowd. RiotReset puts the riot back to normal.");
+}
+
+// Endless: a horde now in a running holdout (sources afresh round the players, the quick beat)
+exec function HordeNow()
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None || !E.HoldoutSpawning())
+    {
+        ClientMessage("Hordes come in a running holdout (Holdout starts one).");
+        return;
+    }
+    E.NextHordeTime = 0;
+    ReportCheat("HordeNow");
+}
+
+// Endless: the pace of every holdout specimen, seen and out of sight (Pace 300 700); the next ones spawned
+exec function Pace(float Seen, optional float Hidden)
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    E.RushSpeed = FMax(Seen, 0);
+    if (Hidden > 0)
+        E.RushHiddenSpeed = Hidden;
+    ReportCheat("Pace");
+    if (E.RushSpeed <= 0)
+        ClientMessage("Holdout specimens keep their own speeds (the old speed-up).");
+    else
+        ClientMessage("Holdout specimens run at "$int(E.RushSpeed)$" seen, "$int(FMax(E.RushSpeed, E.RushHiddenSpeed))$" out of sight.");
+}
+
+exec function RiotReset()
+{
+    local KFEndlessGameType E;
+
+    if (!areCheatsEnabled()) return;
+
+    E = KFEndlessGameType(Level.Game);
+    if (E == None)
+        return;
+    E.RiotClass = class'KFEndlessGameType'.default.RiotClass;
+    E.RiotRowSize = class'KFEndlessGameType'.default.RiotRowSize;
+    E.RiotSpacing = class'KFEndlessGameType'.default.RiotSpacing;
+    E.RiverSources = class'KFEndlessGameType'.default.RiverSources;
+    E.RiverGap = class'KFEndlessGameType'.default.RiverGap;
+    E.RiverMinGap = class'KFEndlessGameType'.default.RiverMinGap;
+    E.RiverSurge = class'KFEndlessGameType'.default.RiverSurge;
+    E.HoldoutCapScale = class'KFEndlessGameType'.default.HoldoutCapScale;
+    E.bRiotRush = class'KFEndlessGameType'.default.bRiotRush;
+    E.RushSpeed = class'KFEndlessGameType'.default.RushSpeed;
+    E.RushHiddenSpeed = class'KFEndlessGameType'.default.RushHiddenSpeed;
+    ReportCheat("RiotReset");
+    ClientMessage("Riot settings back to normal.");
+}
+
+function string Pick(bool bFirst, string First, string Second)
+{
+    if (bFirst)
+        return First;
+    return Second;
 }
 
 exec function Heal()

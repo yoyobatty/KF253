@@ -175,7 +175,6 @@ state Spinning
 		NextSpinMeshTime = 0;
 		NetUpdateTime = Level.TimeSeconds - 1;
 		PlaySound(SpinOpenSound,SLOT_None,255,True);
-		PlaySound(SpinSound,SLOT_None,255,True);
 	}
 
 	function Tick( float DeltaTime )
@@ -186,6 +185,8 @@ state Spinning
 			CurrentSpinIndex = (CurrentSpinIndex+1) % PossibleWeapons.Length;
 			if( PossibleWeapons[CurrentSpinIndex]!=None )
 				SetStaticMesh(PossibleWeapons[CurrentSpinIndex].Default.StaticMesh);
+			// (a tick for each weapon shown, like a prize wheel)
+			PlaySound(SpinSound,SLOT_None,0.6,,400);
 		}
 
 		if( Level.TimeSeconds>=SpinEndTime )
@@ -245,6 +246,6 @@ defaultproperties
 	RemoteRole=ROLE_DumbProxy
 	bAlwaysRelevant=True
 	DrawScale=0.700000
-	SpinSound=Sound'CODSounds.1s_musicbox01'
-	SpinOpenSound=Sound'CODSounds.1s_musicboxopen01'
+	SpinSound=Sound'KFAmbientSound.KFCLICK'
+	SpinOpenSound=Sound'KFAmbientSound.LockerOpen'
 }

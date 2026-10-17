@@ -33,6 +33,7 @@ var() float CrowdShrinkFactor;      // Shrink current radius to this fraction wh
 var() float CrowdShrinkMinRadius;   // Never shrink below this, to avoid clipping through geometry.
 var() float CrowdShrinkRestoreDelay;// Seconds of no further crowd-bumps before restoring.
 var bool bCrowdRadiusShrunk;
+var bool bFixedPace;		// its speed is set for it (a holdout's one pace): no sprint of its own on top
 var() bool bCrowdRoomCheck;         // Grow back only where no other body is in the way.
 var float PreCrowdShrinkRadius;
 var float CrowdShrinkEndTime;
@@ -227,6 +228,12 @@ var bool bUsingRunAnim;             // Currently showing the run animation.
 var bool bDestroyNextTick; // Destroy this pawn next tick because destroying it now will cause problems
 var float TimeSetDestroyNextTickTime; // The time we set the bDestroyNextTick flag
 
+var bool bSettledBody;					// a body at rest, out of Karma's world contacts and gravity until something hits it
+var int SettleChecks;					// body timer checks in a row it has been slower than SettleSpeed
+var float SettleSpeed;					// a body this slow at SettleChecksNeeded checks a second apart settles (0: never)
+var int SettleChecksNeeded;
+var float SettledLinDamp, SettledAngDamp;	// its damping before it settled
+
 var() Sound DecapSound;
 
 var float NextVisCheckTime;
@@ -290,7 +297,8 @@ event Bump(actor Other)
 	{
 		if(bBurnified && !KFMonst.bBurnified)
 		{
-			Other.TakeDamage(15, self, Other.Location,Vect(0,0,0), class'Burned');
+			// (in the name of whoever lit this one: in its own name the other burned uncredited and turned on it)
+			Other.TakeDamage(15, BurnInstigator, Other.Location,Vect(0,0,0), class'Burned');
 			//log("Enemy caught fire" $self);
 		}
 	}
@@ -699,6 +707,10 @@ simulated function Tick(float DeltaTime)
 		NextBileTime+=BileFrequency;
 		TakeBileDamage();
 	}
+
+	// one of a riot's rows: it keeps its place across the way (after its controller has steered it this tick)
+	if( Role==ROLE_Authority && Health>0 && KFMonsterController(Controller)!=None && KFMonsterController(Controller).RiotRow>=0 )
+		KFMonsterController(Controller).RiotSteer(DeltaTime);
 }
 
 function TakeBileDamage()
@@ -1383,6 +1395,7 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 		}
 		else
 		{
+			CheckSettle();
 			SetTimer(1.0, false);
 		}
 	}
@@ -1424,6 +1437,8 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 
 		if( Physics == PHYS_KarmaRagdoll )
 		{
+			WakeBody();
+
 			// Can't shoot corpses during de-res
 			//if ( bDeRes )
 			//	return;
@@ -1887,6 +1902,86 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
     Giblet.Velocity = Velocity + Normal(Direction) * (512.0 + FRand() * 256.0);
 
 	//log("Spawned Giblet of class "$Giblet$" at location "$Location$" with size: "$Giblet.DrawScale$ " on pawn "$GetHumanReadableName());
+}
+
+// A body that has come to rest leaves Karma's world contacts and gravity. Karma still holds its pose and traces still
+// meet its bones, but it costs about an eighth of what it did (32 bodies at rest: 6.4 ms a frame down to 0.8; it was
+// most of the frame in big waves). Strong damping stills any limb still moving. Anything that hits it, or a new body
+// falling near it, puts it back as it was, all but its shadow: that goes for good when it first settles (about 10 us
+// a frame each, and hardly to be seen under a body lying on the floor).
+simulated function CheckSettle()
+{
+	if ( bSettledBody || bDeRes || SettleSpeed <= 0 || Physics != PHYS_KarmaRagdoll )
+		return;
+	if ( VSize(Velocity) < SettleSpeed )
+	{
+		SettleChecks++;
+		if ( SettleChecks >= SettleChecksNeeded )
+			SettleBody();
+	}
+	else
+		SettleChecks = 0;
+}
+
+simulated function SettleBody()
+{
+	local KarmaParamsSkel Skel;
+
+	Skel = KarmaParamsSkel(KParams);
+	if ( bSettledBody || Skel == None || Physics != PHYS_KarmaRagdoll || !bBlockKarma )
+		return;
+	bSettledBody = true;
+	SettledLinDamp = Skel.KLinearDamping;
+	SettledAngDamp = Skel.KAngularDamping;
+	Skel.KLinearDamping = 10;
+	Skel.KAngularDamping = 10;
+	Skel.KActorGravScale = 0;
+	KSetBlockKarma(false);
+	if ( PlayerShadow != None )
+	{
+		PlayerShadow.Destroy();
+		PlayerShadow = None;
+	}
+	if ( RealtimeShadow != None )
+	{
+		RealtimeShadow.Destroy();
+		RealtimeShadow = None;
+	}
+}
+
+simulated function WakeBody()
+{
+	local KarmaParamsSkel Skel;
+	local bool bWasCollide, bWasBlockActors, bWasBlockPlayers;
+
+	if ( !bSettledBody )
+		return;
+	Skel = KarmaParamsSkel(KParams);
+	if ( Skel == None || Physics != PHYS_KarmaRagdoll || !bCollideActors )
+		return;
+	bSettledBody = false;
+	SettleChecks = 0;
+	Skel.KLinearDamping = SettledLinDamp;
+	Skel.KAngularDamping = SettledAngDamp;
+	Skel.KActorGravScale = RagGravScale;
+	// (KSetBlockKarma(true) on a ragdoll that collides fails an engine check: the engine looks at the flag before it
+	// sets it. With collision off it only sets the flag, and turning collision on again puts it back in the contacts.)
+	bWasCollide = bCollideActors;
+	bWasBlockActors = bBlockActors;
+	bWasBlockPlayers = bBlockPlayers;
+	SetCollision(false, false, false);
+	KSetBlockKarma(true);
+	SetCollision(bWasCollide, bWasBlockActors, bWasBlockPlayers);
+	KWake();
+}
+
+simulated function WakeBodiesNear()
+{
+	local KFMonster M;
+
+	foreach CollidingActors(class'KFMonster', M, 200)
+		if ( M != self && M.bSettledBody )
+			M.WakeBody();
 }
 
 simulated function StartDeRes()
@@ -2752,6 +2847,8 @@ simulated function PlayFakeDyingAnimation(class<DamageType> DamageType, vector H
 
 			skelParams.KActorGravScale = RagGravScale;
 
+			WakeBodiesNear();
+
 			return;
 		}
 		// jag
@@ -2924,6 +3021,8 @@ simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLo
 			bRubbery = DamageType.Default.bRubbery;
 
 			skelParams.KActorGravScale = RagGravScale;
+
+			WakeBodiesNear();
 
 			return;
 		}
@@ -3273,6 +3372,8 @@ defaultproperties
      DeResLiftSoftness=(Points=((OutVal=0.000000),(InVal=0.000000,OutVal=0.000000),(InVal=0.000000,OutVal=0.000000)))
      DeResLateralFriction=0.000000
      RagdollLifeSpan=30.000000
+     SettleSpeed=5.000000
+     SettleChecksNeeded=2
      RagDeathVel=150.000000
      RagShootStrength=6000.000000
      RagDeathUpKick=170.000000

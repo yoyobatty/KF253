@@ -74,6 +74,13 @@ function RangedAttack(Actor A)
 
 simulated function int DoAnimAction( name AnimName )
 {
+	// Her head gone (only that asks her for HitF, which her mesh calls HitReactionF): the flinch ends a scream begun
+	if( AnimName=='HitF' )
+	{
+		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
+		PlayAnim(KFHitFront,, 0.1, 1);
+		return 1;
+	}
 	if( AnimName=='Siren_Scream' || AnimName=='Siren_Bite' )
 	{
 		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
@@ -91,6 +98,8 @@ simulated function SpawnTwoShots()
       // Shake nearby players screens
 	local PlayerController LocalPlayer;
 
+	if( bDecapitated )
+		return;
 	LocalPlayer = Level.GetLocalPlayerController();
 	if ( LocalPlayer!=None && (VSize(Location-LocalPlayer.ViewTarget.Location)<ScreamRadius) && FastTrace(Location,LocalPlayer.ViewTarget.Location) )
 		LocalPlayer.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
@@ -190,7 +199,7 @@ defaultproperties
 	RunAnim=""
 	ScreamRadius=700
 	ScreamDamageType=Class'KFMod.SirenScreamDamage'
-	ScreamForce=-50000
+	ScreamForce=-25000
 	RotMag=(X=200.000000,Y=200.000000,Z=200.000000)
 	RotRate=(X=500.000000,Y=500.000000,Z=500.000000)
 	RotTime=3.500000

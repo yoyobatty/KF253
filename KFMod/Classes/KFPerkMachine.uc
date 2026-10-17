@@ -67,5 +67,5 @@ defaultproperties
 {
 	Cost=2000
 	NotEnoughPointsMessage="Not enough dosh!"
-	PurchaseSound=Sound'CODSounds.ui_buygeneric01'
+	PurchaseSound=Sound'PatchSounds.canopen1-1'
 }

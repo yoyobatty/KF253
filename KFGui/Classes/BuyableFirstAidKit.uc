@@ -8,7 +8,7 @@ function bool CanUseThis(Pawn p)
     if (p == None)
       return false;
 
-    return( p.Health<100);
+    return( p.Health<p.HealthMax);
 }
 function bool HasMe(Pawn p)
 {
@@ -24,5 +24,5 @@ defaultproperties
      myShowMesh=StaticMesh'KillingFloorStatics.FirstAidKit'
      cost=150
      ItemName="First Aid Kit"
-     Description="Contains morphine, bandages, anti-biotics, and a variety of other goodies to bring a wounded soldier back up to speed.                                                                                HEALTH + 50"
+     Description="Contains morphine, bandages, anti-biotics, and a variety of other goodies to bring a wounded soldier back up to speed.                                                                                Heals to full health. The price depends on how much health is missing."
 }

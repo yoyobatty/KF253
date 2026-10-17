@@ -34,10 +34,15 @@ function ZombieMoan()
 
 function bool DoPounce()
 {
+	local vector Aim;
+
 	if ( bIsCrouched || bWantsToCrouch || (Physics != PHYS_Walking) || VSize(Location - Controller.Target.Location) > (MeleeRange * 5) )
 		return false;
 
-	Velocity = Normal(Controller.Target.Location-Location)*PounceSpeed;
+	Aim = Controller.Target.Location;
+	if ( CrawlerController(Controller) != None )
+		Aim = CrawlerController(Controller).PounceSpot(Controller.Target);
+	Velocity = Normal(Aim-Location)*PounceSpeed;
 	Velocity.Z = JumpZ;
 	SetPhysics(PHYS_Falling);
 	ZombieSpringAnim();
