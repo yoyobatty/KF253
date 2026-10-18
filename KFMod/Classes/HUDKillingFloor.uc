@@ -162,6 +162,8 @@ var 	array<KFDoorMover>		DoorCache;
 var string CriticalPrompt;      // (Zombies) a use prompt kept up as a critical message, while it lasts
 var float CriticalPromptFade;   // that message fades out over this long once the prompt goes
 
+var KFNightVision NightVision;  // the Commando's night vision, drawn over the view and the weapon (KFPlayerController.bNightVision)
+
 simulated function PostBeginPlay()
 {
 	if( MyColorMod==None )
@@ -329,7 +331,26 @@ simulated function Destroyed()
 	}
 	if( Dread!=None )
 		Dread.Destroy();
+	if( NightVision!=None )
+		NightVision.Destroy();
 	Super.Destroyed();
+}
+
+// Night vision over the view and the weapon, under the HUD: while the player's own controller has it on and may
+simulated function DrawNightVision( Canvas C )
+{
+	local KFPlayerController KPC;
+
+	KPC = KFPlayerController(PlayerOwner);
+	if( KPC!=None && KPC.bNightVision && PawnOwner!=None && PawnOwner==KPC.Pawn && KPC.NightVisionAllowed() )
+	{
+		if( NightVision==None )
+			NightVision = Spawn(class'KFNightVision', self);
+		if( NightVision!=None )
+			NightVision.Draw(C, KPC);
+	}
+	else if( NightVision!=None && NightVision.bActive )
+		NightVision.Off();
 }
 
 // Take it out.
@@ -1316,6 +1337,7 @@ simulated event PostRender( canvas Canvas )
 		else
 			CanvasDrawActors( Canvas, false );
 	}
+	DrawNightVision(Canvas);
 
 	if ( PawnOwner != None && PawnOwner.bSpecialHUD )
 		PawnOwner.DrawHud(Canvas);

@@ -10,5 +10,6 @@ defaultproperties
      KeyData(5)=(Alias="ThrowGrenade",KeyLabel="Throw Grenade")
      KeyData(6)=(Alias="TossCash",KeyLabel="Toss Cash")
      KeyData(7)=(Alias="QuickHeal",KeyLabel="Quick Heal")
+     KeyData(8)=(Alias="TorchKey | onrelease TorchKeyRelease",KeyLabel="Flashlight / Night Vision (hold)")
 }
 

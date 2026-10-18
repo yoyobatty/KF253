@@ -53,6 +53,18 @@ var input byte bUseKey;
 var float UseHoldTime, NextUseSendTime;
 var() float UseSendInterval;
 
+// The flashlight key (F; KFGui.KFKeyBindings): a press takes out the 9mm and turns its light on, or switches the light
+// of the 9mm in hand. A Commando holding it TorchHoldTime switches night vision instead (KFNightVision, drawn by the
+// HUD), so for a Commando the press counts when the key comes up.
+var bool bNightVision;              // (this machine) night vision on
+var bool bTorchKeyDown, bTorchKeyHeld;
+var float TorchKeyHeldFor;          // real seconds the key has been down
+var Weapon TorchDraw;               // the 9mm being taken out, its light to go on once it is up
+var float TorchDrawUntil;
+var() float TorchHoldTime;
+var() Sound NightVisionOnSound, NightVisionOffSound;
+var() float NightVisionVolume;
+
 // View punch, after Half-Life 2: weapons call ViewPunch, a spring swings the view back to the player's aim.
 var vector PunchAngle;         // Current punch in rotator units (X pitch, Y yaw)
 var vector PunchVelocity;      // Its speed, units a second
@@ -84,7 +96,8 @@ replication
 		NetPlayMusic, NetStopMusic,ClientSwitchToBestMeleeWeapon,ShowLobbyMenu,ClientReceiveStat,StatsFinished,ClientGetStats;
 
 	reliable if( Role < ROLE_Authority )
-		KFSwitchToBestWeapon,ServerSetGRIPendingBots,ServerSetTempBotName,GRIKillBotCall,SelectVeterancy,ServerSendStats,UpdateStatsScreen,ServerSetWantsSprint;
+		KFSwitchToBestWeapon,ServerSetGRIPendingBots,ServerSetTempBotName,GRIKillBotCall,SelectVeterancy,ServerSendStats,UpdateStatsScreen,ServerSetWantsSprint,
+		ServerTorchLight;
 
 	unreliable if( Role < ROLE_Authority )
 		ServerAccumulateUse;
@@ -237,6 +250,155 @@ exec function ToggleTorch()
 {
 	if (pawn.Weapon != none && KFWeapon(pawn.Weapon).bTorchEnabled)
 		KFWeapon(pawn.Weapon).LightFire();
+}
+
+// The flashlight key, pressed (see TorchHoldTime)
+exec function TorchKey()
+{
+	if ( Pawn == None || Pawn.Health <= 0 )
+		return;
+	if ( !NightVisionAllowed() )
+	{
+		TorchPress();
+		return;
+	}
+	bTorchKeyDown = true;
+	bTorchKeyHeld = false;
+	TorchKeyHeldFor = 0.0;
+}
+
+exec function TorchKeyRelease()
+{
+	if ( !bTorchKeyDown )
+		return;
+	bTorchKeyDown = false;
+	if ( !bTorchKeyHeld )
+		TorchPress();
+}
+
+// Held long enough: night vision on or off. Taking out the 9mm: its light goes on once it is up.
+simulated function TorchKeyTick( float DeltaTime )
+{
+	if ( bTorchKeyDown && !bTorchKeyHeld )
+	{
+		TorchKeyHeldFor += DeltaTime / FMax(Level.TimeDilation, 0.01);
+		if ( TorchKeyHeldFor >= TorchHoldTime )
+		{
+			bTorchKeyHeld = true;
+			if ( NightVisionAllowed() )
+				SetNightVision(!bNightVision);
+		}
+	}
+	if ( bNightVision && !NightVisionAllowed() )
+		SetNightVision(false);
+	if ( TorchDraw == None )
+		return;
+	if ( Pawn == None || Pawn.Health <= 0 || Level.TimeSeconds > TorchDrawUntil
+		|| (Pawn.PendingWeapon != None && Pawn.PendingWeapon != TorchDraw) || TorchDraw.Owner != Pawn )
+		TorchDraw = None;
+	else if ( Pawn.Weapon == TorchDraw && Pawn.PendingWeapon == None && TorchDraw.ClientState == WS_ReadyToFire )
+	{
+		TorchDraw = None;
+		TorchLight(KFWeapon(Pawn.Weapon), true);
+	}
+}
+
+// A press that counts: the light of the 9mm in hand switched, or the 9mm taken out
+function TorchPress()
+{
+	local Weapon W;
+
+	if ( Pawn == None || Pawn.Health <= 0 || (KFPawn(Pawn) != None && (KFPawn(Pawn).SecondaryItem != None || KFPawn(Pawn).bThrowingNade)) )
+		return;
+	if ( KFWeapon(Pawn.Weapon) != None && KFWeapon(Pawn.Weapon).bTorchEnabled && Pawn.PendingWeapon == None )
+	{
+		TorchDraw = None;
+		TorchLight(KFWeapon(Pawn.Weapon), false);
+		return;
+	}
+	W = TorchWeapon();
+	if ( W == None )
+		return;
+	GetWeapon(W.Class);
+	// (in a game of one the switch can be over before GetWeapon returns)
+	if ( Pawn.PendingWeapon == W || Pawn.Weapon == W )
+	{
+		TorchDraw = W;
+		TorchDrawUntil = Level.TimeSeconds + 3.0;
+	}
+}
+
+// The carried weapon with a light: the 9mm (a pair if we have them), else any other
+function KFWeapon TorchWeapon()
+{
+	local Inventory Inv;
+	local KFWeapon W, Best;
+	local int Count;
+
+	for ( Inv = Pawn.Inventory; Inv != None && Count < 100; Inv = Inv.Inventory )
+	{
+		Count++;
+		W = KFWeapon(Inv);
+		if ( W == None || !W.bTorchEnabled )
+			continue;
+		if ( Dualies(W) != None )
+			return W;
+		if ( Single(W) != None || Best == None )
+			Best = W;
+	}
+	return Best;
+}
+
+// The server switches the light (just on, when bOnly); this machine plays the weapon's light switch animation
+function TorchLight( KFWeapon W, bool bOnly )
+{
+	local WeaponFire F;
+
+	if ( W == None )
+		return;
+	ServerTorchLight(bOnly);
+	F = W.GetFireMode(1);
+	if ( F != None && F.FireAnim != W.ModeSwitchAnim && W.HasAnim(F.FireAnim) )
+		W.PlayAnim(F.FireAnim, F.FireAnimRate, F.TweenTime);
+	else if ( Role < ROLE_Authority && W.HasAnim(W.ModeSwitchAnim) && W.GetFireMode(0) != None )
+		W.PlayAnim(W.ModeSwitchAnim, W.GetFireMode(0).FireAnimRate, W.GetFireMode(0).TweenTime);
+}
+
+function ServerTorchLight( bool bOnly )
+{
+	local KFWeapon W;
+
+	if ( Pawn == None || Pawn.Health <= 0 )
+		return;
+	W = KFWeapon(Pawn.Weapon);
+	if ( W == None || !W.bTorchEnabled || (bOnly && W.FlashLight != None && W.FlashLight.bHasLight) )
+		return;
+	W.ServerSpawnLight();
+	W.AdjustLightGraphic();
+}
+
+// Night vision is the Commando's, while alive
+simulated function bool NightVisionAllowed()
+{
+	local KFPlayerReplicationInfo KPRI;
+
+	KPRI = KFPlayerReplicationInfo(PlayerReplicationInfo);
+	return ( Pawn != None && Pawn.Health > 0 && KPRI != None && KPRI.ClientVeteranSkill != None
+		&& ClassIsChildOf(KPRI.ClientVeteranSkill, class'KFVetCommando') );
+}
+
+// (simulated, so its sound is for this machine only, a listen server's host included)
+simulated function SetNightVision( bool bOn )
+{
+	if ( bOn == bNightVision )
+		return;
+	bNightVision = bOn;
+	if ( ViewTarget == None )
+		return;
+	if ( bOn && NightVisionOnSound != None )
+		ViewTarget.PlaySound(NightVisionOnSound, SLOT_None, NightVisionVolume, false, 200.0, 1.0, false);
+	else if ( !bOn && NightVisionOffSound != None )
+		ViewTarget.PlaySound(NightVisionOffSound, SLOT_None, NightVisionVolume, false, 200.0, 1.0, false);
 }
 
 function int FractionCorrection(float in, out float fraction) {
@@ -917,6 +1079,7 @@ event PlayerTick( float DeltaTime )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
     Super.PlayerTick(DeltaTime);
     UpdateViewPunch(DeltaTime);
+    TorchKeyTick(DeltaTime);
     if (bUseKey != 0)
     {
         UseHoldTime += DeltaTime;
@@ -1613,6 +1776,10 @@ defaultproperties
 	bGunShakeEngineTurn=True
 	CashThrowAmount=50
 	UseSendInterval=0.100000
+	TorchHoldTime=0.350000
+	NightVisionOnSound=Sound'WeaponSounds.LightningGun.LightningZoomIn'
+	NightVisionOffSound=Sound'WeaponSounds.LightningGun.LightningZoomOut'
+	NightVisionVolume=0.500000
 	PunchDamping=9.000000
 	PunchSpring=65.000000
 	PunchImpulse=20.000000

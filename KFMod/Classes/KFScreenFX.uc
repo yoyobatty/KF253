@@ -52,6 +52,9 @@ var() float					BlurFadeTime;		// seconds for a full blur to clear
 var() float					BlurPeak;			// the most a hit, or hits in a row, can blur (1 is all of it)
 var() float					VividPerRich;		// how many of VividMuch, over 100, add the whole of the view's own square
 var bool					bMenu;				// in a level with no game's HUD (the main menu's): more colour only, no glow
+var float					NightGlow;			// how far the night vision is on (KFNightVision sets it every frame): lights glow more
+var() float					NightGlowGain;		// at full night vision the glow is this much stronger, as a share of BloomGain...
+var() int					NightGlowCut;		// ...and starts this much darker, of 255
 var() globalconfig bool		bTorch;				// the player's own tactical light worked out at every pixel, with shadows (KFTorch reads it)
 var() globalconfig bool		bMuzzleLight;		// the player's own shots light what is ahead, with shadows (KFWeapon.ShotLight, KFTorch's light)
 
@@ -339,18 +342,20 @@ simulated function SetVivid()
 simulated function SetGain()
 {
 	local int i, V;
+	local float G;
 
+	G = BloomGain * (1.0 + NightGlowGain * NightGlow);
 	for (i = 0; i < 3; i++)
 	{
 		if (i == 0)
-			V = Clamp(int(255.0 * 0.8 * BloomGain), 0, 255);
+			V = Clamp(int(255.0 * 0.8 * G), 0, 255);
 		else if (i == 1)
-			V = Clamp(int(255.0 * 0.7 * BloomGain), 0, 255);
+			V = Clamp(int(255.0 * 0.7 * G), 0, 255);
 		else
-			V = Clamp(int(255.0 * 0.5 * BloomGain), 0, 255);
+			V = Clamp(int(255.0 * 0.5 * G), 0, 255);
 		Gain[i].Color = class'Canvas'.static.MakeColor(V, V, V, 255);
 	}
-	V = Clamp(BloomCut, 0, 255);
+	V = Clamp(BloomCut - int(float(NightGlowCut) * NightGlow), 0, 255);
 	CutTone.Color.R = V;
 	CutTone.Color.G = V;
 	CutTone.Color.B = V;
@@ -566,6 +571,8 @@ defaultproperties
      BlurHold=0.200000
      BlurFadeTime=1.400000
      BlurPeak=0.850000
+     NightGlowGain=0.350000
+     NightGlowCut=30
      DrawType=DT_None
      bHidden=True
      RemoteRole=ROLE_None
