@@ -107,6 +107,26 @@ event PreBeginPlay()
 	SetTimer(1.5,true);
 }
 
+// A player's walls go to HitWall below (a bot's go to its NotifyHitWall)
+function PossessedBy(Controller C)
+{
+	Super.PossessedBy(C);
+	bDirectHitWall = (PlayerController(C)!=None);
+}
+
+// Walking into glass bumps it here, as the engine does not: between waves a player meets the glass's stand-in
+// (KFGlassBlocker), which is world geometry and bumps nothing, and a player already up against a pane gets no bump
+// for pushing on it
+event HitWall( vector HitNormal, actor Wall )
+{
+	if( Role<ROLE_Authority )
+		return;
+	if( KFGlassBlocker(Wall)!=None )
+		Wall = KFGlassBlocker(Wall).Glass;
+	if( KFGlassMover(Wall)!=None )
+		Wall.Bump(Self);
+}
+
 Simulated function tick(float DeltaTime)
 {
 	super.Tick(DeltaTime);
