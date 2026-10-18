@@ -19,6 +19,14 @@ var float LastFallbackMoveTime;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
 
+// Zombie zones (volumes that stop human pawns but not specimens, as KFZombieZoneVolume): the paths are built through
+// them, so the links that cross one, each with its zone, are shut for our own path searches and reach checks
+// (ShutZoneLinks to OpenZoneLinks).
+var array<ReachSpec> ZoneLinkPath, ShutLinks;
+var array<BlockingVolume> ZoneLinkZone;
+var bool bZoneLinksFound;
+var int ZoneShutDepth;
+
 // Internal to state
 var NavigationPoint ShoppingPath;
 var KFDoorMover TargetDoor;
@@ -1092,7 +1100,18 @@ final function AddEscapeSources( float BotSpeed )
 
 // The way out (see the note above). Sets MoveTarget to the node to run to now, EscapeGoal to where the way leads and
 // EscapeBlocker to the specimen that comes closest to cutting the first leg. False if there is no path node to use.
+// Not through zombie zones: no link through one is usable, and no node beyond one counts as in reach.
 final function bool PlanEscape()
+{
+	local bool bFound;
+
+	ShutZoneLinks();
+	bFound = PlanEscapeRoute();
+	OpenZoneLinks();
+	return bFound;
+}
+
+final function bool PlanEscapeRoute()
 {
 	local NavigationPoint N, E;
 	local ReachSpec Spec;
@@ -1400,7 +1419,7 @@ final function bool PickPathAway(vector Away)
 			}
 	}
 	for ( i=0; i<3; i++ )
-		if ( Cand[i] != None && ActorReachable(Cand[i]) )
+		if ( Cand[i] != None && CanReach(Cand[i]) )
 		{
 			MoveTarget = Cand[i];
 			return true;
@@ -1761,6 +1780,13 @@ function bool HuntRemainingSpecimens()
 function Tick(float DeltaTime)
 {
 	Super.Tick(DeltaTime);
+	// zombie zone links are only ever shut within one call: left shut, the specimens could not use them either
+	if ( ZoneShutDepth > 0 )
+	{
+		warn(GetHumanReadableName()$" left zombie zone links shut");
+		ZoneShutDepth = 1;
+		OpenZoneLinks();
+	}
 	if ( NextWedgeCheckTime < Level.TimeSeconds )
 	{
 		CheckWedged();
@@ -1885,7 +1911,9 @@ function bool FindInventoryGoal(float BestWeight)
 	local bool bFound;
 
 	SetLiftsBlocked(true);
+	ShutZoneLinks();
 	bFound = Super.FindInventoryGoal(BestWeight);
+	OpenZoneLinks();
 	SetLiftsBlocked(false);
 	return bFound;
 }
@@ -2444,7 +2472,7 @@ final function bool FindPickupSwap()
 			BestGain = Gain;
 		}
 	}
-	if ( SwapPickup == None || (!ActorReachable(SwapPickup) && !FindBestPathToward(SwapPickup, true, false)) )
+	if ( SwapPickup == None || (!CanReach(SwapPickup) && !FindBestPathToward(SwapPickup, true, false)) )
 	{
 		SwapPickup = None;
 		SwapDrops.Length = 0;
@@ -2755,8 +2783,7 @@ final function Actor GetRandomDest()
 	local Actor Result;
 
 	// Setup special path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = true;
+	ShutZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
 		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
@@ -2775,8 +2802,7 @@ final function Actor GetRandomDest()
 	}
 
 	// Un-setup path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = false;
+	OpenZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 		DoorPaths[i].Path.CollisionRadius += 10000;
 
@@ -2787,15 +2813,14 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 {
 	local int i;
 
-	if ( !bCheckedReach && ActorReachable(A) )
+	if ( !bCheckedReach && CanReach(A) )
 	{
 		MoveTarget = A;
 		return true;
 	}
 
 	// Setup special path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = true;
+	ShutZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
 		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
@@ -2809,8 +2834,7 @@ function bool FindBestPathToward(Actor A, bool bCheckedReach, bool bAllowDetour)
 		PreviousNavPath = None;
 
 	// Un-setup path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = false;
+	OpenZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 		DoorPaths[i].Path.CollisionRadius += 10000;
 
@@ -2822,8 +2846,7 @@ function bool FindBestPathTo( vector Dest )
 	local int i;
 
 	// Setup special path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = true;
+	ShutZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 	{
 		if( (DoorPaths[i].Door.bSealed || DoorPaths[i].Door.bTriggerTooFar || DoorPaths[i].Door.MyTrigger == None) && !DoorPaths[i].Door.bDoorIsDead )
@@ -2837,8 +2860,7 @@ function bool FindBestPathTo( vector Dest )
 		PreviousNavPath = None;
 
 	// Un-setup path finding.
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = false;
+	OpenZoneLinks();
 	for( i=0; i<DoorPaths.Length; ++i )
 		DoorPaths[i].Path.CollisionRadius += 10000;
 
@@ -3776,11 +3798,104 @@ final function bool VerifyBlockingVolume( BlockingVolume V )
 	return (bPlayers && !bMonsters);
 }
 
+// The path links that run through a zombie zone or end inside one. Worked out once and shared by the bots.
+final function FindZoneLinks()
+{
+	local Controller C;
+	local BlockingVolume V;
+	local array<BlockingVolume> Zones;
+	local NavigationPoint N;
+	local ReachSpec Spec;
+	local vector HL, HN;
+	local int i, k;
+
+	bZoneLinksFound = true;
+	for ( C=Level.ControllerList; C!=None; C=C.NextController )
+		if ( C != self && KFInvasionBot(C) != None && KFInvasionBot(C).bZoneLinksFound )
+		{
+			ZoneLinkPath = KFInvasionBot(C).ZoneLinkPath;
+			ZoneLinkZone = KFInvasionBot(C).ZoneLinkZone;
+			return;
+		}
+	foreach AllActors(class'BlockingVolume', V)
+		if ( VerifyBlockingVolume(V) )
+			Zones[Zones.Length] = V;
+	if ( Zones.Length == 0 )
+		return;
+	for ( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+		for ( k=0; k<N.PathList.Length; k++ )
+		{
+			Spec = N.PathList[k];
+			if ( Spec == None || Spec.End == None )
+				continue;
+			for ( i=0; i<Zones.Length; i++ )
+				if ( Zones[i].Encompasses(N) || Zones[i].Encompasses(Spec.End) || !Zones[i].TraceThisActor(HL, HN, Spec.End.Location, N.Location) )
+				{
+					ZoneLinkPath[ZoneLinkPath.Length] = Spec;
+					ZoneLinkZone[ZoneLinkZone.Length] = Zones[i];
+				}
+		}
+	log("Zombie zones:"@Zones.Length@"path links through them:"@ZoneLinkPath.Length);
+}
+
+// Shuts the ways through zombie zones until OpenZoneLinks: the links through a zone that is on (a trigger can switch
+// its collision) and the nodes we ran into one on the way to (TempBlockedPaths). Calls may nest.
+final function ShutZoneLinks()
+{
+	local int i;
+
+	if ( !bZoneLinksFound )
+		FindZoneLinks();
+	ZoneShutDepth++;
+	if ( ZoneShutDepth > 1 )
+		return;
+	for ( i=0; i<ZoneLinkPath.Length; i++ )
+		if ( ZoneLinkPath[i] != None && ZoneLinkZone[i] != None && ZoneLinkZone[i].bCollideActors && ZoneLinkZone[i].bBlockActors )
+		{
+			ZoneLinkPath[i].CollisionRadius -= 10000; // Pretend that no pawn is small enough to use this.
+			ShutLinks[ShutLinks.Length] = ZoneLinkPath[i];
+		}
+	for ( i=0; i<TempBlockedPaths.Length; i++ )
+		TempBlockedPaths[i].bBlocked = true;
+}
+
+final function OpenZoneLinks()
+{
+	local int i;
+
+	if ( ZoneShutDepth <= 0 )
+		return;
+	ZoneShutDepth--;
+	if ( ZoneShutDepth > 0 )
+		return;
+	for ( i=0; i<ShutLinks.Length; i++ )
+		if ( ShutLinks[i] != None )
+			ShutLinks[i].CollisionRadius += 10000;
+	ShutLinks.Length = 0;
+	for ( i=0; i<TempBlockedPaths.Length; i++ )
+		TempBlockedPaths[i].bBlocked = false;
+}
+
+// ActorReachable, but not across a zombie zone: the engine takes a path link from our anchor as walkable without
+// testing the walk.
+final function bool CanReach( Actor A )
+{
+	local bool bReach;
+
+	ShutZoneLinks();
+	bReach = ActorReachable(A);
+	OpenZoneLinks();
+	return bReach;
+}
+
 event bool NotifyHitWall(vector HitNormal, actor Wall)
 {
+	local vector HL, HN;
+
 	if( PreviousNavPath!=None )
 	{
-		if( VerifyBlockingVolume(BlockingVolume(Wall)) )
+		// (only a zone that stands between us and the node: scraping past one on the way to a node beside it says nothing)
+		if( VerifyBlockingVolume(BlockingVolume(Wall)) && !Wall.TraceThisActor(HL, HN, PreviousNavPath.Location, Pawn.Location) )
 		{
 			// debugf;
 			TempBlockedPaths.Insert(0,1);
@@ -4757,6 +4872,7 @@ Moving:
 	if ( bBenchDebug )
 		log("ESC t="$Level.TimeSeconds@PlayerReplicationInfo.PlayerName@"leg="$EscapeLegs@"to="$MoveTarget@"d="$int(VSize(MoveTarget.Location - Pawn.Location))
 			@"goal="$EscapeGoal@"m="$PlannedLegMargin@"nodes="$EscNode.Length@"crowd="$CrowdList.Length@"flee="$bEscapeFlee@"spd="$int(VSize(Pawn.Velocity)));
+	PreviousNavPath = NavigationPoint(MoveTarget);	// (NotifyHitWall: what a zombie zone stopped us reaching)
 	MoveToward(MoveTarget, EscapeFocus(),, true);
 	if ( bBenchDebug )
 		log("ESC done t="$Level.TimeSeconds@PlayerReplicationInfo.PlayerName@"left="$int(VSize(MoveTarget.Location - Pawn.Location))@"took="$(Level.TimeSeconds - LastFallbackMoveTime));
@@ -4791,7 +4907,10 @@ state FallBackOnPath
 Begin:
 	WaitForLanding();
 	if ( MoveTarget != None )
+	{
+		PreviousNavPath = NavigationPoint(MoveTarget);
 		MoveToward(MoveTarget, Enemy,, true);
+	}
 	WhatToDoNext(155);
 }
 
@@ -5043,14 +5162,14 @@ final function PickNextRetMove()
 				BestDist = Dist;
 			}
 		}
-		if( CurrentMov==None || !ActorReachable(CurrentMov) )
+		if( CurrentMov==None || !CanReach(CurrentMov) )
 			return;
 		MoveTarget = CurrentMov;
 		return;
 	}
 	if( VSize(CurrentMov.Location-Pawn.Location)>100.f )
 	{
-		if( ActorReachable(CurrentMov) )
+		if( CanReach(CurrentMov) )
 		{
 			MoveTarget = CurrentMov;
 			return;
@@ -5066,8 +5185,7 @@ final function PickNextRetMove()
 MoveFound:
 	MoveTarget = None;
 	//EnemyDir = Normal(Enemy.Location-Pawn.Location);
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = true;
+	ShutZoneLinks();
 	for( i=0; i<CurrentMov.PathList.Length; i++ )
 	{
 		N = CurrentMov.PathList[i].End;
@@ -5130,8 +5248,7 @@ MoveFound:
 				MoveTarget = TempCloud;
 		}
 	}
-	for( i=0; i<TempBlockedPaths.Length; ++i )
-		TempBlockedPaths[i].bBlocked = false;
+	OpenZoneLinks();
 	if( MoveTarget != None && NavigationPoint(MoveTarget) != None && TotalWeight > 0 && BestDist > 0 )
 		MoveTarget = None;
 	if( MoveTarget!=None )
@@ -6373,7 +6490,7 @@ KeepMoving:
         LastShopTime = level.TimeSeconds+15+FRand()*15;
         WhatToDoNext(152);
     }
-    if( ActorReachable(ShoppingPath) )
+    if( CanReach(ShoppingPath) )
         MoveToward(ShoppingPath,ShopVolumeActor,,true);
     else if( FindBestPathToward(ShoppingPath,true,false) )
     {
@@ -6464,7 +6581,7 @@ KeepMoving:
 		NextRecoverTime = Level.TimeSeconds + 30.f;
 		WhatToDoNext(37);
 	}
-	else if ( ActorReachable(PickupTarget) )
+	else if ( CanReach(PickupTarget) )
 	{
 		MoveToward(PickupTarget, PickupTarget);
 		Goto('KeepMoving');
@@ -6554,7 +6671,7 @@ Moving:
 		NextSwapCheckTime = Level.TimeSeconds + 6.f;
 		WhatToDoNext(60);
 	}
-	else if ( ActorReachable(SwapPickup) && DropSpot() )
+	else if ( CanReach(SwapPickup) && DropSpot() )
 	{
 		if ( VSize(Destination - Pawn.Location) > 16.f )
 			MoveTo(Destination, SwapPickup);
