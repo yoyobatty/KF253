@@ -15,7 +15,7 @@ simulated function bool AllowFire()
 		return false;
 	if(KFPawn(Instigator).bThrowingNade)
 		return false;
-	if(KFWeapon(Weapon).ClipLeft < 1)
+	if(KFWeapon(Weapon).FireClip(ThisModeNum) < 1)
 	{
 		if(Level.TimeSeconds - LastClickTime > FireRate)
 		{

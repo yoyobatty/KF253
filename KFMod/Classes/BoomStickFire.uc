@@ -16,11 +16,17 @@ simulated function bool AllowFire()
 	local KFWeapon W;
 
 	W = KFWeapon(Weapon);
-	if ( W == None || W.bIsReloading || W.ClipLeft < 1 )
+	if ( W == None || W.bIsReloading || Clip() < 1 )
 		return false;
 	if ( KFPawn(Instigator) != None && (KFPawn(Instigator).SecondaryItem != None || KFPawn(Instigator).bThrowingNade) )
 		return false;
-	return Weapon.AmmoAmount(ThisModeNum) > 0;
+	return KFWeapon(Weapon).FireAmmo(ThisModeNum) > 0;
+}
+
+// Shells loaded for this shot (KFWeapon.FireClip: on a network client, those at the press)
+simulated function int Clip()
+{
+	return KFWeapon(Weapon).FireClip(ThisModeNum);
 }
 
 function float MaxRange()
@@ -56,7 +62,7 @@ event ModeDoFire()
 		return;
 
 	W = KFWeapon(Weapon);
-	bFiringBoth = W.ClipLeft > 1 && (bBothBarrels || (BoomStick(Weapon) != None && BoomStick(Weapon).BotWantsBoth()));
+	bFiringBoth = Clip() > 1 && (bBothBarrels || (BoomStick(Weapon) != None && BoomStick(Weapon).BotWantsBoth()));
 	if ( bFiringBoth )
 	{
 		Load = 2;
@@ -65,7 +71,7 @@ event ModeDoFire()
 	else
 	{
 		Load = 1;
-		if ( W.ClipLeft > 1 )
+		if ( Clip() > 1 )
 			FireAnim = RightAnim;     // the right barrel goes first
 		else
 			FireAnim = LeftAnim;

@@ -90,7 +90,7 @@ function bool AllowFire()
 {
 	if( !KFWeapon(Weapon).bAimingRifle && PlayerController(Instigator.Controller)!=None ) // Only disallow this on human players
 		return false;
-	return ( Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire);
+	return ( KFWeapon(Weapon).FireAmmo(ThisModeNum) >= AmmoPerFire);
 }
 function ServerPlayFiring()
 {

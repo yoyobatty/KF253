@@ -47,7 +47,7 @@ simulated function bool AllowFire()
 	if(KFPawn(Instigator).bThrowingNade)
 		return false;
 
-	if(KFWeapon(Weapon).ClipLeft < 1)
+	if(KFWeapon(Weapon).FireClip(ThisModeNum) < 1)
 	{
 		if(Level.TimeSeconds - LastClickTime > FireRate)
 		{
@@ -61,7 +61,7 @@ simulated function bool AllowFire()
 		return false;
 	}
 
-	return Super.AllowFire();
+	return KFWeapon(Weapon).FireAmmo(ThisModeNum) >= AmmoPerFire;
 }
 
 function StopFiring()
@@ -216,6 +216,7 @@ event ModeDoFire()
     }
 	//log("ModeDoFire called on "$Weapon.GetHumanReadableName());
 	Super.ModeDoFire();
+	KFWeapon(Weapon).ShotDue[ThisModeNum] = 0;
 
     // Only start a new recoil if not already recoiling
     if (Instigator.IsLocallyControlled())

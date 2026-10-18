@@ -46,6 +46,8 @@ var bool bIsReloading, bReloadEffectDone;
 var bool bReloadQueued;			// R came while the last shot's cooldown ran: the reload starts as it ends
 var float ReloadQueuedUntil;	// (and is let go if it cannot start by then)
 var float DrawnTime;			// when BringUp last ran (see WeaponUp)
+var int ShotClip[2], ShotAmmo[2];	// network client: rounds loaded and ammo when a shot of each mode was started (see StartFire)
+var byte ShotDue[2];			// (that shot has not been let off here yet)
 
 var () float Weight; // how much does it weigh
 
@@ -456,14 +458,39 @@ simulated function bool StartFire(int Mode)
 	if( KFHumanPawn(Instigator)!=None && KFHumanPawn(Instigator).bIsDowned )
 		return false;
 
+	ShotDue[Mode] = 0;
 	RetVal = super.StartFire(Mode);
 
 	if( RetVal )
 	{
+		// A network client lets the shot off a frame after the press, and the server's answer to it (its emptier
+		// ClipLeft or ammo) can come in first; the shot was then refused here (no animation, or the empty click) while
+		// the server fired it. So the fire modes judge a started shot by what was loaded at the press (FireClip, FireAmmo).
+		if( Role < ROLE_Authority )
+		{
+			ShotClip[Mode] = ClipLeft;
+			ShotAmmo[Mode] = AmmoAmount(Mode);
+			ShotDue[Mode] = 1;
+		}
 		InterruptReload();
 	}
 
 	return RetVal;
+}
+
+// Rounds loaded, and ammo, for a shot of this mode (see StartFire)
+simulated function int FireClip(int Mode)
+{
+	if( Role < ROLE_Authority && ShotDue[Mode] > 0 )
+		return ShotClip[Mode];
+	return ClipLeft;
+}
+
+simulated function int FireAmmo(int Mode)
+{
+	if( Role < ROLE_Authority && ShotDue[Mode] > 0 )
+		return ShotAmmo[Mode];
+	return AmmoAmount(Mode);
 }
 
 // Interrupt the reload for single bullet insert weapons

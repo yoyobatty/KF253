@@ -9,7 +9,7 @@ var name FireAimingAnim;
 
 simulated function bool AllowFire()
 {
-	if( KFWeapon(Weapon).bIsReloading && KFWeapon(Weapon).ClipLeft < 2 )
+	if( KFWeapon(Weapon).bIsReloading && KFWeapon(Weapon).FireClip(ThisModeNum) < 2 )
 		return false;
 	if(KFPawn(Instigator).SecondaryItem!=none)
 		return false;    
@@ -21,12 +21,12 @@ simulated function bool AllowFire()
 		LastClickTime = Level.TimeSeconds;
 	}
 
-	if( KFWeapon(Weapon).ClipLeft < 1 )
+	if( KFWeapon(Weapon).FireClip(ThisModeNum) < 1 )
 	{
 		return false;
 	}
 
-	return super(WeaponFire).AllowFire();
+	return KFWeapon(Weapon).FireAmmo(ThisModeNum) >= AmmoPerFire;
 }
 
 function AimingSpeed()

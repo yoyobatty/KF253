@@ -2,7 +2,7 @@ class CrossbowFire extends KFShotgunFire;
 
 simulated function bool AllowFire()
 {
-	return (Weapon.AmmoAmount(ThisModeNum) >= AmmoPerFire);
+	return (KFWeapon(Weapon).FireAmmo(ThisModeNum) >= AmmoPerFire);
 }
 
 function float MaxRange()

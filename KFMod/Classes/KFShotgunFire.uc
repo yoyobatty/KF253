@@ -84,6 +84,8 @@ event ModeDoFire()
 	}
 	//log("ModeDoFire called on "$Weapon.GetHumanReadableName());
 	Super.ModeDoFire();
+	if ( KFWeapon(Weapon) != None )
+		KFWeapon(Weapon).ShotDue[ThisModeNum] = 0;
 
     // client
     if (Instigator.IsLocallyControlled())
@@ -111,7 +113,7 @@ function projectile SpawnProjectile(Vector Start, Rotator Dir)
 
 simulated function bool AllowFire()
 {
-	if( KFWeaponShotgun(Weapon).bIsReloading && KFWeaponShotgun(Weapon).ClipLeft < 2 )
+	if( KFWeaponShotgun(Weapon).bIsReloading && KFWeapon(Weapon).FireClip(ThisModeNum) < 2 )
 	{
 		//log(Instigator.GetHumanReadableName()$" couldn't fire because reload and small clip count on: "$Weapon.GetHumanReadableName());
 		return false;
@@ -127,13 +129,13 @@ simulated function bool AllowFire()
 		LastClickTime = Level.TimeSeconds;
 	}
 
-	if( KFWeaponShotgun(Weapon).ClipLeft < 1 )
+	if( KFWeapon(Weapon).FireClip(ThisModeNum) < 1 )
 	{
 		//log(Instigator.GetHumanReadableName()$" couldn't fire because small clip count "$Weapon.GetHumanReadableName());
 		return false;
 	}
 
-	return super(WeaponFire).AllowFire();
+	return KFWeapon(Weapon).FireAmmo(ThisModeNum) >= AmmoPerFire;
 }
 
 function PlayFiring()
