@@ -954,6 +954,10 @@ function bool PerformDodge(eDoubleClickDir DoubleClickMove, vector Dir, vector C
 // High damage was taken, make em fall over.
 function bool FlipOver()
 {
+	// (not a model without the knock-down, such as the Zombies mode's older ones: nothing played, so nothing ever let
+	// it go again)
+	if( !HasAnim('StunState') )
+		Return False;
 	if( Physics==PHYS_Falling )
 	{
 		SetPhysics(PHYS_Walking);
@@ -2105,7 +2109,8 @@ function DoorAttack(Actor A)
 
 function CorpseAttack(Actor A)
 {
-	if ( bShotAnim || Physics == PHYS_Swimming)
+	// (not a model without the feeding, as above for the knock-down)
+	if ( bShotAnim || Physics == PHYS_Swimming || !HasAnim('ZombieFeed') )
 		return;
 	Velocity.X = 0;
 	Velocity.Y = 0;
@@ -2131,7 +2136,7 @@ function RangedAttack(Actor A)
 }
 simulated event SetAnimAction(name NewAction)
 {
-	local int meleeAnimIndex;
+	local int meleeAnimIndex, Channel;
 
 	if( NewAction=='' )
 		Return;
@@ -2141,8 +2146,13 @@ simulated event SetAnimAction(name NewAction)
 		NewAction = meleeAnims[meleeAnimIndex];
 		CurrentDamtype = ZombieDamType[meleeAnimIndex];
 	}
-	ExpectingChannel = DoAnimAction(NewAction);
-	if( ExpectingChannel!=0 )
+	Channel = DoAnimAction(NewAction);
+	// A flinch does not take over from an action that holds the specimen (a knock-down, an attack, a scream): the
+	// flinch's end freed it, and it walked off sliding in the knock-down's pose or attacked from the floor. (Unless
+	// that action is no longer playing, so a lost animation end still lets it go.)
+	if( !bShotAnim || !IsFlinchAnim(NewAction) || !IsAnimating(ExpectingChannel) )
+		ExpectingChannel = Channel;
+	if( Channel!=0 )
 		bWaitForAnim = true;
 	else bPhysicsAnimUpdate = False;
 	if( Level.NetMode!=NM_Client )
@@ -2152,15 +2162,23 @@ simulated event SetAnimAction(name NewAction)
 		ResetAnimActTime = Level.TimeSeconds+0.3;
 	}
 }
+simulated function bool IsFlinchAnim( name AnimName )
+{
+	return AnimName=='HitF' || AnimName=='HitF2' || AnimName=='HitF3' || AnimName==KFHitFront || AnimName==KFHitBack
+		|| AnimName==KFHitRight || AnimName==KFHitLeft;
+}
+
 simulated function int DoAnimAction( name AnimName )
 {
-	if( AnimName=='HitF' || AnimName=='HitF2' || AnimName=='HitF3' || AnimName==KFHitFront || AnimName==KFHitBack || AnimName==KFHitRight
-	 || AnimName==KFHitLeft )
+	if( IsFlinchAnim(AnimName) )
 	{
 		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
 		PlayAnim(AnimName,, 0.0, 1);
 		Return 1;
 	}
+	// (knocked over: an attack under way over the upper body stops, or it swung on, and struck, from the floor)
+	if( AnimName=='StunState' )
+		StopAnimating(true);
 	PlayAnim(AnimName,,0.1);
 	Return 0;
 }
@@ -2467,6 +2485,37 @@ function OldPlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<D
 }
 
 // New Hit FX for Zombies!
+// On a dedicated server the stock test first puts the idle pose on channel 0, as its guess at what clients show (the
+// server plays no movement animations). At every hit that cut short a whole-body action playing there (a knock-down,
+// an attack, a feed), and the idle's end let the specimen go: clients saw it slide along in the action's pose. Such an
+// action plays on the server as well, so a specimen in one is tested in that pose, which is what clients show.
+function bool IsHeadShot(vector loc, vector ray, float AdditionalScale)
+{
+	local coords C;
+	local vector HeadLoc, B, M, diff;
+	local float t, DotMM, Distance;
+
+	if( Level.NetMode!=NM_DedicatedServer || HeadBone=='' || !IsAnimating(0) )
+		return Super.IsHeadShot(loc, ray, AdditionalScale);
+
+	C = GetBoneCoords(HeadBone);
+	HeadLoc = C.Origin + (HeadHeight * HeadScale * AdditionalScale * C.XAxis);
+	B = loc;
+	M = ray * (2.0 * CollisionHeight + 2.0 * CollisionRadius);
+	diff = HeadLoc - B;
+	t = M Dot diff;
+	if( t>0 )
+	{
+		DotMM = M dot M;
+		if( t<DotMM )
+			diff = diff - (t / DotMM) * M;
+		else
+			diff -= M;
+	}
+	Distance = Sqrt(diff Dot diff);
+	return (Distance < (HeadRadius * HeadScale * AdditionalScale));
+}
+
 function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> damageType, vector Momentum)
 {
 	local Vector HitNormal;

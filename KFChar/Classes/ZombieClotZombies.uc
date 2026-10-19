@@ -11,6 +11,27 @@ simulated function PostBeginPlay()
 	damageRand = 0;
 }
 
+// Its claws are whole-body animations (the clot's grapple is over the upper body only, so that one walks on while it
+// grabs): it stops to swing, as other specimens do, or it slid along in the swing. (The clot's Tick, left out here,
+// is the grapple's: it pushed the clot on at the target all through an attack.)
+simulated function Tick(float DeltaTime)
+{
+	Super(KFMonster).Tick(DeltaTime);
+}
+
+function RangedAttack(Actor A)
+{
+	if ( bShotAnim || Physics == PHYS_Swimming )
+		return;
+	if ( CanAttack(A) )
+	{
+		bShotAnim = true;
+		SetAnimAction('Claw');
+		Controller.bPreparingMove = true;
+		Acceleration = vect(0,0,0);
+	}
+}
+
 function ClawDamageTarget()
 {
 	if( Level.TimeSeconds < NextClawTime )
@@ -30,7 +51,8 @@ simulated function AnimEnd(int Channel)
 	}
 	if( !bPhysicsAnimUpdate && Channel==0 )
 		bPhysicsAnimUpdate = Default.bPhysicsAnimUpdate;
-	Super(Skaarj).AnimEnd(Channel);
+	// (not Skaarj's: it goes on to Monster's, which lets the specimen go at the end of any animation, a flinch's too)
+	Super(xPawn).AnimEnd(Channel);
 }
 
 defaultproperties

@@ -87,9 +87,28 @@ simulated function int DoAnimAction( name AnimName )
 		PlayAnim(AnimName,, 0.1, 1);
 		return 1;
 	}
+	// A flinch goes over her upper body as on the others; none while a scream or a bite has it (a hit does not cut those
+	// short). Over her whole body it stopped her legs while she walked on, screaming or not, and she slid along.
+	if( AnimName==KFHitFront || AnimName==KFHitBack || AnimName==KFHitLeft || AnimName==KFHitRight )
+	{
+		if( ScreamingOrBiting() )
+			return 1;
+		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
+		PlayAnim(AnimName,, 0.0, 1);
+		return 1;
+	}
 
 	PlayAnim(AnimName,,0.1);
 	Return 0;
+}
+
+simulated function bool ScreamingOrBiting()
+{
+	local name Seq;
+	local float Frame, Rate;
+
+	GetAnimParams(1, Seq, Frame, Rate);
+	return IsAnimating(1) && (Seq=='Siren_Scream' || Seq=='Siren_Bite');
 }
 
 // Scream Time

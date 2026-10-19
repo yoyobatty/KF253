@@ -12,7 +12,8 @@ simulated function AnimEnd(int Channel)
 	}
 	if( !bPhysicsAnimUpdate && Channel==0 )
 		bPhysicsAnimUpdate = Default.bPhysicsAnimUpdate;
-	Super(Skaarj).AnimEnd(Channel);
+	// (not Skaarj's: it goes on to Monster's, which lets the specimen go at the end of any animation, a flinch's too)
+	Super(xPawn).AnimEnd(Channel);
 }
 
 defaultproperties

@@ -53,6 +53,14 @@ ignores EnemyNotVisible;
 			zombiefleshpound(pawn).SpinDamage(A);
 	}
 
+	// The spin is a whole-body animation: he spins where he stands (he slid along in it at his walking speed)
+	function Tick( float Delta )
+	{
+		Global.Tick(Delta);
+		if( Pawn!=None )
+			Pawn.Acceleration = vect(0,0,0);
+	}
+
 Begin:
 
 WaitForAnim:
