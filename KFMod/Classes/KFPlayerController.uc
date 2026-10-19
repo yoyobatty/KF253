@@ -12,6 +12,8 @@ var string LibraryListHeaders[LIBLIST_CATS];
 var bool bChoseStarting, bClassChosen;
 var bool IsInLobby;
 var globalconfig int CashThrowAmount; // Amount of cash a player throws per keypress.   Set in the player settings menu
+const HoldUseBind = "Button bUseKey | Use";	// use on a press, held for repairing and reviving (bUseKey)
+var globalconfig bool bKFKeysSet;		// the mod's own keys have been given to this player's setup (SetUpKFKeys), once
 
 var KFMusicInteraction KFInterAct;
 var string DelayedSongToPlay;
@@ -112,6 +114,65 @@ simulated function InitInputSystem()
     Super.InitInputSystem();
 
     InitFOV();
+    SetUpKFKeys();
+}
+
+// Once for each player: the mod's actions that have no key at all in his setup go on their usual keys, where that key
+// is free or still does what stock UT2004 gave it. (The mod's user ini starts as a copy of the player's UT2004 one, and
+// a setup made before these keys came knows none of them.) Plain Use keys also hold use, for repairing and reviving.
+simulated final function SetUpKFKeys()
+{
+	local int i;
+	local string KeyName, Bind;
+	local bool bHoldUse, bHeal, bMelee, bTorch;
+	local array<string> UseKeys;
+
+	if( bKFKeysSet )
+		return;
+	for( i=1; i<255; i++ )
+	{
+		KeyName = ConsoleCommand("KEYNAME" @ i);
+		if( KeyName=="" )
+			continue;
+		Bind = Caps(ConsoleCommand("KEYBINDING" @ KeyName));
+		// (the alias some setups use, written out so the controls menu shows it)
+		if( Bind=="BUSEKEY" )
+			ConsoleCommand("SET Input" @ KeyName @ HoldUseBind);
+		if( InStr(Bind, "BUSEKEY")>=0 )
+			bHoldUse = true;
+		else if( Bind=="USE" )
+			UseKeys[UseKeys.Length] = KeyName;
+		if( InStr(Bind, "QUICKHEAL")>=0 )
+			bHeal = true;
+		if( InStr(Bind, "QUICKMELEE")>=0 )
+			bMelee = true;
+		if( InStr(Bind, "TORCHKEY")>=0 )
+			bTorch = true;
+	}
+	if( !bHoldUse )
+	{
+		for( i=0; i<UseKeys.Length; i++ )
+			ConsoleCommand("SET Input" @ UseKeys[i] @ HoldUseBind);
+		if( UseKeys.Length==0 )
+			GiveKey("E", "Use", HoldUseBind);
+	}
+	if( !bHeal )
+		GiveKey("Q", "SwitchWeapon 10", "QuickHeal");
+	if( !bMelee )
+		GiveKey("V", "SpeechMenuToggle", "QuickMelee");
+	if( !bTorch )
+		GiveKey("F", "VoiceTalk", "TorchKey | onrelease TorchKeyRelease");
+	bKFKeysSet = true;
+	SaveConfig();
+}
+
+simulated final function GiveKey( string KeyName, string StockBind, string NewBind )
+{
+	local string Bind;
+
+	Bind = ConsoleCommand("KEYBINDING" @ KeyName);
+	if( Bind=="" || Bind~=StockBind )
+		ConsoleCommand("SET Input" @ KeyName @ NewBind);
 }
 
 // Set up the widescreen FOV values for this player

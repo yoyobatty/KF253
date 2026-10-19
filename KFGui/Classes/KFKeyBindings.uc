@@ -11,5 +11,6 @@ defaultproperties
      KeyData(6)=(Alias="TossCash",KeyLabel="Toss Cash")
      KeyData(7)=(Alias="QuickHeal",KeyLabel="Quick Heal")
      KeyData(8)=(Alias="TorchKey | onrelease TorchKeyRelease",KeyLabel="Flashlight / Night Vision (hold)")
+     KeyData(9)=(Alias="QuickMelee",KeyLabel="Quick Melee (Zombies)")
 }
 
