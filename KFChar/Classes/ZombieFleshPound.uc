@@ -93,11 +93,17 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	//if (damageType == class 'DamTypeVomit')
 	//	Damage = 0; // nulled
 
-	if((Health - Damage) > 0)
+	// (the headshot test in KFMonster.TakeDamage goes by the shot's direction: with it zeroed here, a Fleshpound headshot only
+	// counted when the bullet ended inside the head. bNoHitPush takes the push away there, after the test.)
+	if( !bHeadDirFix && (Health - Damage) > 0 )
 		Momentum = vect(0,0,0) ;
 	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType);
 
-	TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage
+	// (a perk can count for less towards it: KFVeterancyTypes.RageShare)
+	if( KFPawn(instigatedBy) != None )
+		TwoSecondDamageTotal += int(float(OldHealth - Health) * KFPawn(instigatedBy).GetVeteran().static.RageShare(damageType));
+	else
+		TwoSecondDamageTotal += OldHealth - Health; // Corrected issue where only the Base Health is counted toward the FP's Rage
 
 	if (TwoSecondDamageTotal > RageDamageThreshold && !bChargingPlayer || bFrustrated)
 		StartCharging();
@@ -464,6 +470,7 @@ defaultproperties
 {
      RunAnim=""
      BlockDamageReduction=0.400000
+     bNoHitPush=True
      RotMag=(X=400.000000,Y=400.000000)
      RotRate=(X=400.000000,Y=400.000000,Z=400.000000)
      RotTime=2.500000

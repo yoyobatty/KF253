@@ -735,6 +735,21 @@ simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)
 }
 
 
+
+// For a shot in flight: is Other a player on the shooter's side? The shooter's team while he has one, else the team noted when
+// the shot was fired, so the shot of a player who has just died still passes his team-mates.
+static function bool OnShootersTeam( Actor Other, Pawn Shooter, int FiredTeam )
+{
+	local int T;
+
+	if ( KFHumanPawn(Other) == None )
+		return false;
+	T = FiredTeam;
+	if ( Shooter != None && Shooter.GetTeamNum() != 255 )
+		T = Shooter.GetTeamNum();
+	return T != 255 && KFHumanPawn(Other).GetTeamNum() == T;
+}
+
 defaultproperties
 {
 	JarRotateMag=1000.000000

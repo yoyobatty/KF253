@@ -1082,6 +1082,12 @@ State FireChaingun
 
 		SpawnChaingunFear(HL);
 	}
+	// Think, and fire while still at it (called as its own statement from the state code, since ChaingunThink can change state)
+	function ChaingunStep()
+	{
+		if( ChaingunThink() )
+			FireMGShot();
+	}
 	function bool NeedToTurnFor( rotator targ )
 	{
 		local int YawErr;
@@ -1097,8 +1103,10 @@ Begin:
             Acceleration = vect(0,0,0);
         if( !bFireAtWill && Level.TimeSeconds>MissileWindupEndTime )
             AnimEnd(0);
-        if( bFireAtWill && ChaingunThink() )
-            FireMGShot();
+        // (ChaingunThink can change state; called inside the condition here it stopped the game, "Critical: AActor::ProcessState",
+        // as the engine read the rest of the line from the new state's code. A state change from state code is a whole statement.)
+        if( bFireAtWill )
+            ChaingunStep();
         Sleep(ChaingunCurrentInterval);
     }
 }

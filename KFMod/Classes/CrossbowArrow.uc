@@ -8,6 +8,7 @@ var sound Arrow_hitarmor;
 var sound Arrow_hitflesh;
 
 var() float HeadShotDamageMult;
+var int ShooterTeam;	// the shooter's team when fired (KFHumanPawn.OnShootersTeam)
 
 var Actor ImpactActor;
 var Pawn IgnoreImpactPawn;
@@ -49,6 +50,8 @@ simulated function PostNetBeginPlay()
 simulated function PostBeginPlay()
 {
 	Super.PostBeginPlay();
+	if ( Instigator != None )
+		ShooterTeam = Instigator.GetTeamNum();
 	Velocity = Speed * Vector(Rotation);
 	if( PhysicsVolume.bWaterVolume )
 		Velocity*=0.65;
@@ -209,10 +212,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 		return;
 
 	// Don't allow hits on poeple on the same team
-    if ( KFHumanPawn(Other) != None && Instigator != None
-         && KFHumanPawn(Other).PlayerReplicationInfo != None && KFHumanPawn(Other).PlayerReplicationInfo.Team != None
-         && Instigator.PlayerReplicationInfo != None && Instigator.PlayerReplicationInfo.Team != None
-         && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
+    if ( class'KFHumanPawn'.static.OnShootersTeam(Other, Instigator, ShooterTeam) )
     {
         return;
     }
@@ -353,6 +353,7 @@ simulated function Destroyed()
 
 defaultproperties
 {
+     ShooterTeam=255
 	DamageTypeHeadShot=Class'KFMod.DamTypeCrossbowHeadShot'
 	Arrow_hitwall(0)=Sound'KFWeaponSound.bullethitflesh2'
 	Arrow_hitwall(1)=Sound'KFWeaponSound.bullethitflesh3'

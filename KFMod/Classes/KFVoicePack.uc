@@ -116,6 +116,8 @@ static function PlayerSpeech( name Type, int Index, string Callsign, Actor PackO
     */
 	//Log("PlayerSpeech: "$Type$" Ix:"$Index$" Callsign:"$Callsign$" Recip:"$Recipient);
 	Controller(PackOwner).SendVoiceMessage( Controller(PackOwner).PlayerReplicationInfo, none, Type, GetRandIndex(Type), 'TEAM' );
+	// the bots hear it too (the stock code passes only orders on to them)
+	class'KFInvasionBot'.static.TellBotsOfCall(Controller(PackOwner), Type);
 }
 
 static function byte GetRandIndex(name Type)

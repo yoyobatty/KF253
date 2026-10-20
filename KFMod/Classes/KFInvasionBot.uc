@@ -15,6 +15,8 @@ var float NextTargetCheck,NextMedicFireTime,NextNadeTimer,WeldAssistTimer;
 
 var byte HealState,OldMovesCount;
 var float RetreatTime,LastEnemyEncounter,LastChatTime,LastCalloutTime;
+var Pawn CalledOut;			// the big specimen this bot last called out
+var float NextHoldChat, LastHoldChat;
 var float LastFallbackMoveTime;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
@@ -26,6 +28,48 @@ var array<ReachSpec> ZoneLinkPath, ShutLinks;
 var array<BlockingVolume> ZoneLinkZone;
 var bool bZoneLinksFound;
 var int ZoneShutDepth;
+
+// Holding a place through a wave as players do (KFHoldPlan): a post in the held area and where to look from it
+var() bool bHoldSpots;
+var() float HoldReach;		// at the post when this close
+var() float HoldQuietTime;	// with nothing met for this long and specimens about, go and find them
+var() float HoldEarlyTime;	// trader time: at the spot with this many seconds left
+var() float HoldGlanceShare;	// at the post: share of looks down another way in
+var() bool bPostNades;			// at the post: the grenade decision of any other fight (TryNade)
+
+// Grenades, as players spend them
+var() bool bFragFP;				// a frag for a Fleshpound (FPToFrag), one at a time a Fleshpound, some kept for them in their waves
+var() int FragReserve;			// in a Fleshpound wave, frags kept for Fleshpounds (not thrown at other bunches)
+var KFMonster FragTarget;		// the Fleshpound our last frag was meant for, and when we went to throw it
+var float FragTime;
+
+// Weapons, as players use them
+var() bool bTacticalReload;		// a part-empty gun reloaded in a lull of the fight, not at the last round (TacticalReload)
+var() bool bAmmoRun;			// low on ammo in a wave: a box from the map near by (AmmoRunAssignment, state AmmoRun)
+var KFAmmoPickup AmmoRunTarget;
+var float NextAmmoRunTime, AmmoRunBestDist;
+var int AmmoRunStalls;
+
+// Retreats
+var() bool bRetreatToTeam;		// from a big one after us, back towards the nearest team-mate's guns, not just away (PickNextRetMove)
+
+// Pits
+var() bool bPitAware;			// no dodge jump over, and no step off a ledge into, a drop that would badly hurt or kill (PitBelow)
+var bool bPitBlockedFall;		// jumping was switched off for this tick, to stop a step off a ledge into a pit
+
+// Team-mates to players
+var() bool bAnswerCalls;		// a player's voice calls answered: Medic, Cover, Form up (HeardCall)
+var() bool bHumanFirst;			// a hurt player healed before a hurt bot (FindInjuredAlly)
+var Pawn MedicCallFor, CoverFor;	// who called for a medic, for cover; and until when we answer
+var float MedicCallUntil, CoverUntil;
+var NavigationPoint HoldNode, HoldFace;
+
+// Berserkers fighting the way players play them
+var() bool bZerkBile;		// bile is not run from unless hurt (the perk takes 80% less of it)
+var() bool bZerkRhythm;		// a step back as each blow lands, out of the reply, and in again
+var() bool bZerkGun;		// a Berserker shoots what hurts from afar (Sirens, the Patriarch) with his gun, as players carry one for them
+var float LastStepBackSwing;
+var vector ZerkBackSpot;
 
 // Internal to state
 var NavigationPoint ShoppingPath;
@@ -52,6 +96,7 @@ var float NextPerkSwitchTime;
 var bool bPerkCheckPending;
 var() bool bPerkSwitching;
 var() float PerkStay, PerkMedicNeed, PerkCrowd, PerkSwitchGap;
+var() bool bLateZerkSwap;		// a Berserker takes another perk for the waves with Fleshpounds in them
 
 // Trader: the way into the shop (FindShopEntry), steps walked in, the wave whose personality we have.
 var ShopVolume EntryShop;
@@ -102,6 +147,14 @@ var bool bWasWaveInProgress;
 var float NextPickupSearchTime;
 
 var KFNadeHealingExplosion NearbyHealCloud;
+
+// A Field Medic's healing grenade where specimens crowd the team, as players use it (bMedicCrowdHeal: CrowdHealTarget,
+// MedicHealNade): MedicHealCrowd or more specimens within MedicHealReach of a team-mate, or of himself, within MedicHealDist.
+var() bool bMedicCrowdHeal;
+var() int MedicHealCrowd;
+var() float MedicHealReach, MedicHealDist;
+var KFHumanPawn HealNadeTarget;		// for state NadeTarget: the team-mate (or ourselves) chosen by MedicHealNade
+var float NextHealNadeTime;			// no other one while the last one's cloud lasts
 
 // Where our own grenade is about to go off, and until when to stay away from it.
 var vector NadeDangerSpot;
@@ -539,6 +592,14 @@ function bool FindInjuredAlly()
 	local float BestDist;
 
 	InjuredAlly = None;
+	// (bAnswerCalls) the player who called for a medic, through a fight if need be
+	if( MedicCallFor != None && Level.TimeSeconds < MedicCallUntil && KFHumanPawn(MedicCallFor) != None && MedicCallFor.Health > 0
+		&& MedicCallFor.Health + KFHumanPawn(MedicCallFor).HealthToGive < MedicCallFor.HealthMax && MySyringe != None
+		&& MySyringe.ChargeBar() >= 0.6f && (FindNearestThreat(AllyDist, BestDist) == None || BestDist >= 200.f) )
+	{
+		InjuredAlly = KFHumanPawn(MedicCallFor);
+		return true;
+	}
 	if( ManyEnemiesAround(3, Pawn.Location) )
 		return false;
 	// not with a specimen about to reach us either: the syringe leaves us defenceless
@@ -563,6 +624,8 @@ function bool FindInjuredAlly()
 		AllyDist = VSize(Pawn.Location - aKFHPawn.Location);
 		if( AKFHPawn.Health<40 )
 			AllyDist*=0.5f;
+		if( bHumanFirst && PlayerController(aKFHPawn.Controller) != None )
+			AllyDist*=0.4f;
 		if( InjuredAlly==none || (AllyDist<BestDist) )
 		{
 			InjuredAlly = aKFHPawn;
@@ -607,6 +670,8 @@ function bool EnemyReallyScary()
         }
 		else if (M.IsA('ZombieFleshPound'))
 		{
+			// (every specimen spawns a little faster than its class default, for the difficulty, so this takes any Fleshpound
+			// after us within 1000, raging or not; tested against a true rage check, the early retreat did as well or better)
 			if (HPFactor > 0.5 && C.Enemy==Pawn && (D < 600.f || (D < 1000.f && M.GroundSpeed > M.default.GroundSpeed)))
 				return true;
 			DangerScore += 5.0 * HPFactor;
@@ -630,6 +695,68 @@ function bool EnemyReallyScary()
 	else ScaryThreshold = 10.f;
 
 	return (DangerScore >= ScaryThreshold);
+}
+
+// What hurts from afar: a Siren with her head on, the Patriarch, the specimens that shoot (a Berserker shoots these
+// with his gun while nothing is on top of him)
+final function bool RangedThreat( KFMonster M )
+{
+	if ( M == None || M.Health <= 0 )
+		return false;
+	if ( M.IsA('ZombieSiren') )
+		return !M.bDecapitated;
+	return M.IsA('ZombieBoss') || M.IsA('ZombieFleshPoundRange') || M.IsA('ZombieSoldier');
+}
+
+// A gun (not a blade, tool or grenade) with a round in it or in reserve
+final function bool HasLoadedGun()
+{
+	local Inventory Inv;
+	local KFWeapon W;
+
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W != None && !W.bMeleeWeapon && Welder(W) == None && Syringe(W) == None && Frag(W) == None && W.HasAmmo() )
+			return true;
+	}
+	return false;
+}
+
+// A Fleshpound or a Scrake within 1000 whose enemy we are
+final function bool BigOneAfterUs()
+{
+	local Controller C;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C.Enemy == Pawn && C.Pawn != None && C.Pawn.Health > 0 && (C.Pawn.IsA('ZombieFleshPound') || C.Pawn.IsA('ZombieScrake'))
+			&& VSize(C.Pawn.Location - Pawn.Location) < 1000.f )
+			return true;
+	return false;
+}
+
+// A Berserker's blow has just landed on what is in front of him: a step back out of its reply (players time their
+// hits this way), to ZerkBackSpot
+final function bool ZerkStepBackNow()
+{
+	local KFMeleeFire F;
+	local vector Back;
+
+	if ( !bZerkRhythm || Enemy == None || Pawn == None || Pawn.Physics != PHYS_Walking || Pawn.Weapon == None
+		|| !Pawn.Weapon.bMeleeWeapon || GetPerkName() != "Berserker" )
+		return false;
+	F = KFMeleeFire(Pawn.Weapon.GetFireMode(0));
+	if ( F == None || F.SwingTo <= LastStepBackSwing || Level.TimeSeconds < F.SwingTo || Level.TimeSeconds > F.SwingTo + 0.3 )
+		return false;
+	LastStepBackSwing = F.SwingTo;
+	if ( VSize(Enemy.Location - Pawn.Location) > Enemy.CollisionRadius + Pawn.CollisionRadius + 110.f )
+		return false;
+	Back = Pawn.Location + 90.f * Normal((Pawn.Location - Enemy.Location) * vect(1,1,0));
+	// clear behind us, with floor under the spot
+	if ( !FastTrace(Back, Pawn.Location) || FastTrace(Back - vect(0,0,80), Back) )
+		return false;
+	ZerkBackSpot = Back;
+	return true;
 }
 
 // The bot's perk name, "" if it has none (perks disabled).
@@ -1745,9 +1872,6 @@ final function ReloadIfLow()
 // instead of waiting around the squad leader. (Not when the leader is a player: then it is the player's call.)
 function bool HuntRemainingSpecimens()
 {
-	local Controller C;
-	local KFMonster M, Best;
-	local float D, BestD;
 	local KFGameType G;
 
 	G = KFGameType(Level.Game);
@@ -1755,8 +1879,17 @@ function bool HuntRemainingSpecimens()
 		|| NextHuntCheckTime > Level.TimeSeconds || Level.TimeSeconds - LastEnemyEncounter < 10.f
 		|| (Squad != None && PlayerController(Squad.SquadLeader) != None) )
 		return false;
-	NextHuntCheckTime = Level.TimeSeconds + 1.f;
+	return HuntNearestSpecimen();
+}
 
+// Off along the paths to the nearest specimen on our floor
+final function bool HuntNearestSpecimen()
+{
+	local Controller C;
+	local KFMonster M, Best;
+	local float D, BestD;
+
+	NextHuntCheckTime = Level.TimeSeconds + 1.f;
 	for ( C=Level.ControllerList; C!=None; C=C.nextController )
 	{
 		M = KFMonster(C.Pawn);
@@ -1780,6 +1913,13 @@ function bool HuntRemainingSpecimens()
 function Tick(float DeltaTime)
 {
 	Super.Tick(DeltaTime);
+	// (bPitAware) jumping back on after the tick it was off for (TacticalMove keeps it off)
+	if ( bPitBlockedFall )
+	{
+		bPitBlockedFall = false;
+		if ( Pawn != None && !IsInState('TacticalMove') )
+			Pawn.bCanJump = Pawn.JumpZ > 0;
+	}
 	// zombie zone links are only ever shut within one call: left shut, the specimens could not use them either
 	if ( ZoneShutDepth > 0 )
 	{
@@ -2058,7 +2198,8 @@ final function CheckBile()
 	if ( Pawn == None || Pawn.Health <= 0 || Pawn.Physics != PHYS_Walking || NextBileAvoidTime > Level.TimeSeconds
 		|| IsInState('AvoidBile') || IsInState('AvoidOwnNade') || IsInState('Dead') || IsInState('GameEnded') || IsInState('RoundEnded') )
 		return;
-	if ( InBile() )
+	// (a Berserker takes a fifth of it: not worth leaving a fight for unless hurt)
+	if ( InBile() && !(bZerkBile && GetPerkName() == "Berserker" && Pawn.Health > 40) )
 	{
 		GoalString = "Get out of the bile";
 		GotoState('AvoidBile');
@@ -2194,7 +2335,13 @@ function ExecuteWhatToDoNext()
 			GotoState('SwapForPickup');
 			return;
 		}
+		if ( AmmoRunAssignment(Threat, ThreatMargin) )
+			return;
+		if ( CoverAssignment() )
+			return;
 		if ( Enemy == None && HuntRemainingSpecimens() )
+			return;
+		if ( HoldAssignment() )
 			return;
 		if ( AssignSquadResponsibility() )
 		{
@@ -2656,8 +2803,33 @@ final function float PerkFit( class<KFVeterancyTypes> V )
 		Fit += PerkMedicNeed;
 	if ( V == KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill )
 		Fit += PerkStay;
+	if ( bLateZerkSwap && V.default.VeterancyName == "Berserker" && FleshpoundWave() )
+		Fit -= 2.0;
 	// a team does better with a spread of perks: a little less for each team-mate who has it already
 	return Fit - PerkCrowd * TeamOnPerk(V);
+}
+
+// The wave on (or next, in trader time) has Fleshpounds in its squads, or is the last.
+final function bool FleshpoundWave()
+{
+	local KFGameType G;
+	local int i, j, Bit;
+
+	G = KFGameType(Level.Game);
+	if ( G == None )
+		return false;
+	if ( G.WaveNum >= G.FinalWave || G.WaveNum >= ArrayCount(G.Waves) )
+		return true;
+	Bit = 1;
+	for ( i=0; i<G.InitSquads.Length; i++ )
+	{
+		if ( (Bit & G.Waves[G.WaveNum].WaveMask) != 0 )
+			for ( j=0; j<G.InitSquads[i].MSquad.Length; j++ )
+				if ( G.InitSquads[i].MSquad[j] != None && InStr(Caps(string(G.InitSquads[i].MSquad[j].Name)), "FLESHPOUND") >= 0 )
+					return true;
+		Bit *= 2;
+	}
+	return false;
 }
 
 // How many other living team-mates (players or bots) have this perk.
@@ -3548,6 +3720,11 @@ function float RateWeapon(Weapon W)
 		R*=1.5;
 	if( !W.bMeleeWeapon && Enemy!=None && VSize(Enemy.Location-Pawn.Location)>W.GetFireMode(0).MaxRange() )
 		R*=0.15;
+	// a Berserker shoots what hurts from afar with his gun rather than walk into it (players carry one for Sirens)
+	if ( bZerkGun && W.bMeleeWeapon && KFMonster(Enemy) != None && RangedThreat(KFMonster(Enemy))
+		&& VSize(Enemy.Location - Pawn.Location) > 350.f && GetPerkName() == "Berserker" && LineOfSightTo(Enemy)
+		&& CountThreatsWithin(300.f) == 0 )
+		R *= 0.3;
 	if ( W.bMeleeWeapon && Enemy != None && GetPerkName() != "Berserker" )
 	{
 		// Not a Berserker: a blade is for a lone weak specimen or for when the guns are dry, and not at all when hurt.
@@ -3874,6 +4051,138 @@ final function OpenZoneLinks()
 	ShutLinks.Length = 0;
 	for ( i=0; i<TempBlockedPaths.Length; i++ )
 		TempBlockedPaths[i].bBlocked = false;
+}
+
+// During a wave the team holds one place (KFHoldPlan): the map's proven spot, or round a player who leads and stays
+// put. Each bot goes to its post and watches its way in from there, shooting what comes and not going after what it
+// cannot see. What is close is dealt with as ever, before this (ExecuteWhatToDoNext), and the bot comes back to its
+// post after, once the way there is clear.
+final function bool HoldAssignment()
+{
+	local KFHoldPlan Plan;
+	local KFMonster Threat;
+	local float ThreatDist, ThreatMargin;
+
+	if ( !bHoldSpots || KFGameType(Level.Game) == None )
+		return false;
+	// a wave on, or the end of trader time: at the spot before the specimens come, as players are
+	if ( !KFGameType(Level.Game).bWaveInProgress && KFGameType(Level.Game).WaveCountDown > HoldEarlyTime )
+		return false;
+	Plan = class'KFHoldPlan'.static.Get(self);
+	if ( Plan == None )
+		return false;
+	// a player leading: posts round him once he stays put (until then, follow him as ever); with him dead, hold on where
+	// we were; else the team's own spot
+	if ( PlayerController(Squad.SquadLeader) != None )
+	{
+		if ( Squad.SquadLeader.Pawn != None && Squad.SquadLeader.Pawn.Health > 0 )
+		{
+			if ( !Plan.LeaderSettled(Squad.SquadLeader.Pawn) )
+				return false;
+		}
+		else if ( !Plan.bReady && !Plan.Ready() )
+			return false;
+	}
+	else if ( !Plan.Ready() )
+		return false;
+	if ( !Plan.PostFor(self, HoldNode, HoldFace) )
+		return false;
+	// no gun with ammo and nothing on us: go and restock (the squad's errands look for ammo and guns), as players do, and
+	// come back after
+	if ( Enemy == None && NeedWeapon() )
+		return false;
+	// a fight on: the gun out (the knife may be out from the run here)
+	if ( Enemy != None )
+		SwitchToBestWeapon();
+	// nothing has come for a while with specimens about: go and find them, as players do (a spot off the specimens'
+	// way stalls the wave), then come back
+	if ( Enemy == None && Level.TimeSeconds - LastEnemyEncounter > HoldQuietTime && KFGameType(Level.Game).NumMonsters > 0
+		&& NextHuntCheckTime < Level.TimeSeconds && HuntNearestSpecimen() )
+	{
+		GoalString = "Hold: quiet too long, going to find them";
+		HoldChat(2);
+		return true;
+	}
+	if ( Enemy != None && EnemyVisible() && VSize(HoldNode.Location - Pawn.Location) < HoldReach )
+	{
+		if ( HoldingMelee() )
+			ChooseAttackMode();
+		else
+		{
+			if ( NextTargetCheck < Level.TimeSeconds )
+			{
+				FindBetterTarget();
+				NextTargetCheck = Level.TimeSeconds + 1.f;
+			}
+			if ( MedicHealNade() )
+				return true;
+			Threat = FindNearestThreat(ThreatDist, ThreatMargin);
+			// a grenade from the post as in any other fight (the bot shoots from here without going through FightEnemy)
+			if ( bPostNades && TryNade(Threat, ThreatMargin) )
+				return true;
+			TacticalReload(Threat, ThreatMargin);
+			GoalString = "Hold: shoot from my post";
+			DoRangedAttackOn(Enemy);
+		}
+		return true;
+	}
+	// off the post with a fight on: back to it only when the way there does not lead into the specimens (players give
+	// ground and take the spot back once it is clear, they do not walk into what pushed them off it)
+	if ( !HoldWayClear() )
+	{
+		HoldChat(1);
+		return false;
+	}
+	GoalString = "Hold: my post "$HoldNode.Name$", watching "$HoldFace.Name;
+	GotoState('HoldPost');
+	return true;
+}
+
+// Where to look from the post: down our own way in, now and then down another (players keep an eye on every way in)
+final function Actor HoldGlance()
+{
+	local KFHoldPlan Plan;
+	local NavigationPoint F;
+
+	if ( FRand() < HoldGlanceShare )
+	{
+		Plan = class'KFHoldPlan'.static.Get(self);
+		if ( Plan != None )
+			F = Plan.OtherFace(HoldFace);
+	}
+	if ( F != None )
+		return F;
+	return HoldFace;
+}
+
+// The first of the team at its post says so (once a spot)
+final function AnnounceHold()
+{
+	local KFHoldPlan Plan;
+
+	Plan = class'KFHoldPlan'.static.Get(self);
+	if ( Plan != None && Plan.bReady && Plan.AnnouncedCenter != Plan.Center )
+	{
+		Plan.AnnouncedCenter = Plan.Center;
+		HoldChat(0);
+	}
+}
+
+// The way back to our post clear of the fight: no enemy, or no specimen in sight (or our enemy) about as near the post
+// as we are, or nearer.
+final function bool HoldWayClear()
+{
+	local Controller C;
+	local float D;
+
+	if ( Enemy == None )
+		return true;
+	D = VSize(HoldNode.Location - Pawn.Location);
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( KFMonster(C.Pawn) != None && C.Pawn.Health > 0 && VSize(C.Pawn.Location - HoldNode.Location) < D + 300.f
+			&& VSize(C.Pawn.Location - Pawn.Location) < 1500.f && (C.Pawn == Enemy || LineOfSightTo(C.Pawn)) )
+			return false;
+	return true;
 }
 
 // ActorReachable, but not across a zombie zone: the engine takes a path link from our anchor as walkable without
@@ -4255,7 +4564,8 @@ final function SendChatMsg( string S )
 final function MaybeCalloutEnemy(Pawn SeenEnemy)
 {
     local KFMonster M;
-    local float D;
+    local Controller C;
+    local string S;
 
     if (LastCalloutTime + 60.f > Level.TimeSeconds)
         return; // Don't spam
@@ -4263,30 +4573,104 @@ final function MaybeCalloutEnemy(Pawn SeenEnemy)
     M = KFMonster(SeenEnemy);
     if (M == None || M.Health <= 0)
         return;
-
-    D = VSize(M.Location - Pawn.Location);
+    // one call for each big one, as in a team of players: not when a team-mate has called this one, or anything just now
+    for ( C=Level.ControllerList; C!=None; C=C.nextController )
+        if ( KFInvasionBot(C) != None && C != self
+            && (KFInvasionBot(C).CalledOut == M || KFInvasionBot(C).LastCalloutTime + 8.f > Level.TimeSeconds) )
+            return;
 
     if (M.IsA('ZombieBoss'))
     {
-        LastCalloutTime = Level.TimeSeconds;
         switch (Rand(3))
         {
-            case 0: SendChatMsg("patty here"); break;
-            case 1: SendChatMsg("on me"); break;
-            case 2: SendChatMsg("BOSS"); break;
+            case 0: S = "patty here"; break;
+            case 1: S = "on me"; break;
+            case 2: S = "BOSS"; break;
         }
     }
     else if (M.IsA('ZombieFleshPound'))
     {
-        LastCalloutTime = Level.TimeSeconds;
         switch (Rand(4))
         {
-            case 0: SendChatMsg("fp"); break;
-            case 1: SendChatMsg("FP"); break;
-            case 2: SendChatMsg("fp on me"); break;
-            case 3: SendChatMsg("watch out fp"); break;
+            case 0: S = "fp"; break;
+            case 1: S = "FP"; break;
+            case 2: S = "fp on me"; break;
+            case 3: S = "watch out fp"; break;
         }
     }
+    else if (M.IsA('ZombieScrake'))
+    {
+        switch (Rand(3))
+        {
+            case 0: S = "scrake"; break;
+            case 1: S = "SC"; break;
+            case 2: S = "scrake here"; break;
+        }
+    }
+    else if (M.IsA('ZombieSiren'))
+    {
+        switch (Rand(3))
+        {
+            case 0: S = "siren"; break;
+            case 1: S = "SIREN"; break;
+            case 2: S = "siren, get her"; break;
+        }
+    }
+    if (S == "")
+        return;
+    LastCalloutTime = Level.TimeSeconds;
+    CalledOut = M;
+    SendChatMsg(S);
+}
+
+// A word to the team about the hold, typed as players type it: now and then, and seldom twice running.
+// Kind 0 the team's spot taken (once a spot, by whoever gets there first), 1 giving ground, 2 going to find the last ones.
+final function HoldChat( byte Kind )
+{
+	local string S;
+	local Controller C;
+
+	if ( Kind != 0 )
+	{
+		if ( Level.TimeSeconds < NextHoldChat || FRand() < 0.5 )
+			return;
+		for ( C=Level.ControllerList; C!=None; C=C.nextController )
+			if ( KFInvasionBot(C) != None && C != self && KFInvasionBot(C).LastHoldChat + 20.f > Level.TimeSeconds )
+				return;
+	}
+	NextHoldChat = Level.TimeSeconds + 30.f + 30.f * FRand();
+	LastHoldChat = Level.TimeSeconds;
+	switch ( Kind )
+	{
+		case 0:
+			switch ( Rand(5) )
+			{
+				case 0: S = "hold here"; break;
+				case 1: S = "camp here"; break;
+				case 2: S = "lets hold here"; break;
+				case 3: S = "set up here"; break;
+				case 4: S = "stay together"; break;
+			}
+			break;
+		case 1:
+			switch ( Rand(4) )
+			{
+				case 0: S = "back up"; break;
+				case 1: S = "too many"; break;
+				case 2: S = "falling back"; break;
+				case 3: S = "fall back"; break;
+			}
+			break;
+		case 2:
+			switch ( Rand(3) )
+			{
+				case 0: S = "where are they"; break;
+				case 1: S = "ill go look"; break;
+				case 2: S = "gonna find the last ones"; break;
+			}
+			break;
+	}
+	SendChatMsg(S);
 }
 
 final function bool TryToHealSelf()
@@ -4373,6 +4757,60 @@ function bool ClearShot(Vector TargetLoc, bool bImmediateFire)
     return true;
 }
 
+// (bPitAware) A fall from Loc (the pawn's middle) that would badly hurt or kill, as players see the drop before they step: no
+// floor within the height whose fall costs a quarter of the health (falls hurt from MaxFallSpeed on), or the floor in a pain
+// volume or under the zone's kill height
+final function bool PitBelow( vector Loc )
+{
+	local vector HitLocation, HitNormal;
+	local float Drop;
+	local PhysicsVolume V;
+
+	Drop = Square(1.25 * Pawn.MaxFallSpeed) / (2.0 * FMax(Abs(Pawn.PhysicsVolume.Gravity.Z), 100.0));
+	if ( Trace(HitLocation, HitNormal, Loc - vect(0,0,1) * (Pawn.CollisionHeight + Drop), Loc, false, Pawn.GetCollisionExtent()) == None )
+		return true;
+	if ( HitLocation.Z < Pawn.Region.Zone.KillZ + 2 * Pawn.CollisionHeight )
+		return true;
+	V = Level.GetPhysicsVolume(HitLocation);
+	return ( V != None && V.bPainCausing && V.DamagePerSec > 0 );
+}
+
+// (bPitAware) Whether a jump from here towards Dest comes down in a pit or flies over one: the ground a quarter, a half, three
+// quarters and all the way there (a combat jump lands short of where it was aimed, and over what it passes when it hits something)
+final function bool PitOnTheWay( vector Dest )
+{
+	local vector Dir;
+	local int i;
+
+	Dir = Dest - Pawn.Location;
+	Dir.Z = 0;
+	for ( i=1; i<=4; i++ )
+		if ( PitBelow(Pawn.Location + Dir * (0.25 * i)) )
+			return true;
+	return false;
+}
+
+// (bPitAware) The engine asks before the bot goes off a ledge (MayFall): not into a pit. Jumping is switched off for this tick,
+// so the engine takes the step back and ends the move. A path down to a node below is trusted.
+final function PitCheckFall()
+{
+	if ( !bPitAware || Pawn == None || !Pawn.bCanJump )
+		return;
+	if ( NavigationPoint(MoveTarget) != None && InLatentExecution(LATENT_MOVETOWARD)
+		&& MoveTarget.Location.Z < Pawn.Location.Z - Pawn.CollisionHeight - MAXSTEPHEIGHT )
+		return;
+	if ( PitBelow(Pawn.Location) )
+	{
+		Pawn.bCanJump = false;
+		bPitBlockedFall = true;
+	}
+}
+
+event MayFall()
+{
+	PitCheckFall();
+}
+
 function bool TestDirection( vector dir, out vector pick )
 {
 	local int	FearRadius;
@@ -4454,6 +4892,8 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	}
 	if( Enemy!=None )
 		LastEnemyEncounter = Level.TimeSeconds;
+	if ( MedicHealNade() )
+		return;
 	// Badly hurt with something on top of us: get clear before anything else.
 	if ( Pawn.Health < 35 && Threat != None && ThreatDist < 220.f && GetPerkName() != "Berserker" )
 	{
@@ -4472,14 +4912,11 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 	// Heal when nothing can reach us while we do it (was: only with fewer than two specimens in sight within 800).
 	if (Pawn.Health < GetMinHealingValue() && (Threat == None || ThreatMargin > 150.f) && StartleActor == None && TryToHealSelf() )
 		return;
-	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (Threat==None || ThreatMargin>0.f) && (Rand(2)==0 || ManyEnemiesAround(5, Pawn.Location)) && ShouldNadeEnemy() )
-	{
-		NextNadeTimer = Level.TimeSeconds+6.f+FRand()*5.f;
-		GoalString = "NadeEnemy";
-		GoToState('NadeTarget');
+	if ( TryNade(Threat, ThreatMargin) )
 		return;
-	}
-	else NextNadeTimer = Level.TimeSeconds+1.f+FRand()*4.f;
+	if ( AmmoRunAssignment(Threat, ThreatMargin) )
+		return;
+	TacticalReload(Threat, ThreatMargin);
 
 	if( EnemyReallyScary() )
 	{
@@ -4700,6 +5137,8 @@ state NadeTarget
 		{
 			FragFire(MyGrenades.GetFireMode(0)).mHoldSpeedMax = GetNadeTossSpeed(GetNadeTossSpot(Target));
 			MyGrenades.ServerThrow();
+			if ( KFHumanPawn(Target) != None )
+				NextHealNadeTime = Level.TimeSeconds + 7.f;
 			if ( KFMonster(Target) != None && GetPerkName() != "Field Medic" )
 			{
 				// keep track of it, to stay out of its blast until it has gone off (see CheckOwnNade)
@@ -4721,7 +5160,11 @@ state NadeTarget
 			KFPawn(Pawn).bThrowingNade = false;
 	}
 Begin:
-	Target = NearbyAllyNeedsHealing();
+	if ( HealNadeTarget != None && HealNadeTarget.Health > 0 )
+		Target = HealNadeTarget;
+	else
+		Target = NearbyAllyNeedsHealing();
+	HealNadeTarget = None;
 	if (Target != None)
 	{
 		if(Target != Pawn)
@@ -4741,6 +5184,11 @@ Begin:
 	}
 	Pawn.Acceleration = vect(0,0,0);	// stand still for the throw
 	Sleep(0.1f);
+	if ( Target == None )
+	{
+		WhatToDoNext(154);
+		Stop;
+	}
 	if( KFPawn(Pawn) != none )
 		KFPawn(Pawn).SetAnimAction('NadeToss');
 	if ( NeedToTurn(Target.Location) )
@@ -4879,6 +5327,154 @@ Moving:
 	if ( Level.TimeSeconds - LastFallbackMoveTime < 0.1 )
 		Sleep(0.1);
 	Goto('Moving');
+}
+
+// At my post in the held area (HoldAssignment): get there, shooting what is in sight on the way, then stand and watch
+// my way in.
+state HoldPost
+{
+	ignores HearNoise;
+
+	function BeginState()
+	{
+		Pawn.bWantsToCrouch = false;
+	}
+	function EndState()
+	{
+		SetBotSprinting(false);
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+	}
+	function Actor HoldLook()
+	{
+		if ( Enemy != None && LineOfSightTo(Enemy) )
+			return Enemy;
+		return MoveTarget;
+	}
+Begin:
+	WaitForLanding();
+	if ( HoldNode != None && VSize(HoldNode.Location - Pawn.Location) > HoldReach )
+	{
+		SetBotSprinting(Enemy == None && VSize(HoldNode.Location - Pawn.Location) > 600.f);
+		if ( CanReach(HoldNode) )
+		{
+			MoveTarget = HoldNode;
+			MoveToward(HoldNode, HoldLook(),, Enemy != None);
+		}
+		else if ( FindBestPathToward(HoldNode, true, true) )
+			MoveToward(MoveTarget, HoldLook(),, Enemy != None);
+		else
+		{
+			GoalString = "Hold: no way to my post";
+			Sleep(0.5);
+		}
+		WhatToDoNext(180);
+	}
+	SetBotSprinting(false);
+	AnnounceHold();
+	Focus = HoldGlance();
+	Pawn.Acceleration = vect(0,0,0);
+	Sleep(0.4 + 0.4 * FRand());
+	WhatToDoNext(181);
+}
+
+// To an ammo box on the map (see AmmoRunAssignment), shooting on the way
+state AmmoRun
+{
+	ignores HearNoise;
+
+	function BeginState()
+	{
+		Pawn.bWantsToCrouch = false;
+	}
+	function EndState()
+	{
+		NextAmmoRunTime = Level.TimeSeconds + 10.f;
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+	}
+	// still there and still of use to us, nothing to run from, and closer within the last few legs
+	final function bool KeepGoing()
+	{
+		local float D;
+
+		if ( AmmoRunTarget == None || AmmoRunTarget.bHidden || AmmoRunTarget.bDeleteMe || !AmmoRunTarget.IsInState('Pickup')
+			|| AmmoRunTarget.BotDesireability(Pawn) <= 0 || EnemyReallyScary() )
+			return false;
+		D = VSize(AmmoRunTarget.Location - Pawn.Location);
+		if ( D < AmmoRunBestDist - 48.f )
+		{
+			AmmoRunBestDist = D;
+			AmmoRunStalls = 0;
+		}
+		else if ( ++AmmoRunStalls > 8 )
+			return false;
+		return true;
+	}
+Begin:
+	WaitForLanding();
+	AmmoRunBestDist = 1000000.f;
+	AmmoRunStalls = 0;
+KeepMoving:
+	if ( !KeepGoing() )
+		WhatToDoNext(195);
+	else if ( CanReach(AmmoRunTarget) )
+	{
+		MoveToward(AmmoRunTarget, FaceActor(1),, Enemy != None);
+		Goto('KeepMoving');
+	}
+	else if ( FindBestPathToward(AmmoRunTarget, true, true) )
+	{
+		MoveToward(MoveTarget, FaceActor(1),, Enemy != None);
+		Goto('KeepMoving');
+	}
+	else
+		WhatToDoNext(196);
+}
+
+// To a player who called for cover (see CoverAssignment), shooting on the way
+state CoverRun
+{
+	ignores HearNoise;
+
+	function BeginState()
+	{
+		Pawn.bWantsToCrouch = false;
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+	}
+Begin:
+	WaitForLanding();
+	if ( CoverFor == None || CoverFor.Health <= 0 )
+		WhatToDoNext(197);
+	else if ( CanReach(CoverFor) )
+		MoveToward(CoverFor, FaceActor(1),, Enemy != None);
+	else if ( FindBestPathToward(CoverFor, true, true) )
+		MoveToward(MoveTarget, FaceActor(1),, Enemy != None);
+	else
+		CoverFor = None;
+	WhatToDoNext(198);
 }
 
 // One leg of a fighting retreat along the path network (see PickPathAwayFromThreats).
@@ -5142,8 +5738,11 @@ final function PickNextRetMove()
     local bool bAnyMonsterHasLOS;
     local bool bHasLOS;
     local KFNadeHealingExplosion TempCloud;
-	local Vector HN,HL;
+	local Vector HN,HL,MateLoc;
+	local bool bToMate;
 
+	// (bRetreatToTeam) a Fleshpound or Scrake after us: lead him into the team's fire
+	bToMate = bRetreatToTeam && BigOneAfterUs() && NearestAllyLoc(MateLoc) && VSize(MateLoc - Pawn.Location) < 1500.f;
 	if( CurrentMov==None )
 	{
 		for( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
@@ -5228,7 +5827,9 @@ MoveFound:
 			Dist += 0.15f;
 		else
 			Dist -= 0.35f;
-        if ( Squad != None )
+        if ( bToMate )
+            Dist -= Normal(MateLoc - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.8f;
+        else if ( Squad != None )
         {
             if ( Squad.SquadLeader != None && Squad.SquadLeader.Pawn != None && Squad.SquadLeader.Pawn != Pawn )
                 Dist -= Normal(Squad.SquadLeader.Pawn.Location - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.4f;
@@ -5411,12 +6012,13 @@ ignores SeePlayer, HearNoise;
 	*/
 	function MayFall()
 	{
-		if ( MoveTarget != Enemy )
-			return;
-
-		Pawn.bCanJump = ActorReachable(Enemy);
-		if ( !Pawn.bCanJump )
-			MoveTimer = -1.0;
+		if ( MoveTarget == Enemy )
+		{
+			Pawn.bCanJump = ActorReachable(Enemy);
+			if ( !Pawn.bCanJump )
+				MoveTimer = -1.0;
+		}
+		PitCheckFall();
 	}
 
 	function bool TryToDuck(vector duckDir, bool bReversed)
@@ -5529,6 +6131,13 @@ ignores SeePlayer, HearNoise;
 			Pawn.bCanJump = true;
 	}
 
+	function Tick( float DeltaTime )
+	{
+		Global.Tick(DeltaTime);
+		if ( ZerkStepBackNow() )
+			GotoState(, 'StepBack');
+	}
+
 Begin:
 	if (Pawn.Physics == PHYS_Falling)
 	{
@@ -5550,8 +6159,34 @@ Moving:
 	WhatToDoNext(17);
 	if ( bSoaking )
 		SoakStop("STUCK IN CHARGING!");
+	Stop;
+StepBack:
+	GoalString = "Step back after the blow";
+	MoveTo(ZerkBackSpot, Enemy);
+	WhatToDoNext(18);
 }
 
+
+// (bPitAware) Stock Fallback and Hunting answer MayFall themselves: the pit check after theirs
+state Fallback
+{
+	function MayFall()
+	{
+		Super.MayFall();
+		PitCheckFall();
+	}
+}
+
+state Hunting
+{
+ignores EnemyNotVisible;
+
+	function MayFall()
+	{
+		Super.MayFall();
+		PitCheckFall();
+	}
+}
 
 state Fallback2 extends Fallback
 {
@@ -5778,6 +6413,328 @@ Begin:
 	Pawn.Acceleration = vect(0,0,0);
 }
 
+// A fight's grenade: where specimens bunch, or a Field Medic's healing one for a hurt team-mate close by (ShouldNadeEnemy).
+// True if the bot goes to throw it.
+final function bool TryNade( KFMonster Threat, float ThreatMargin )
+{
+	local KFMonster FP;
+
+	// a frag for a Fleshpound goes before the toss of a coin (bFragFP)
+	if ( bFragFP && NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() )
+	{
+		FP = FPToFrag();
+		if ( FP != None )
+		{
+			Enemy = FP;
+			FragTarget = FP;
+			FragTime = Level.TimeSeconds;
+			NextNadeTimer = Level.TimeSeconds+2.5f+FRand();
+			GoalString = "Frag the Fleshpound";
+			GoToState('NadeTarget');
+			return true;
+		}
+	}
+	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (Threat==None || ThreatMargin>0.f) && (Rand(2)==0 || ManyEnemiesAround(5, Pawn.Location))
+		&& !(bFragFP && KeepFragsForFP()) && ShouldNadeEnemy() )
+	{
+		NextNadeTimer = Level.TimeSeconds+6.f+FRand()*5.f;
+		GoalString = "NadeEnemy";
+		GoToState('NadeTarget');
+		return true;
+	}
+	else NextNadeTimer = Level.TimeSeconds+1.f+FRand()*4.f;
+	return false;
+}
+
+// (bFragFP) The Fleshpound to throw a frag at, as players spend theirs on them (frags and rockets do him double damage): in
+// sight, in throwing range with a clear arc, with more than a quarter of his health left, and no grenade already on its way to
+// him (anyone's) nor one a team-mate has just gone to throw; the nearest. Not from a Field Medic or a Firebug, whose grenades
+// heal or burn.
+final function KFMonster FPToFrag()
+{
+	local Controller C, C2;
+	local KFMonster M, Best;
+	local Nade N;
+	local float D, BestD;
+	local bool bTaken;
+
+	if ( GetPerkName() == "Field Medic" || GetPerkName() == "Firebug" )
+		return None;
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		M = KFMonster(C.Pawn);
+		if ( M == None || M.Health <= 0.25 * M.HealthMax || !M.IsA('ZombieFleshPound') || M.bDecapitated )
+			continue;
+		D = VSize(M.Location - Pawn.Location);
+		if ( D < GetNadeMinDist() + 60.f || D > 1100.f || (Best != None && D >= BestD) || !LineOfSightTo(M) )
+			continue;
+		bTaken = false;
+		for ( C2=Level.ControllerList; C2!=None && !bTaken; C2=C2.nextController )
+			if ( C2 != self && KFInvasionBot(C2) != None && KFInvasionBot(C2).FragTarget == M && Level.TimeSeconds - KFInvasionBot(C2).FragTime < 2.5f )
+				bTaken = true;
+		foreach DynamicActors(class'Nade', N)
+			if ( !bTaken && !N.bHasExploded && VSize(N.Location - M.Location) < 600.f )
+				bTaken = true;
+		if ( bTaken || !NadeLaneClear(M) || !NadePathClear(M) )
+			continue;
+		Best = M;
+		BestD = D;
+	}
+	return Best;
+}
+
+// (bFragFP) In a wave with Fleshpounds, the last FragReserve frags are theirs (a Field Medic's and a Firebug's grenades are not
+// for them, so they keep none)
+final function bool KeepFragsForFP()
+{
+	if ( GetPerkName() == "Field Medic" || GetPerkName() == "Firebug" || MyGrenades == None )
+		return false;
+	return MyGrenades.AmmoAmount(0) <= FragReserve && FleshpoundWave();
+}
+
+// (bTacticalReload) In a lull of the fight (nothing within 500, nothing inside its kite distance with 250 to spare), a gun
+// under a third full is reloaded now, as players do, rather than at its last round with a specimen on top of us
+final function TacticalReload( KFMonster Threat, float ThreatMargin )
+{
+	local KFWeapon KW;
+
+	if ( !bTacticalReload || Pawn == None )
+		return;
+	KW = KFWeapon(Pawn.Weapon);
+	if ( KW == None || KW.bMeleeWeapon || KW.bIsReloading || KW.ClipCount <= 1 || KW.ClipLeft >= KW.ClipCount * 0.35
+		|| !KW.AllowReload() || (Threat != None && ThreatMargin < 250.f) || CountThreatsWithin(500.f) > 0 )
+		return;
+	KW.ReloadMeNow();
+}
+
+// (bAmmoRun) Low on ammo in a wave with nothing close (every gun we would use under a quarter full): an ammo box for one of our
+// guns lying out on the map near by, with no crowd round it. Players top up from the boxes rather than fight on with the 9mm.
+final function bool AmmoRunAssignment( KFMonster Threat, float ThreatMargin )
+{
+	if ( !bAmmoRun || Pawn == None || Level.TimeSeconds < NextAmmoRunTime || KFGameType(Level.Game) == None
+		|| !KFGameType(Level.Game).bWaveInProgress || (Threat != None && ThreatMargin < 300.f) || !LowOnAmmo() )
+		return false;
+	NextAmmoRunTime = Level.TimeSeconds + 3.f;
+	AmmoRunTarget = AmmoBoxNear();
+	if ( AmmoRunTarget == None )
+		return false;
+	GoalString = "Ammo run to "$AmmoRunTarget.Name;
+	GotoState('AmmoRun');
+	return true;
+}
+
+// Every gun we would fight with (not melee, rated over 0.5, not the grenades) under a quarter of its ammo
+final function bool LowOnAmmo()
+{
+	local Inventory Inv;
+	local KFWeapon W;
+	local bool bAny;
+
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W == None || W.bMeleeWeapon || W.AIRating <= 0.5 || W.AmmoClass[0] == None || Frag(W) != None )
+			continue;
+		bAny = true;
+		if ( W.AmmoAmount(0) >= 0.25 * W.MaxAmmo(0) )
+			return false;
+	}
+	return bAny;
+}
+
+// The nearest ammo box out on the map for one of our guns: within 1800 on about our floor, with no crowd round it
+final function KFAmmoPickup AmmoBoxNear()
+{
+	local KFAmmoPickup P, Best;
+	local float D, BestD;
+
+	foreach DynamicActors(class'KFAmmoPickup', P)
+	{
+		if ( P.bHidden || P.bDeleteMe || !P.IsInState('Pickup') || P.BotDesireability(Pawn) <= 0 )
+			continue;
+		D = VSize(P.Location - Pawn.Location);
+		if ( D > 1800.f || (Best != None && D >= BestD) || Abs(P.Location.Z - Pawn.Location.Z) > 400.f || ManyEnemiesAround(4, P.Location) )
+			continue;
+		Best = P;
+		BestD = D;
+	}
+	return Best;
+}
+
+// A player's voice call (KFVoicePack.PlayerSpeech), which the stock code passes on to bots only when it is an order
+static function TellBotsOfCall( Controller Caller, name CallType )
+{
+	local Controller C;
+
+	if ( Caller == None || Caller.Pawn == None )
+		return;
+	for ( C=Caller.Level.ControllerList; C!=None; C=C.nextController )
+		if ( KFInvasionBot(C) != None && C.Pawn != None && C.Pawn.Health > 0 && C.SameTeamAs(Caller) )
+			KFInvasionBot(C).HeardCall(Caller, CallType);
+}
+
+// (bAnswerCalls) A player's call: "Medic!" brings the best placed of us to heal him (MedicAnswerer), "Cover!" the two of us
+// nearest him and "Form up!" all of us, for a while
+function HeardCall( Controller Caller, name CallType )
+{
+	if ( !bAnswerCalls || Caller.Pawn == None || Pawn == None )
+		return;
+	if ( CallType == 'MEDIC' )
+	{
+		if ( Caller.Pawn.Health < Caller.Pawn.HealthMax && MedicAnswerer(Caller.Pawn) == self )
+		{
+			MedicCallFor = Caller.Pawn;
+			MedicCallUntil = Level.TimeSeconds + 12.f;
+			if ( Caller.PlayerReplicationInfo != None )
+				SendChatMsg("Coming, "$Caller.PlayerReplicationInfo.PlayerName$"!");
+		}
+	}
+	else if ( CallType == 'COVER' || CallType == 'FORM' )
+	{
+		if ( CallType == 'FORM' || AmongNearestTo(Caller.Pawn, 2) )
+		{
+			CoverFor = Caller.Pawn;
+			CoverUntil = Level.TimeSeconds + 15.f;
+		}
+	}
+}
+
+// Of us bots, the one to answer a call for a medic from P: a Field Medic first (half the distance), then whoever is nearest
+// with the syringe charged; none further than 2000
+final function KFInvasionBot MedicAnswerer( Pawn P )
+{
+	local Controller C;
+	local KFInvasionBot B, Best;
+	local float D, BestD;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		B = KFInvasionBot(C);
+		if ( B == None || B.Pawn == None || B.Pawn.Health <= 0 || B.Pawn == P || !B.bAnswerCalls )
+			continue;
+		D = VSize(B.Pawn.Location - P.Location);
+		if ( B.GetPerkName() == "Field Medic" )
+			D *= 0.5;
+		else if ( B.MySyringe == None || B.MySyringe.ChargeBar() < 0.6f )
+			continue;
+		if ( D < 2000.f && (Best == None || D < BestD) )
+		{
+			Best = B;
+			BestD = D;
+		}
+	}
+	return Best;
+}
+
+// Whether we are among the N bots nearest to P
+final function bool AmongNearestTo( Pawn P, int N )
+{
+	local Controller C;
+	local float MyD;
+	local int Nearer;
+
+	MyD = VSize(Pawn.Location - P.Location);
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C != self && KFInvasionBot(C) != None && C.Pawn != None && C.Pawn.Health > 0 && C.Pawn != P
+			&& VSize(C.Pawn.Location - P.Location) < MyD )
+			Nearer++;
+	return Nearer < N;
+}
+
+// (bAnswerCalls) Answering "Cover!" or "Form up!": to the player, then fight as usual round him until the call runs out
+final function bool CoverAssignment()
+{
+	if ( CoverFor == None || Level.TimeSeconds > CoverUntil || CoverFor.Health <= 0 )
+	{
+		CoverFor = None;
+		return false;
+	}
+	if ( VSize(CoverFor.Location - Pawn.Location) < 350.f && LineOfSightTo(CoverFor) )
+		return false;
+	if ( CoverFor.PlayerReplicationInfo != None )
+		GoalString = "Cover "$CoverFor.PlayerReplicationInfo.PlayerName;
+	GotoState('CoverRun');
+	return true;
+}
+
+// Field Medic (bMedicCrowdHeal): the healing grenade thrown where specimens crowd the team (CrowdHealTarget). Unlike other
+// grenades it goes with specimens close by, since it cannot hurt us; not with a raging Fleshpound after us. True if the bot
+// goes to throw it.
+final function bool MedicHealNade()
+{
+	if ( !bMedicCrowdHeal || MyGrenades == None || !MyGrenades.HasAmmo() || Level.TimeSeconds < NextHealNadeTime
+		|| GetPerkName() != "Field Medic" )
+		return false;
+	HealNadeTarget = CrowdHealTarget();
+	if ( HealNadeTarget == None && MedicCallFor != None && Level.TimeSeconds < MedicCallUntil && KFHumanPawn(MedicCallFor) != None
+		&& MedicCallFor.Health > 0 && MedicCallFor.Health < 70 && VSize(MedicCallFor.Location - Pawn.Location) < MedicHealDist
+		&& LineOfSightTo(MedicCallFor) && NadePathClear(MedicCallFor) )
+		HealNadeTarget = KFHumanPawn(MedicCallFor);
+	if ( HealNadeTarget == None || EnemyReallyScary() )
+	{
+		HealNadeTarget = None;
+		return false;
+	}
+	NextHealNadeTime = Level.TimeSeconds + 7.f;
+	GoalString = "Heal grenade into the crowd";
+	GoToState('NadeTarget');
+	return true;
+}
+
+// Where a medic throws the healing grenade, as players do when it gets wild: at his own feet when specimens are round him,
+// or into team-mates they surround, even from across the room. Of the team-mates in sight within MedicHealDist (and
+// himself) with MedicHealCrowd or more specimens within MedicHealReach, the one where the cloud does most: those
+// specimens, the team-mates it would cover and the health they miss.
+final function KFHumanPawn CrowdHealTarget()
+{
+	local Controller C, C2;
+	local KFHumanPawn P, Q, Best;
+	local int Z, T;
+	local float Score, BestScore, Missing;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		P = KFHumanPawn(C.Pawn);
+		if ( P == None || P.Health <= 0 || VSize(P.Location - Pawn.Location) > MedicHealDist )
+			continue;
+		if ( P != Pawn && (!LineOfSightTo(P) || !NadePathClear(P)) )
+			continue;
+		Z = SpecimensNear(P.Location, MedicHealReach);
+		if ( Z < MedicHealCrowd )
+			continue;
+		T = 0;
+		Missing = 0;
+		for ( C2=Level.ControllerList; C2!=None; C2=C2.nextController )
+		{
+			Q = KFHumanPawn(C2.Pawn);
+			if ( Q != None && Q.Health > 0 && VSize(Q.Location - P.Location) < 175.f )
+			{
+				T++;
+				Missing += FMax(Q.HealthMax - Q.Health - Q.HealthToGive, 0);
+			}
+		}
+		Score = Z + 2 * T + Missing / 50.f;
+		if ( Best == None || Score > BestScore )
+		{
+			Best = P;
+			BestScore = Score;
+		}
+	}
+	return Best;
+}
+
+// Live specimens within R of Loc, about on its floor
+final function int SpecimensNear( vector Loc, float R )
+{
+	local Controller C;
+	local int Count;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( KFMonster(C.Pawn) != None && C.Pawn.Health > 0 && VSize(C.Pawn.Location - Loc) < R && Abs(C.Pawn.Location.Z - Loc.Z) < 150.f )
+			Count++;
+	return Count;
+}
+
 final function bool ShouldNadeEnemy()
 {
 	local Controller C;
@@ -5837,6 +6794,10 @@ final function float GetEnemyDesire( KFMonster M, bool bCheckedSight )
     else if( Cost<KiteDistanceFor(M) )
         Cost*=0.6f;
     Cost*=(1.f/FMax(float(M.ScoringValue)*0.001f,0.7f));
+    // a Berserker with a gun and nothing on top of him shoots Sirens first, from where he is
+    if( bZerkGun && M.IsA('ZombieSiren') && !M.bDecapitated && VSize(M.Location-Pawn.Location)<1200.f && GetPerkName()=="Berserker"
+        && HasLoadedGun() && CountThreatsWithin(300.f) == 0 )
+        Cost*=0.4f;
     // A Bloat sprays bile for two seconds when it dies: kill it while it is far away, leave it while it is close.
     if( M.IsA('ZombieBloat') )
     {
@@ -6317,6 +7278,9 @@ ignores SeePlayer, HearNoise;
 			bWantJump = (Vehicle(Pawn) == None) && (Pawn.Physics != PHYS_Falling) && ((FRand() < 0.05 * Skill + 0.6 * Jumpiness) || (Pawn.Weapon != None && Pawn.Weapon.SplashJump() && ProficientWithWeapon()))
 				&& (Enemy.Location.Z - Enemy.CollisionHeight <= Pawn.Location.Z + MAXSTEPHEIGHT - Pawn.CollisionHeight)
 				&& !NeedToTurn(Enemy.Location);
+			// (bPitAware) no dodge jump that comes down in a pit or flies over one
+			if ( bWantJump && bPitAware && PitOnTheWay(MinDest) )
+				bWantJump = false;
 
 			HitActor = Trace(HitLocation, HitNormal, MinDest, Pawn.Location, false, collSpec);
 			if ( (HitActor != None) && (!bWantJump || !Pawn.bCanWallDodge) )
@@ -6701,6 +7665,11 @@ state Roaming
         Super.BeginState();
         SetBotSprinting(true);
     }
+    function MayFall()
+    {
+        Super.MayFall();
+        PitCheckFall();
+    }
     event bool NotifyHitWall(vector HitNormal, actor Wall)
     {
         if( KFDoorMover(Wall)!=None && KFDoorMover(Wall).bSealed && !KFDoorMover(Wall).bDisallowWeld )
@@ -6876,6 +7845,7 @@ final function KFNadeHealingExplosion FindNearbyHealCloud()
     return Best;
 }
 
+
 function MoverFinished()
 {
 	if (PendingMover == None)
@@ -6921,6 +7891,13 @@ defaultproperties
 	SwapDropDist=110.000000
 	SwapMinGain=0.050000
 	bPerkSwitching=True
+	bLateZerkSwap=True
+	bPostNades=True
+	bMedicCrowdHeal=True
+	MedicHealCrowd=3
+	FragReserve=2
+	MedicHealReach=300.000000
+	MedicHealDist=1000.000000
 	PerkStay=0.400000
 	PerkMedicNeed=0.500000
 	PerkCrowd=0.150000
@@ -6945,4 +7922,19 @@ defaultproperties
 	EscapeMinMargin=1.000000
 	EscapeMaxNodes=64
 	AnchorLostLimit=10.000000
+	HoldReach=120.000000
+	bHoldSpots=True
+	HoldQuietTime=15.000000
+	HoldEarlyTime=30.000000
+	HoldGlanceShare=0.250000
+	bZerkBile=True
+	bZerkRhythm=True
+	bZerkGun=True
+	bTacticalReload=True
+	bFragFP=True
+	bAmmoRun=True
+	bRetreatToTeam=True
+	bAnswerCalls=True
+	bHumanFirst=True
+	bPitAware=True
 }

@@ -52,6 +52,12 @@ var		float	BleedOutTime;       // When this zombie will die from bleeding out
 var() bool bCannibal;  // If true, this enemy will stop to eat corpses it finds.
 
 var float StunTime, LastPuntTime, DecapTime;
+// Health and damage by difficulty: Easy, Normal, Skilled, Elite, Suicidal (retail Killing Floor's Beginner to Hell on Earth)
+var() float DifficultyHealthScales[5], DifficultyDamageScales[5];
+var bool bLastHitHead;				// the last blow that hurt us was a headshot
+var bool bNoHitPush;				// no push from a hit that leaves us alive, whatever it was (the Fleshpound)
+var bool bHeadDirFix;				// (test switch) the Fleshpound's headshot test sees the shot's direction
+var float NextHeadStaggerTime;		// when a melee headshot can stagger us again (HeadStagger)
 var float LastHeadShotSoundTime;
 
 var Rotator NewTorsoRotation;
@@ -336,7 +342,7 @@ function KickActor()
 simulated function PostBeginPlay()
 {
 	local vector AttachPos;
-	local float ScalingFactor;
+	local float HealthScale, DamageScale;
 	local float Difficulty;
 
 	if(ROLE==ROLE_Authority)
@@ -422,38 +428,39 @@ simulated function PostBeginPlay()
 	bSTUNNED = false;
 	DECAP = false;
 
-	// Difficulty Scaling
+	// Difficulty scaling, as retail Killing Floor: health and damage from the game's difficulty alone, the same in every
+	// wave (DifficultyHealthScales, DifficultyDamageScales); walk speeds spread 10% either way (was 25%, with a scale that
+	// grew 0.3 a difficulty step without end and with each wave's WaveDifficulty on top)
 	if (Level.Game != none && !bDiffAdjusted)
 	{
-		Difficulty = DeathMatch(Level.Game).AdjustedDifficulty;
+		Difficulty = Level.Game.GameDifficulty;
 
-		// Some randomization to their walk speeds.
-		GroundSpeed = default.GroundSpeed - (0.5*default.Groundspeed) + (rand(default.groundspeed*0.5) + (0.25 * default.groundspeed));
-		if (Difficulty <= 3)
+		GroundSpeed = default.GroundSpeed * (0.9 + 0.2 * FRand());
+		HealthScale = DifficultyHealthScales[DifficultyIndex(Difficulty)];
+		DamageScale = DifficultyDamageScales[DifficultyIndex(Difficulty)];
+		// Endless and Zombies modes keep growing harder wave by wave, as they did (their AdjustedDifficulty climbs 0.1 a wave)
+		if ( KFEndlessGameType(Level.Game) != None )
 		{
-			ScalingFactor = 0.75 + (Difficulty - 1) * 0.125;
-		}
-		else
-		{
-			ScalingFactor = 1.0 + (Difficulty - 3) * 0.3;
+			HealthScale += 0.3 * FMax(DeathMatch(Level.Game).AdjustedDifficulty - Difficulty, 0.0);
+			DamageScale += 0.3 * FMax(DeathMatch(Level.Game).AdjustedDifficulty - Difficulty, 0.0);
 		}
 		GroundSpeed += (Difficulty * 3);
 		AirSpeed += (Difficulty * 3);
 		WaterSpeed += (Difficulty * 3);
-		Health *= ScalingFactor;
+		Health *= HealthScale;
 		Health *= NumPlayersHealthModifer();
-		HealthMax *= ScalingFactor;
+		HealthMax *= HealthScale;
 		HealthMax *= NumPlayersHealthModifer();
-		HeadHealth *= ScalingFactor * NumPlayersHealthModifer();
-		damageConst *= ScalingFactor;
+		HeadHealth *= HealthScale * NumPlayersHealthModifer();
+		damageConst *= DamageScale;
 		if( Level.Game.NumPlayers == 1 ) damageConst *= 0.75;
-		damageRand *= ScalingFactor;
+		damageRand *= DamageScale;
 		if ( Level.Game.NumPlayers == 1 ) damageRand *= 0.75;
-		SpinDamConst *= ScalingFactor;
+		SpinDamConst *= DamageScale;
 		if ( Level.Game.NumPlayers == 1 ) SpinDamConst *= 0.75;
-		SpinDamRand *= ScalingFactor;
+		SpinDamRand *= DamageScale;
 		if ( Level.Game.NumPlayers == 1 ) SpinDamRand *= 0.75;
-		ScreamDamage *= ScalingFactor;
+		ScreamDamage *= DamageScale;
 		if ( Level.Game.NumPlayers == 1 ) ScreamDamage *= 0.75;
 		OriginalGroundSpeed = GroundSpeed;
 		if ( Difficulty >= 5.0 ) // Elite and above
@@ -471,6 +478,21 @@ simulated function PostBeginPlay()
 	}
 	else
 		SavedWalkAnim = MovementAnims[0];
+}
+
+// The row of DifficultyHealthScales and DifficultyDamageScales for a game difficulty, by retail Killing Floor's bounds:
+// Easy (1.5), Normal (3), Skilled (4), Elite (5), Suicidal (7)
+static function int DifficultyIndex( float Difficulty )
+{
+	if ( Difficulty < 2.0 )
+		return 0;
+	if ( Difficulty < 4.0 )
+		return 1;
+	if ( Difficulty < 5.0 )
+		return 2;
+	if ( Difficulty < 7.0 )
+		return 3;
+	return 4;
 }
 
 // Scales the health this Zed has by number of players
@@ -2362,6 +2384,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 		bIsHeadShot = IsHeadShot(hitlocation, normal(momentum), HeadShotCheckScale);
 	}
+	bLastHitHead = bIsHeadShot;
 
 	if ( (bDecapitated || bIsHeadShot) && class<Burned>(DamageType) == none && class<DamTypeFlamethrower>(DamageType) == none )
 	{
@@ -2391,7 +2414,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 		}
 	}
 
-	if( Health-Damage > 0 && DamageType!=class'DamTypeFrag' && DamageType!=class'DamTypeShotgun' && DamageType!=class'DamTypeDBShotgun' )
+	if( Health-Damage > 0 && (bNoHitPush || (DamageType!=class'DamTypeFrag' && DamageType!=class'DamTypeShotgun' && DamageType!=class'DamTypeDBShotgun')) )
 		Momentum = vect(0,0,0);
 	if(class<DamTypeVomit>(DamageType)!=none) // Same rules apply to zombies as players.
 	{
@@ -2680,12 +2703,26 @@ function bool Stunned()
 	return bSTUNNED;
 }
 
+// A melee headshot from a perk that staggers what melee cannot stun otherwise (KFVeterancyTypes.HeadStaggerGap), now and then
+function bool HeadStagger()
+{
+	local float Gap;
+
+	if( !bLastHitHead || KFPawn(LastDamagedBy) == None || Level.TimeSeconds < NextHeadStaggerTime )
+		return false;
+	Gap = KFPawn(LastDamagedBy).GetVeteran().static.HeadStaggerGap(self);
+	if( Gap <= 0 )
+		return false;
+	NextHeadStaggerTime = Level.TimeSeconds + Gap;
+	return true;
+}
+
 function PlayDirectionalHit(Vector HitLoc)
 {
 	local Vector X,Y,Z, Dir;
 
 	// (the flag was only read by a hit test no weapon uses any more)
-	if( bMeleeStunImmune && ClassIsChildOf(LastDamagedbyType,class'DamTypeMelee') )
+	if( bMeleeStunImmune && ClassIsChildOf(LastDamagedbyType,class'DamTypeMelee') && !HeadStagger() )
 		return;
 
 	GetAxes(Rotation, X,Y,Z);
@@ -3400,6 +3437,17 @@ defaultproperties
      MaxSpineVariation=1000
      MaxContortionPercentage=0.250000
      MinTimeBetweenPainAnims=0.500000
+     bHeadDirFix=True
+     DifficultyHealthScales(0)=0.500000
+     DifficultyHealthScales(1)=1.000000
+     DifficultyHealthScales(2)=1.350000
+     DifficultyHealthScales(3)=1.550000
+     DifficultyHealthScales(4)=1.750000
+     DifficultyDamageScales(0)=0.300000
+     DifficultyDamageScales(1)=1.000000
+     DifficultyDamageScales(2)=1.250000
+     DifficultyDamageScales(3)=1.500000
+     DifficultyDamageScales(4)=1.750000
      playedHit=True
      FeedThreshold=0.100000
      CorpseLifeSpan=60.000000

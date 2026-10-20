@@ -11,6 +11,8 @@ var() float FlightTime;		// how long it flies before it burns out; the perk's Ex
 
 simulated function PostBeginPlay()
 {
+	if ( Instigator != None )
+		ShooterTeam = Instigator.GetTeamNum();
 	SetTimer(0.2, true);
 	FlightStart = Level.TimeSeconds;
 
@@ -135,10 +137,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
         return;
 
     // Don't allow hits on people on the same team
-    if( KFHumanPawn(Other) != none && Instigator != none
-        && KFHumanPawn(Other).PlayerReplicationInfo != none && KFHumanPawn(Other).PlayerReplicationInfo.Team != none
-        && Instigator.PlayerReplicationInfo != none && Instigator.PlayerReplicationInfo.Team != none
-        && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
+    if( class'KFHumanPawn'.static.OnShootersTeam(Other, Instigator, ShooterTeam) )
         return;
 
     Other.TakeDamage(Damage, Instigator, HitLocation, vect(0,0,0), MyDamageType);

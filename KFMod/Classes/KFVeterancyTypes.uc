@@ -146,6 +146,24 @@ static function float GetBodyArmorDamageModifier()
 	return 1.0;
 }
 
+// Seconds between the staggers our melee headshots give a specimen that melee cannot stun otherwise (0: none)
+static function float HeadStaggerGap( KFMonster Other )
+{
+	Return 0;
+}
+
+// Health we get back for a melee kill
+static function int MeleeKillHealth()
+{
+	Return 0;
+}
+
+// The share of our damage that counts towards a Fleshpound's rage
+static function float RageShare( class<DamageType> DmgType )
+{
+	Return 1.0;
+}
+
 defaultproperties
 {
 	bHasPerkWeapon=false

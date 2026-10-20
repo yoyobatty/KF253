@@ -7,6 +7,8 @@ simulated function PostBeginPlay()
 {
 
 	Super(Projectile).PostBeginPlay();
+	if ( Instigator != None )
+		ShooterTeam = Instigator.GetTeamNum();
 
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 

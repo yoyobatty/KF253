@@ -1700,6 +1700,17 @@ event PostLogin( PlayerController NewPlayer )
 function Killed( Controller Killer, Controller Killed, Pawn KilledPawn, class<DamageType> damageType )
 {
 	local KFPlayerController PC;
+	local int Heal;
+
+	// a melee kill can give health back (KFVeterancyTypes.MeleeKillHealth)
+	if( KFMonster(KilledPawn)!=None && Killer!=None && KFPawn(Killer.Pawn)!=None && Killer.Pawn.Health>0
+		&& Class<KFWeaponDamageType>(KFMonster(KilledPawn).LastDamagedByType)!=None
+		&& Class<KFWeaponDamageType>(KFMonster(KilledPawn).LastDamagedByType).default.bIsMeleeDamage )
+	{
+		Heal = KFPawn(Killer.Pawn).GetVeteran().static.MeleeKillHealth();
+		if( Heal>0 )
+			KFPawn(Killer.Pawn).GiveHealth(Heal, Killer.Pawn.HealthMax);
+	}
 
 	if( KFMonster(KilledPawn)!=None && 
         Class<KFWeaponDamageType>(damageType)!=None &&

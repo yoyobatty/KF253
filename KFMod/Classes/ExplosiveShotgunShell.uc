@@ -1,6 +1,7 @@
 class ExplosiveShotgunShell extends Projectile;
 
 var class<DamageType> ExplosiveDamageType;
+var int ShooterTeam;	// the shooter's team when fired (KFHumanPawn.OnShootersTeam)
 
 var() vector ShakeRotMag;
 var() vector ShakeRotRate;
@@ -12,6 +13,8 @@ var() float  ShakeOffsetTime;
 simulated function PostBeginPlay()
 {
     Super.PostBeginPlay();
+	if ( Instigator != None )
+		ShooterTeam = Instigator.GetTeamNum();
     Velocity = Speed * Vector(Rotation);
 }
 
@@ -73,10 +76,7 @@ simulated function ProcessTouch(Actor Other, vector HitLocation)
     if (Other == None || Other == Instigator || Other.Base == Instigator)
         return;
 
-    if (KFHumanPawn(Other) != None && Instigator != None
-        && KFHumanPawn(Other).PlayerReplicationInfo != None && KFHumanPawn(Other).PlayerReplicationInfo.Team != None
-        && Instigator.PlayerReplicationInfo != None && Instigator.PlayerReplicationInfo.Team != None
-        && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex)
+    if ( class'KFHumanPawn'.static.OnShootersTeam(Other, Instigator, ShooterTeam) )
         return;
 
     Explode(HitLocation, -X);
@@ -89,6 +89,7 @@ simulated function Landed(vector HitNormal)
 
 defaultproperties
 {
+     ShooterTeam=255
     ExplosiveDamageType=Class'KFMod.DamTypeExplosiveShotgun'
     ShakeRotMag=(X=250,Y=0,Z=250)
     ShakeRotRate=(X=2500,Y=2500,Z=2500)

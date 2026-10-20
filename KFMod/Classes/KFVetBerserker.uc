@@ -1,6 +1,11 @@
 Class KFVetBerserker extends KFVeterancyTypes
 	Abstract;
 
+// Buffs on test (0, and 1.0 for the share, leave things as they were)
+var() float ScrakeStaggerGap;	// a melee headshot staggers a Scrake, at most once in so many seconds
+var() int KillHealth;			// health back for each melee kill
+var() float MeleeRageShare;		// the share of melee damage that counts towards a Fleshpound's rage
+
 static function bool QualityFor( KFPlayerStats Other )
 {
 	Return (Other.TotalMeleeDamage>=10000);
@@ -47,9 +52,26 @@ static function bool CanBeGrabbed( KFMonster Other )
 {
 	Return !Other.IsA('ZombieClot');
 }
+static function float HeadStaggerGap( KFMonster Other )
+{
+	if ( Other.IsA('ZombieScrake') )
+		Return default.ScrakeStaggerGap;
+	Return 0;
+}
+static function int MeleeKillHealth()
+{
+	Return default.KillHealth;
+}
+static function float RageShare( class<DamageType> DmgType )
+{
+	if( Class<KFWeaponDamageType>(DmgType)!=None && Class<KFWeaponDamageType>(DmgType).Default.bIsMeleeDamage )
+		Return default.MeleeRageShare;
+	Return 1.0;
+}
 
 defaultproperties
 {
+	MeleeRageShare=1.000000
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.Berserker'
 	VeterancyName="Berserker"

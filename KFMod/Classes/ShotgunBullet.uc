@@ -10,6 +10,7 @@ var () int MaxPenetrations; // Yeah, Hardy har har. It refers in fact to the num
 var () float PenDamageReduction; // how much damage does it lose with each person it passes through?
 var () float PenDamageReductionPerked;
 var() float HeadShotDamageMult;
+var int ShooterTeam;	// the shooter's team when fired (KFHumanPawn.OnShootersTeam)
 var array<Pawn> HurtPawns; // Who this pellet has hurt already. A body and its extra collision are one target.
 
 simulated event PreBeginPlay()
@@ -23,6 +24,8 @@ simulated event PreBeginPlay()
 simulated function PostBeginPlay()
 {
 	Super.PostBeginPlay();
+	if ( Instigator != None )
+		ShooterTeam = Instigator.GetTeamNum();
 
 	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
 
@@ -130,10 +133,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
         return;
 
     // Don't allow hits on people on the same team
-    if( KFHumanPawn(Other) != none && Instigator != none
-        && KFHumanPawn(Other).PlayerReplicationInfo != none && KFHumanPawn(Other).PlayerReplicationInfo.Team != none
-        && Instigator.PlayerReplicationInfo != none && Instigator.PlayerReplicationInfo.Team != none
-        && KFHumanPawn(Other).PlayerReplicationInfo.Team.TeamIndex == Instigator.PlayerReplicationInfo.Team.TeamIndex )
+    if( class'KFHumanPawn'.static.OnShootersTeam(Other, Instigator, ShooterTeam) )
         return;
 
     // Resolve ExtendedZCollision to its owner pawn
@@ -169,6 +169,7 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
 
 defaultproperties
 {
+     ShooterTeam=255
     DamageAtten=5.000000
     MaxPenetrations=2
     PenDamageReduction=0.500000

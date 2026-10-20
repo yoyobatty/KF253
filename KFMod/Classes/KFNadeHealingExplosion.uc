@@ -29,6 +29,7 @@ simulated function Tick(float DT)
 simulated function Timer()
 {
 	local int i;
+	local Actor A;
 
     if ( Role < ROLE_Authority )
         return;
@@ -39,22 +40,16 @@ simulated function Timer()
 		return;
 	}
 
+	// (each one held in A: the damage can kill a specimen, and its place in Touching then empties under us)
 	for (i=0;i<Touching.length;i++)
 	{
-		if ( Touching[i] != None )
-        {
-			if(Touching[i].IsA('KFMonster'))
-            {
-				KFMonster(Touching[i]).TakeDamage(Damage,Instigator,Touching[i].Location,vect(0,0,0),DamageType);
-                //log(GetHumanReadableName()$" hurt " $Touching[i].GetHumanReadableName());
-            }
-            if(Touching[i].IsA('KFHumanPawn'))
-            {
-			    if(KFHumanPawn(Touching[i]).GiveHealth(HealAmount, KFHumanPawn(Touching[i]).HealthMax))
-                    PlayOwnedSound(Sound'KFWeaponSound.SyringeFire',SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,,false);
-                //log(GetHumanReadableName()$" Healed " $Touching[i].GetHumanReadableName());
-            }
-        }
+		A = Touching[i];
+		if ( A == None )
+			continue;
+		if ( KFMonster(A) != None )
+			KFMonster(A).TakeDamage(Damage,Instigator,A.Location,vect(0,0,0),DamageType);
+		else if ( KFHumanPawn(A) != None && KFHumanPawn(A).GiveHealth(HealAmount, KFHumanPawn(A).HealthMax) )
+			PlayOwnedSound(Sound'KFWeaponSound.SyringeFire',SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,,false);
 	}
 }
 
