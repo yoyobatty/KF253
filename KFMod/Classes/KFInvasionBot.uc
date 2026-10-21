@@ -36,6 +36,11 @@ var() float HoldQuietTime;	// with nothing met for this long and specimens about
 var() float HoldEarlyTime;	// trader time: at the spot with this many seconds left
 var() float HoldGlanceShare;	// at the post: share of looks down another way in
 var() bool bPostNades;			// at the post: the grenade decision of any other fight (TryNade)
+var() float HoldNoWayRest;	// no path to the post: this long doing other things before trying it again
+var float HoldOffUntil;
+var NavigationPoint HoldNoWayNode;	// the post we last found no way to
+var() bool bHumanOrdersFirst;	// a player's order beats the team's hold (Hold: his spot; Freelance, Attack: none)
+var name HumanOrders;			// the last order a player gave this bot
 
 // Grenades, as players spend them
 var() bool bFragFP;				// a frag for a Fleshpound (FPToFrag), one at a time a Fleshpound, some kept for them in their waves
@@ -4091,6 +4096,14 @@ final function OpenZoneLinks()
 		TempBlockedPaths[i].bBlocked = false;
 }
 
+// (the last order a player gave us, for the hold to give way to)
+function SetOrders(name NewOrders, Controller OrderGiver)
+{
+	if ( PlayerController(OrderGiver) != None )
+		HumanOrders = NewOrders;
+	Super.SetOrders(NewOrders, OrderGiver);
+}
+
 // During a wave the team holds one place (KFHoldPlan): the map's proven spot, or round a player who leads and stays
 // put. Each bot goes to its post and watches its way in from there, shooting what comes and not going after what it
 // cannot see. What is close is dealt with as ever, before this (ExecuteWhatToDoNext), and the bot comes back to its
@@ -4101,7 +4114,10 @@ final function bool HoldAssignment()
 	local KFMonster Threat;
 	local float ThreatDist, ThreatMargin;
 
-	if ( !bHoldSpots || KFGameType(Level.Game) == None )
+	if ( !bHoldSpots || KFGameType(Level.Game) == None || Level.TimeSeconds < HoldOffUntil )
+		return false;
+	// a player told us where to be (a Hold order puts his HoldSpot in GoalScript) or to go our own way
+	if ( bHumanOrdersFirst && (HoldSpot(GoalScript) != None || HumanOrders == 'Freelance' || HumanOrders == 'Attack') )
 		return false;
 	// a wave on, or the end of trader time: at the spot before the specimens come, as players are
 	if ( !KFGameType(Level.Game).bWaveInProgress && KFGameType(Level.Game).WaveCountDown > HoldEarlyTime )
@@ -4123,7 +4139,7 @@ final function bool HoldAssignment()
 	}
 	else if ( !Plan.Ready() )
 		return false;
-	if ( !Plan.PostFor(self, HoldNode, HoldFace) )
+	if ( !Plan.PostFor(self, HoldNode, HoldFace, HoldNoWayNode) )
 		return false;
 	// no gun with ammo and nothing on us: go and restock (the squad's errands look for ammo and guns), as players do, and
 	// come back after
@@ -5411,6 +5427,12 @@ Begin:
 		else
 		{
 			GoalString = "Hold: no way to my post";
+			HoldOffUntil = Level.TimeSeconds + HoldNoWayRest;
+			HoldNoWayNode = HoldNode;
+			if ( class'KFHoldPlan'.static.Get(self) != None )
+				class'KFHoldPlan'.static.Get(self).DropPost(self);
+			if ( Pawn.FindAnchorFailedTime == Level.TimeSeconds && AnchorLostTooLong() )
+				TeleportBackIn();
 			Sleep(0.5);
 		}
 		WhatToDoNext(180);
@@ -7975,6 +7997,8 @@ defaultproperties
 	AnchorLostLimit=10.000000
 	HoldReach=120.000000
 	bHoldSpots=True
+	HoldNoWayRest=5.000000
+	bHumanOrdersFirst=True
 	HoldQuietTime=15.000000
 	HoldEarlyTime=30.000000
 	HoldGlanceShare=0.250000

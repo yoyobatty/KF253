@@ -72,6 +72,9 @@ var bool bEvaluating, bChosen;
 // a player leading: once he has stayed put a while, the hold is round him (the bots cover the other ways in)
 var() float LeaderSettleTime;	// seconds the player stays within LeaderSettleRadius before the bots take posts round him
 var() float LeaderSettleRadius;
+var() float LeaderLeaveRadius;	// once settled, the hold round him stays put until he is this far from its centre
+var bool bLeaderHeld;
+var float LeaderHeldTime;		// when a bot last found him still holding
 var Pawn LeaderPawn;
 var vector LeaderSpot;
 var float LeaderSince;
@@ -741,14 +744,18 @@ final function bool Ready()
 		return false;
 	if ( LeaderCenter >= 0 || Center != BestSpot )
 	{
+		// a player's squad holds round him: the bots of other squads join it rather than pull the posts away
+		if ( bLeaderHeld && LeaderPawn != None && LeaderPawn.Health > 0 && Level.TimeSeconds - LeaderHeldTime < 2.0 )
+			return bReady;
 		LeaderCenter = -1;
+		bLeaderHeld = false;
 		SetCenter(BestSpot);
 	}
 	return bReady;
 }
 
-// A player leads: true once he has stayed put LeaderSettleTime, with the hold centred on the node nearest him (and
-// posts handed out again when that changes). False while he moves: the bots then follow him as before.
+// A player leads: true once he has stayed put LeaderSettleTime, with the hold centred on the node nearest him; it then
+// stays there while he moves about within LeaderLeaveRadius of it. False while he moves on: the bots follow him.
 final function bool LeaderSettled(Pawn P)
 {
 	local int i, Best;
@@ -758,11 +765,25 @@ final function bool LeaderSettled(Pawn P)
 		Build();
 	if ( P == None || P.Health <= 0 )
 		return false;
+	if ( P == LeaderPawn && bLeaderHeld && bReady && LeaderCenter >= 0 && Center == LeaderCenter )
+	{
+		if ( VSize(P.Location - Nodes[LeaderCenter].Location) <= LeaderLeaveRadius
+			&& Abs(P.Location.Z - Nodes[LeaderCenter].Location.Z) < 200.0 )
+		{
+			LeaderHeldTime = Level.TimeSeconds;
+			return true;
+		}
+		bLeaderHeld = false;
+		LeaderSpot = P.Location;
+		LeaderSince = Level.TimeSeconds;
+		return false;
+	}
 	if ( P != LeaderPawn || VSize(P.Location - LeaderSpot) > LeaderSettleRadius )
 	{
 		LeaderPawn = P;
 		LeaderSpot = P.Location;
 		LeaderSince = Level.TimeSeconds;
+		bLeaderHeld = false;
 		return false;
 	}
 	if ( Level.TimeSeconds - LeaderSince < LeaderSettleTime )
@@ -781,11 +802,13 @@ final function bool LeaderSettled(Pawn P)
 	}
 	if ( Best < 0 )
 		return false;
-	if ( Best != LeaderCenter || !bReady )
+	if ( Best != LeaderCenter || !bReady || Center != Best )
 	{
 		LeaderCenter = Best;
 		SetCenter(Best);
 	}
+	bLeaderHeld = true;
+	LeaderHeldTime = Level.TimeSeconds;
 	return true;
 }
 
@@ -808,8 +831,9 @@ final function NavigationPoint OtherFace(NavigationPoint Own)
 	return None;
 }
 
-// This bot's post and where to look from it; a post whose holder is gone is free again
-final function bool PostFor(Controller C, out NavigationPoint Post, out NavigationPoint Face)
+// This bot's post and where to look from it; a post whose holder is gone is free again. Avoid: a post the bot found
+// no way to, not handed to it again while another is free
+final function bool PostFor(Controller C, out NavigationPoint Post, out NavigationPoint Face, optional NavigationPoint Avoid)
 {
 	local int i, Free;
 
@@ -827,7 +851,7 @@ final function bool PostFor(Controller C, out NavigationPoint Post, out Navigati
 		if ( PostOwner[i] == None || PostOwner[i].Pawn == None || PostOwner[i].Pawn.Health <= 0 )
 		{
 			PostOwner[i] = None;
-			if ( Free < 0 )
+			if ( Free < 0 && Nodes[Posts[i]] != Avoid )
 				Free = i;
 		}
 	}
@@ -844,6 +868,16 @@ final function bool PostFor(Controller C, out NavigationPoint Post, out Navigati
 	Post = Nodes[Posts[Free]];
 	Face = Nodes[LaneFace[PostLane[Free]]];
 	return true;
+}
+
+// C gives up its post (it found no way there)
+final function DropPost(Controller C)
+{
+	local int i;
+
+	for ( i=0; i<Posts.Length; i++ )
+		if ( PostOwner[i] == C )
+			PostOwner[i] = None;
 }
 
 // Of the free posts (First is one), the one on the way in furthest behind the leader's back: what he cannot watch himself
@@ -901,6 +935,7 @@ defaultproperties
      EvalPerTick=4
      LeaderSettleTime=3.000000
      LeaderSettleRadius=250.000000
+     LeaderLeaveRadius=500.000000
      LeaderCenter=-1
      AnnouncedCenter=-1
      bHidden=True
