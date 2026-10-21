@@ -22,6 +22,7 @@ var KActor KickTarget;
 
 var Actor InitialPathGoal;
 var byte PathFindState;
+var() bool bStallDropsFirstStop;	// one that stalls on its way to its first stop gives it up and makes for its victim
 
 // Used for alternative pathing:
 var Actor LastResult;
@@ -36,6 +37,12 @@ var bool bLiftPass;
 var float NextFloorCheck,StrandedTime;
 var() float StrandedDelay;
 
+var vector WedgeSpot;
+var float WedgeSince, NextWedgeCheck;
+var byte WedgeHops;
+var() float WedgeDelay;		// this long held in one spot while falling, or while its velocity says it moves, it hops loose (0: never)
+var float AnchorlessSince;
+var() float AnchorlessDelay;	// this long finding no way onto the paths, a specimen nobody sees is recycled (0: never)
 
 // Riot: one of a row of specimens let loose side by side (KFEndlessGameType). It keeps its place across the way,
 // as far as there is room at each path node, until it is near its victim; one ahead of its row eases off.
@@ -211,6 +218,65 @@ function tick(float DeltaTime)
 	}
 	if( Level.TimeSeconds >= NextFloorCheck )
 		CheckFloor();
+	if( Level.TimeSeconds >= NextWedgeCheck )
+	{
+		CheckWedged();
+		CheckAnchorless();
+	}
+}
+
+// One whose path searches find no way onto the paths (spawned off them, or fallen into a pocket) is recycled when
+// nobody sees it; the stock random jumps in FindRoamDest only start for one that once had a way on
+function CheckAnchorless()
+{
+	if( AnchorlessDelay<=0 || Pawn==None || Pawn.Health<=0 || KFM==None )
+		Return;
+	if( Pawn.FindAnchorFailedTime<=Pawn.LastValidAnchorTime )
+	{
+		AnchorlessSince = 0;
+		Return;
+	}
+	if( AnchorlessSince==0 )
+		AnchorlessSince = Level.TimeSeconds;
+	else if( Level.TimeSeconds-AnchorlessSince>=AnchorlessDelay && !Pawn.PlayerCanSeeMe() && KFGameType(Level.Game)!=None )
+		KFGameType(Level.Game).RecycleMonster(KFM);
+}
+
+// Held in one spot while falling or while its velocity says it moves (caught on a ledge, or on a blocking volume's edge):
+// a hop towards where it is going, then one back the other way, then random ones; after three, unseen, it is recycled
+function CheckWedged()
+{
+	local vector Dir;
+
+	NextWedgeCheck = Level.TimeSeconds + 1.0;
+	if( WedgeDelay<=0 || Pawn==None || Pawn.Health<=0 || KFM==None )
+		Return;
+	if( VSize(Pawn.Location-WedgeSpot)>8 || (VSize(Pawn.Velocity)<100 && Pawn.Physics!=PHYS_Falling) || KFM.bShotAnim )
+	{
+		WedgeSpot = Pawn.Location;
+		WedgeSince = Level.TimeSeconds;
+		WedgeHops = 0;
+		Return;
+	}
+	if( Level.TimeSeconds-WedgeSince<WedgeDelay )
+		Return;
+	WedgeSince = Level.TimeSeconds;
+	if( WedgeHops>=3 && !Pawn.PlayerCanSeeMe() && KFGameType(Level.Game)!=None && KFGameType(Level.Game).RecycleMonster(KFM) )
+		Return;
+	if( MoveTarget!=None )
+		Dir = MoveTarget.Location - Pawn.Location;
+	else Dir = Destination - Pawn.Location;
+	WedgeHops++;
+	if( WedgeHops==2 )
+		Dir = -Dir;
+	else if( WedgeHops>2 )
+		Dir = VRand();
+	Dir.Z = 0;
+	if( VSize(Dir)<1 )
+		Dir = vect(1,0,0);
+	Pawn.Velocity = Normal(Dir) * Pawn.GroundSpeed * 0.5;
+	Pawn.Velocity.Z = 300;
+	Pawn.SetPhysics(PHYS_Falling);
 }
 
 function CheckFloor()
@@ -779,7 +845,11 @@ state ZombieHunt extends Hunting
 	function Timer()
 	{
 		if(Pawn.Velocity == vect(0,0,0))
+		{
+			if( bStallDropsFirstStop && PathFindState==1 )
+				PathFindState = 2;
 			GotoState('ZombieRestFormation','Moving');
+		}
 		SetCombatTimer();
 		StopFiring();
 	}
@@ -1753,6 +1823,7 @@ function Trigger( actor Other, pawn EventInstigator )
 defaultproperties
 {
 	bWarnShotTarget=True
+	bStallDropsFirstStop=True
 	RiotRow=-1
 	RiotReleaseDist=700.000000
 	RiotAheadSlack=60.000000
@@ -1764,4 +1835,6 @@ defaultproperties
 	ReactionTime=1.000000
 	MyFloor=255
 	StrandedDelay=10.000000
+	WedgeDelay=4.000000
+	AnchorlessDelay=10.000000
 }

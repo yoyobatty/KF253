@@ -1329,6 +1329,18 @@ function bool AddSquad()
     return Result;
 }
 
+// A stuck or stranded specimen back in the queue (KFGameType's version waits for bWaveInProgress, never set here)
+function bool RecycleMonster(KFMonster M)
+{
+    if (!bEndlessWaveActive || bWaveBossInProgress || bGameEnded || M.bBoss)
+        return false;
+    RecycledSquad[RecycledSquad.Length] = M.Class;
+    TotalMaxMonsters++;
+    LastZVol = None;
+    M.KilledBy(M);
+    return true;
+}
+
 function BoostHoldoutZeds()
 {
     local Controller C;
