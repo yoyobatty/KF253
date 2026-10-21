@@ -890,6 +890,7 @@ defaultproperties
      StockSpots(1)="KF-Offices=InventorySpot76"
      StockSpots(2)="KF-WestLondon=PathNode152"
      StockSpots(3)="KF-HorzineHeadquaters-V2=PathNode39"
+     StockSpots(4)="KF-Wretched-b2=PathNode110"
      AreaRadius=450.000000
      Eye=20.000000
      PostBack=150.000000

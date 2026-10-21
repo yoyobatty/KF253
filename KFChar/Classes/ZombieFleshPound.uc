@@ -360,13 +360,14 @@ function SpinDamage(actor Target)
 			KFPlayerController(HumanTarget.Controller).ClientKFShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 
 		//TODO - line below was KFPawn. Does this whole block need to be KFPawn, or is it OK as KFHumanPawn?
-		KFHumanPawn(Target).TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
+		HumanTarget.TakeDamage(DamageAmount, self ,HitLocation,pushdir, class 'KFMod.ZombieMeleeDamage');
 
-		if (KFHumanPawn(Target).Health <=0)
+		// (a killing blow can gib the body and remove it at once)
+		if (HumanTarget != None && HumanTarget.Health <=0)
 		{
-			KFHumanPawn(Target).SpawnGibs(rotator(pushdir), 1);
-			TearBone=KFPawn(Target).GetClosestBone(HitLocation,Velocity,dummy);
-			KFHumanPawn(Controller.Target).HideBone(TearBone);
+			HumanTarget.SpawnGibs(rotator(pushdir), 1);
+			TearBone=HumanTarget.GetClosestBone(HitLocation,Velocity,dummy);
+			HumanTarget.HideBone(TearBone);
 			//HideBone(TearBone);
 		}
 	}

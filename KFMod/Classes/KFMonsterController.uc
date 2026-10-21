@@ -17,6 +17,7 @@ var byte CorpseBiteCount;
 var KFDoorMover TargetDoor;
 var KFBarricadePlank TargetPlank;
 var PlayerDeathMark TargetCorpse;
+var() bool bWarnShotTarget;		// projectiles warn their target, as bots' do (AdjustAim)
 var KActor KickTarget;
 
 var Actor InitialPathGoal;
@@ -34,6 +35,7 @@ var byte MyFloor;
 var bool bLiftPass;
 var float NextFloorCheck,StrandedTime;
 var() float StrandedDelay;
+
 
 // Riot: one of a row of specimens let loose side by side (KFEndlessGameType). It keeps its place across the way,
 // as far as there is room at each path node, until it is near its victim; one ahead of its row eases off.
@@ -417,7 +419,7 @@ function bool TestDirection( vector dir, out vector pick )
 	// Actually avoid FearSpots.  (was never implemented)
 	if ( FearSpots[0] != None || FearSpots[1] != None )
 	{
-		if ( FearSpots[1] != None && ( VSize( Pawn.Location - FearSpots[0].Location ) > VSize( Pawn.Location - FearSpots[1].Location ) ) )
+		if ( FearSpots[1] != None && ( FearSpots[0] == None || VSize( Pawn.Location - FearSpots[0].Location ) > VSize( Pawn.Location - FearSpots[1].Location ) ) )
 		{
 			avoid = FearSpots[1].Location;
 			FearRadius = FearSpots[1].CollisionRadius;
@@ -819,6 +821,12 @@ state ZombieHunt extends Hunting
 		{
 			Destination = Pawn.Location+VRand()*200;
 			Return;
+		}
+		// (no enemy left to hunt: the rest of this reads where it was)
+		if ( Enemy == None )
+		{
+			WanderOrCamp(false);
+			return;
 		}
 		if ( ActorReachable(Enemy) )
 		{
@@ -1540,6 +1548,15 @@ function ExecuteWhatToDoNext()
 	}
 }
 
+// (bWarnShotTarget) As a bot's shots do, a specimen's projectile warns the pawn it is aimed at: Projectile.PostBeginPlay warns
+// its shooter's ShotTarget, which the stock monster aim never set, so no bot ever sidestepped a Patriarch's rocket
+function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int aimerror)
+{
+	if ( bWarnShotTarget )
+		ShotTarget = Pawn(Target);
+	return Super.AdjustAim(FiredAmmunition, projStart, aimerror);
+}
+
 state StakeOut
 {
 ignores EnemyNotVisible;
@@ -1735,6 +1752,7 @@ function Trigger( actor Other, pawn EventInstigator )
 
 defaultproperties
 {
+	bWarnShotTarget=True
 	RiotRow=-1
 	RiotReleaseDist=700.000000
 	RiotAheadSlack=60.000000

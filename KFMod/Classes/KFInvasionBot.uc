@@ -46,12 +46,16 @@ var float FragTime;
 // Weapons, as players use them
 var() bool bTacticalReload;		// a part-empty gun reloaded in a lull of the fight, not at the last round (TacticalReload)
 var() bool bAmmoRun;			// low on ammo in a wave: a box from the map near by (AmmoRunAssignment, state AmmoRun)
+var() bool bBuyOffListAmmo;		// at the trader, ammo too for the guns it does not sell, the 9mm above all (BuyOffListAmmo)
+var() bool bNoStrayBlades;		// only a Berserker buys a blade (GetShoppingWishes): for anyone else it is weight and cash spent on nothing
 var KFAmmoPickup AmmoRunTarget;
 var float NextAmmoRunTime, AmmoRunBestDist;
 var int AmmoRunStalls;
 
 // Retreats
 var() bool bRetreatToTeam;		// from a big one after us, back towards the nearest team-mate's guns, not just away (PickNextRetMove)
+var() bool bSirenAware;			// backing off, not down a Siren's scream: in front of her, in her sight, within its reach (PickNextRetMove)
+var() bool bScrakeFocus;		// a Scrake close by is the target, faced: he charges whoever turns away from him (GetEnemyDesire)
 
 // Pits
 var() bool bPitAware;			// no dodge jump over, and no step off a ledge into, a drop that would badly hurt or kill (PitBelow)
@@ -3250,6 +3254,10 @@ function DoTrading()
 	PlayerReplicationInfo.Score = FMax(PlayerReplicationInfo.Score,0);
 	if( PlayerReplicationInfo.Score>0 && (Saving == None || Pawn.ShieldStrength < 50) )
 		BuyKevlar();
+	// (bBuyOffListAmmo) the 9mm last, with what is left (bought before the guns it cost guns and armour at Elite), and
+	// not from savings for a perk gun unless no gun has a round
+	if ( bBuyOffListAmmo && PlayerReplicationInfo.Score > 0 && (Saving == None || !HasLoadedGun()) )
+		BuyOffListAmmo();
 	SwitchToBestWeapon();
 	LastShopCash = PlayerReplicationInfo.Score;
 	log(PlayerReplicationInfo.PlayerName$" Finished Trading. Cash left: "$int(PlayerReplicationInfo.Score)$" armour "$int(Pawn.ShieldStrength)$" saving for "$Saving$" in shop "$InShop());
@@ -3300,6 +3308,9 @@ final function GetShoppingWishes( out array<class<KFWeaponPickup> > Wish )
 	{
 		PC = class<KFWeaponPickup>(L[i]);
 		if ( PC == None || class<KFWeapon>(PC.default.InventoryType) == None || Pawn.FindInventoryType(PC.default.InventoryType) != None )
+			continue;
+		// (bNoStrayBlades) a blade only for a Berserker
+		if ( bNoStrayBlades && class<KFWeapon>(PC.default.InventoryType).default.bMeleeWeapon && GetPerkName() != "Berserker" )
 			continue;
 		D = PC.default.MaxDesireability * (1.f + FRand() * 0.5f);
 		if ( WeaponIsForPerk(PC) )
@@ -3418,6 +3429,33 @@ final function bool FitsAfterSales( class<KFWeaponPickup> PC )
 			Load -= W.Weight;
 	}
 	return ( Load + class<KFWeapon>(PC.default.InventoryType).default.Weight <= P.MaxCarryWeight );
+}
+
+// (bBuyOffListAmmo) Ammo for the guns we carry that the trader does not sell, the 9mm above all: a player buys it from the
+// trader's ammo list, but the bots only ever filled guns on sale, so a bot whose main gun was a LAW was left with an empty
+// pistol and the knife whenever specimens came close.
+final function BuyOffListAmmo()
+{
+	local array<class<Pickup> > L;
+	local Inventory Inv;
+	local KFWeapon W;
+	local int i;
+	local bool bOnSale;
+
+	L = GetLegalPurchases();
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W == None || W.bMeleeWeapon || W == MyGrenades || Syringe(W) != None || Welder(W) != None
+			|| class<KFWeaponPickup>(W.PickupClass) == None || W.GetAmmoClass(0) == None )
+			continue;
+		bOnSale = false;
+		for ( i=0; i<L.Length && !bOnSale; i++ )
+			if ( L[i] == W.PickupClass )
+				bOnSale = true;
+		if ( !bOnSale )
+			FillAllAmmo(W.GetAmmoClass(0), 1.f);
+	}
 }
 
 // Fills the ammo of the guns on sale here that the bot carries: its perk guns, or the others.
@@ -5740,6 +5778,7 @@ final function PickNextRetMove()
     local KFNadeHealingExplosion TempCloud;
 	local Vector HN,HL,MateLoc;
 	local bool bToMate;
+	local float SirenCost;
 
 	// (bRetreatToTeam) a Fleshpound or Scrake after us: lead him into the team's fire
 	bToMate = bRetreatToTeam && BigOneAfterUs() && NearestAllyLoc(MateLoc) && VSize(MateLoc - Pawn.Location) < 1500.f;
@@ -5793,11 +5832,17 @@ MoveFound:
 		EnemyDir = vect(0,0,0);
         TotalWeight = 0.0;
         bAnyMonsterHasLOS = false;
+        SirenCost = 0;
         for( C = Level.ControllerList; C != None; C = C.nextController )
         {
             M = KFMonster(C.Pawn);
             if( M == None || M.Health <= 0 )
                 continue;
+
+            // (bSirenAware) inside a Siren's scream: within its reach (700), in front of her (her cone), in her sight
+            if ( bSirenAware && M.IsA('ZombieSiren') && !M.bDecapitated && VSize(N.Location - M.Location) < 750.f
+                && (Normal(N.Location - M.Location) dot vector(M.Rotation)) > 0.4f && FastTrace(N.Location, M.Location + M.EyePosition()) )
+                SirenCost += 0.5f;
 
             D = VSize(M.Location - Pawn.Location);
             bHasLOS = LineOfSightTo(M);
@@ -5827,6 +5872,7 @@ MoveFound:
 			Dist += 0.15f;
 		else
 			Dist -= 0.35f;
+		Dist += SirenCost;
         if ( bToMate )
             Dist -= Normal(MateLoc - Pawn.Location) dot Normal(N.Location - Pawn.Location) * 0.8f;
         else if ( Squad != None )
@@ -6134,7 +6180,8 @@ ignores SeePlayer, HearNoise;
 	function Tick( float DeltaTime )
 	{
 		Global.Tick(DeltaTime);
-		if ( ZerkStepBackNow() )
+		// (the checks in Global.Tick can have sent us elsewhere, to get out of bile: no StepBack label there)
+		if ( IsInState('Charging') && ZerkStepBackNow() )
 			GotoState(, 'StepBack');
 	}
 
@@ -6797,6 +6844,10 @@ final function float GetEnemyDesire( KFMonster M, bool bCheckedSight )
     // a Berserker with a gun and nothing on top of him shoots Sirens first, from where he is
     if( bZerkGun && M.IsA('ZombieSiren') && !M.bDecapitated && VSize(M.Location-Pawn.Location)<1200.f && GetPerkName()=="Berserker"
         && HasLoadedGun() && CountThreatsWithin(300.f) == 0 )
+        Cost*=0.4f;
+    // (bScrakeFocus) a Scrake within 700 with his head on comes first: he charges at two and a half times his pace at
+    // anyone who turns away from him, so a player keeps him in front while backing off
+    if( bScrakeFocus && M.IsA('ZombieScrake') && !M.bDecapitated && VSize(M.Location-Pawn.Location)<700.f )
         Cost*=0.4f;
     // A Bloat sprays bile for two seconds when it dies: kill it while it is far away, leave it while it is close.
     if( M.IsA('ZombieBloat') )
@@ -7937,4 +7988,8 @@ defaultproperties
 	bAnswerCalls=True
 	bHumanFirst=True
 	bPitAware=True
+	bNoStrayBlades=True
+	bBuyOffListAmmo=True
+	bSirenAware=True
+	bScrakeFocus=True
 }

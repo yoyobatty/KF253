@@ -285,10 +285,10 @@ event Bump(actor Other)
 		return;
 
 	if( Other.IsA('NetKActor') && Physics != PHYS_Falling && Location.Z < Other.Location.Z + CollisionHeight
-	 && Location.Z > Other.Location.Z - (CollisionHeight * 0.5) && Base!=Other && Base.bStatic
+	 && Location.Z > Other.Location.Z - (CollisionHeight * 0.5) && Base!=None && Base!=Other && Base.bStatic
 	 && normal(X) dot normal(Other.Location - Location) >= 0.7)
 	{
-		if( KActor(Other).KGetMass()>=0.5 && !MonsterController(Controller).CanAttack(Controller.Enemy) )
+		if( KActor(Other).KGetMass()>=0.5 && MonsterController(Controller)!=None && !MonsterController(Controller).CanAttack(Controller.Enemy) )
 		{
 			// Store kick impact data
 
@@ -331,6 +331,9 @@ function JumpOffPawn()
 // Actually execute the kick (this is notified in the ZombieKick animation)
 function KickActor()
 {
+	// (a notify from the kick animation: by then the specimen may be dead, with no controller, or the prop gone)
+	if ( KickTarget == None || KFMonsterController(Controller) == None )
+		return;
 	KickTarget.Velocity.Z += (Mass * 5 + (KGetMass() * 10));
 	KickTarget.KAddImpulse(ImpactVector, KickLocation);
 	Acceleration = vect(0,0,0);
@@ -2220,6 +2223,8 @@ simulated function AnimEnd(int Channel)
 
 simulated function HandleBumpGlass()
 {
+	if ( Controller == None )
+		return;
 	Acceleration = vect(0,0,0);
 	Velocity = vect(0,0,0);
 
@@ -2777,6 +2782,7 @@ function bool MeleeDamageTarget(int hitdamage, vector pushdir)
 	local Name TearBone;
 	local Float dummy;
 	local Emitter BloodHit;
+	local KFHumanPawn Victim;
 
 	if( Level.NetMode==NM_Client || Controller==None )
 		Return False; // Never should be done on client.
@@ -2802,17 +2808,22 @@ function bool MeleeDamageTarget(int hitdamage, vector pushdir)
 			return false;
 
 
-	  if ((Controller.target != None) && KFHumanPawn(Controller.Target)!=none)
+	  // (the victim held here: a blow that kills makes the controller let go of its target)
+	  Victim = KFHumanPawn(Controller.Target);
+	  if (Victim != None)
 	  {
-	   //TODO - line below was KFPawn. Does this whole block need to be KFPawn, or is it OK as KFHumanPawn?
-	   KFHumanPawn(Controller.Target).TakeDamage(hitdamage, Instigator ,HitLocation,pushdir, CurrentDamType); //class 'KFmod.ZombieMeleeDamage');
+	   Victim.TakeDamage(hitdamage, Instigator ,HitLocation,pushdir, CurrentDamType); //class 'KFmod.ZombieMeleeDamage');
 
-		  if (KFHumanPawn(Controller.Target).Health <=0)
+		  // (a killing blow can gib the body and remove it at once)
+		  if (Victim == None || Victim.Health <=0)
 		  {
-		   BloodHit = Spawn(class'KFMod.FeedingSpray',self,,Controller.Target.Location,rotator(pushdir));	 //
-		   KFHumanPawn(Controller.Target).SpawnGibs(rotator(pushdir), 1);
-		   TearBone=KFHumanPawn(Controller.Target).GetClosestBone(HitLocation,Velocity,dummy);
-		   KFHumanPawn(Controller.Target).HideBone(TearBone);
+		   if (Victim != None)
+		   {
+			BloodHit = Spawn(class'KFMod.FeedingSpray',self,,Victim.Location,rotator(pushdir));	 //
+			Victim.SpawnGibs(rotator(pushdir), 1);
+			TearBone=Victim.GetClosestBone(HitLocation,Velocity,dummy);
+			Victim.HideBone(TearBone);
+		   }
 
 		   // Give us some Health back
 

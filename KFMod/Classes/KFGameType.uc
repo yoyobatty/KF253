@@ -437,7 +437,9 @@ event InitGame( string Options, out string Error )
 			LoadedSkills[LoadedSkills.Length] = V;
 	}
 	//Spawn(Class'KFBotChatManager');
-	AccessControl.AdminClass = class'KFMod.KFAdmin';
+	// (no access control in a game played offline)
+	if ( AccessControl != None )
+		AccessControl.AdminClass = class'KFMod.KFAdmin';
 	LoadUpMonsterList();
 }
 
