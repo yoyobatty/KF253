@@ -189,6 +189,8 @@ var int WedgeTries;
 
 // Off the path network (no anchor found): since when and where. After AnchorLostLimit seconds there, unseen, it is
 // put back on its last anchor (TeleportBackIn).
+var() bool bLedgeJump;			// walked into a ledge under a low opening (a window sill): hop into the opening (LedgeJump)
+var float NextLedgeJump;
 var float AnchorLostTime;
 var vector AnchorLostSpot;
 var() float AnchorLostLimit;
@@ -4279,7 +4281,66 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 		AddSealPath(CurrentPath,KFDoorMover(Wall));
 		MoveTarget = Pawn.Anchor;
 	}
+	if( LedgeJump(HitNormal) )
+		return true;
 	return Super.NotifyHitWall(HitNormal, Wall);
+}
+
+// (bLedgeJump) A ledge in a low opening, as KF-Offices' window sills (PathNode84, PathNode111): the engine's step up
+// rises the whole MAXSTEPHEIGHT before it moves on, and its jump test (PickWallAdjust) looks ahead only at the top of
+// the jump, so where the opening is lower than the pawn and a step both fail and the bot walks into the sill for good.
+// Look for the heights up to our jump at which the way ahead is clear, with floor beyond, and hop to their middle.
+final function bool LedgeJump(vector HitNormal)
+{
+	local vector Dir, Ext, HL, HN, Start, Ahead;
+	local float Rise, H, Low, High, G, Reach;
+
+	if( !bLedgeJump || Pawn==None || Pawn.Physics!=PHYS_Walking || !Pawn.bCanJump || Pawn.JumpZ<=0 || Level.TimeSeconds<NextLedgeJump
+		|| Destination.Z<Pawn.Location.Z-MAXSTEPHEIGHT )
+		return false;
+	Dir = Destination - Pawn.Location;
+	Dir.Z = 0;
+	if( VSize(Dir)<1.f )
+		return false;
+	Dir = Normal(Dir);
+	HitNormal.Z = 0;
+	if( (Normal(HitNormal) dot Dir)>-0.5 )
+		return false;
+	G = FMax(Abs(Pawn.PhysicsVolume.Gravity.Z), 1.f);
+	Rise = Square(Pawn.JumpZ) / (2.f * G);
+	Ext = Pawn.GetCollisionExtent();
+	Start = Pawn.Location;
+	Reach = Pawn.CollisionRadius + 16.f;
+	if( Trace(HL, HN, Start + Dir * Reach, Start, true, Ext)==None )
+		return false;
+	Low = -1;
+	High = -1;
+	for( H=4.f; H<=Rise; H+=4.f )
+	{
+		if( Trace(HL, HN, Start + vect(0,0,1) * H, Start, false, Ext)!=None )
+			break;
+		Ahead = Start + vect(0,0,1) * H + Dir * Reach;
+		if( Trace(HL, HN, Ahead, Start + vect(0,0,1) * H, true, Ext)==None
+			&& Trace(HL, HN, Ahead - vect(0,0,1) * (H + MAXSTEPHEIGHT), Ahead, false, Ext)!=None )
+		{
+			if( Low<0 )
+				Low = H;
+			High = H;
+		}
+		else if( Low>=0 )
+			break;
+	}
+	if( Low<0 )
+		return false;
+	H = FMin(Rise, 0.5 * (Low + High) + 4.f);
+	NextLedgeJump = Level.TimeSeconds + 1.f;
+	Pawn.Velocity = Dir * Pawn.GroundSpeed;
+	Pawn.Velocity.Z = Sqrt(2.f * G * H);
+	Pawn.Acceleration = Dir * Pawn.AccelRate;
+	bJumpOverWall = true;
+	bNotifyApex = true;
+	Pawn.SetPhysics(PHYS_Falling);
+	return true;
 }
 
 final function AddSealPath( ReachSpec Spec, KFDoorMover Door )
@@ -7997,6 +8058,7 @@ defaultproperties
 	AnchorLostLimit=10.000000
 	HoldReach=120.000000
 	bHoldSpots=True
+	bLedgeJump=True
 	HoldNoWayRest=5.000000
 	bHumanOrdersFirst=True
 	HoldQuietTime=15.000000
