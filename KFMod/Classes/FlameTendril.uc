@@ -106,6 +106,8 @@ simulated function Explode(vector HitLocation,vector HitNormal)
 
     if ( Role == ROLE_Authority )
         HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
+    else if ( Level.NetMode == NM_Client )
+        class'KFMonster'.static.IgniteBodiesNear(self, DamageRadius, HitLocation);
     bRelevant = EffectIsRelevant(Location,false);
     if ( (bRelevant || Level.NetMode != NM_Client) && CanSpawnFuelFlameNear(3, 36.0) )
         Spawn(class'FlameGroundFire',Instigator,,Location + vect(0,0,1));

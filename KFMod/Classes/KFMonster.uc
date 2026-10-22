@@ -122,8 +122,9 @@ var bool bCharDone;
 var Combiner CharSkins[4];				// the blend standing in for each skin on the way
 var ConstantColor CharMask;				// how much of the skin is left
 var array<Object> CharMade;				// from the level's pool, to be given back
+var() float GibCharShare;				// giblets and stumps of a charred body char this share of the way
 
-// The dead burn on for CorpseBurnTime seconds where they fall, and then smoke
+// The dead burn on for CorpseBurnTime seconds where they fall, or where fire reaches them, and then smoke
 var() float CorpseBurnTime;
 var float CorpseBurnEnd;				// when the fire on the body goes out; 0 for a body that is not burning
 var bool bCorpseSmoked;
@@ -822,6 +823,34 @@ simulated function StopBurnFX()
 	bBurnApplied = False;
 }
 
+// Fire has reached a body on this machine (each machine keeps its own): it burns, or burns on for longer
+simulated function IgniteBody()
+{
+	if ( !bPlayedDeath || bGibbed || bSkeletized || bDeRes || Level.NetMode == NM_DedicatedServer )
+		return;
+	if ( Level.TimeSeconds >= CorpseBurnEnd )
+	{
+		bCorpseSmoked = false;
+		if ( CorpseSmoke != None )
+		{
+			CorpseSmoke.Kill();
+			CorpseSmoke = None;
+		}
+		Enable('Tick');
+	}
+	CorpseBurnEnd = FMax(CorpseBurnEnd, Level.TimeSeconds + CorpseBurnTime * (0.75 + 0.5 * FRand()));
+}
+
+// A network client's fires light its own bodies themselves: the server's fire damage never reaches them
+static function IgniteBodiesNear( Actor Fire, float Radius, vector Spot )
+{
+	local KFMonster M;
+
+	foreach Fire.VisibleCollidingActors(class'KFMonster', M, Radius, Spot)
+		if ( M.bPlayedDeath )
+			M.IgniteBody();
+}
+
 simulated function SmokeBody()
 {
 	if ( CorpseSmokeClass == None )
@@ -872,6 +901,16 @@ simulated function TickChar( float DeltaTime )
 			CharSkins[i].Material2 = T;
 		Skins[i] = CharSkins[i];
 	}
+	CharStumps();
+}
+
+simulated function CharStumps()
+{
+	local int i;
+
+	for ( i=0; i<ArrayCount(Stumps); i++ )
+		if ( Stumps[i] != None )
+			Stumps[i].CharTo(CharLevel * GibCharShare);
 }
 
 // The plain picture under a skin, when the skin is one a blend can be made of: solid all over, and still
@@ -904,6 +943,7 @@ simulated function CharDone()
 	Skins[2]=Texture 'PatchTex.Common.ZedBurnSkin';
 	Skins[3]=Texture 'PatchTex.Common.ZedBurnSkin';
 	FreeChar();
+	CharStumps();
 }
 
 simulated function FreeChar()
@@ -1490,6 +1530,9 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 		local Vector PushLinVel, PushAngVel;
 		local bool bIsHeadshot;
 
+		if ( class<Burned>(damageType) != None || class<DamTypeFlamethrower>(damageType) != None )
+			IgniteBody();
+
 		if( Physics == PHYS_KarmaRagdoll )
 		{
 			WakeBody();
@@ -1730,6 +1773,7 @@ simulated function AddStump( int Slot, name Bone )
 	Stumps[Slot].bCollideWorld = false;
 	Stumps[Slot].SetDrawScale(Stumps[Slot].DrawScale * StumpSize[Slot] * GibScale * DrawScale);
 	AttachToBone(Stumps[Slot], Bone);
+	Stumps[Slot].CharTo(CharLevel * GibCharShare);
 }
 
 simulated function DropStump( int Slot )
@@ -1943,6 +1987,8 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
         return;
 	Giblet.bFlaming = bFlaming;
 	Giblet.SpawnTrail();
+	if ( KFGib(Giblet) != None )
+		KFGib(Giblet).CharTo(CharLevel * GibCharShare);
 
 	Giblet.SetDrawScale(Giblet.DrawScale * GibScale * DrawScale);
 	if( GibClass == MonsterHeadGiblet )
@@ -3534,6 +3580,7 @@ defaultproperties
 	 BurnSpeedScale=0.800000
 	 CharTime=5.000000
 	 CorpseBurnTime=6.000000
+	 GibCharShare=0.500000
 	 CorpseSmokeClass=Class'KFMod.KFCorpseSmoke'
 	 HeavyBloodClass=Class'KFMod.KFBloodPuffHeavy'
 	 BurstBloodClass=Class'KFMod.KFBloodBurst'

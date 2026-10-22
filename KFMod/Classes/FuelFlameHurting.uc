@@ -16,8 +16,8 @@ simulated function PostBeginPlay()
 {
     // Dedicated servers + Emitters + AutoDestroy is a bad combo for gameplay actors.
     // Run damage ticking on the server explicitly and self-destruct after BurnTime.
-    if (Level.NetMode != NM_Client)
-        SetTimer(BurnInterval, true);
+    // (a network client's fire only lights its own bodies)
+    SetTimer(BurnInterval, true);
 }
 
 simulated function PostNetBeginPlay()
@@ -121,6 +121,12 @@ function Timer()
 
 	if (PhysicsVolume.bWaterVolume)
 		return;
+
+	if ( Level.NetMode == NM_Client )
+	{
+		class'KFMonster'.static.IgniteBodiesNear(self, DamageRadius, Location);
+		return;
+	}
 
 	if ( Role == Role_Authority )
 		HurtRadius(FlameDamage, DamageRadius, class'KFMod.DamTypeFlamethrower', 0.f, Location );

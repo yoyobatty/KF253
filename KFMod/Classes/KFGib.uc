@@ -4,6 +4,11 @@ class KFGib extends Gib;
 
 var() xEmitter TrailFlame;
 
+// A giblet off a charred body shows the burnt skin through its own by the share it is charred
+var Combiner CharSkin;
+var ConstantColor CharMask;
+var array<Object> CharMade;				// from the level's pool, given back when it goes
+
 simulated function HitWall( Vector HitNormal, Actor Wall )
 {
     local float Speed, MinSpeed;
@@ -81,6 +86,34 @@ simulated function SpawnTrail()
 			RandSpin( 64000 );
 		}
 	}
+}
+
+// Charred by Amount, 0 to 1; called again as its body chars further
+simulated function CharTo( float Amount )
+{
+	local Texture T;
+
+	if ( Amount <= 0.0 || Level.NetMode == NM_DedicatedServer )
+		return;
+	if ( CharSkin == None )
+	{
+		if ( Skins.Length == 0 )
+			return;
+		T = Texture(Skins[0]);
+		if ( T == None || T.bMasked || T.bAlphaTexture )
+			return;
+		CharMask = class'KFFXMat'.static.Tone(CharMade, Level, 255, 255);
+		CharSkin = class'KFFXMat'.static.Fade(CharMade, Level, Texture'PatchTex.Common.ZedBurnSkin', T, CharMask);
+		Skins[0] = CharSkin;
+	}
+	CharMask.Color.A = Clamp(int(255.0 * (1.0 - Amount)), 0, 255);
+}
+
+simulated function Destroyed()
+{
+	if ( CharMade.Length > 0 )
+		class'KFFXMat'.static.FreeAll(CharMade, Level);
+	Super.Destroyed();
 }
 
 defaultproperties
