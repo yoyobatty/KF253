@@ -17,6 +17,7 @@
 class KFTHud extends Interaction;
 
 var array<KFTLight>	Lights;
+var int				Turn;				// (whose turn it is to take pictures, when more than one light is lit)
 
 static final function KFTHud Of(PlayerController PC, optional bool bMake)
 {
@@ -62,10 +63,34 @@ function Remove(KFTLight L)
 function PreRender(Canvas C)
 {
 	local int i, n;
+	local KFTLight Taker;
 
 	for (i = Lights.Length - 1; i >= 0; i--)
 		if (Lights[i] == None || Lights[i].bDeleteMe)
 			Lights.Remove(i, 1);
+	// One light's pictures a frame. The torch and the muzzle light both taking theirs in the same frame left the sky
+	// drawn as black fog for the rest of the map (inside the renderer: nothing a script can see changes). A light with
+	// no pictures yet goes first; otherwise the lights take turns, and the others keep the pictures they have.
+	Taker = None;
+	for (i = 0; i < Lights.Length; i++)
+		if (Lights[i].bDressed && Lights[i].bLit && !Lights[i].bHavePictures)
+		{
+			Taker = Lights[i];
+			break;
+		}
+	if (Taker == None && Lights.Length > 0)
+	{
+		Turn++;
+		for (n = 0; n < Lights.Length; n++)
+		{
+			Taker = Lights[(Turn + n) % Lights.Length];
+			if (Taker.bDressed && Taker.bLit)
+				break;
+		}
+	}
+	n = 0;
+	for (i = 0; i < Lights.Length; i++)
+		Lights[i].bYield = (Lights[i] != Taker);
 	for (i = 0; i < Lights.Length; i++)
 	{
 		Lights[i].Shun(true);

@@ -128,6 +128,7 @@ var() config float	BounceGain;			// ...and how much of it
 var() config int	Thrift;				// the pictures taken every other frame: 0 never, 1 always, 2 when frames take long
 var bool			bSparing;			// (they are being taken every other frame just now)
 var bool			bSkipped;			// (and were not taken in the last frame)
+var bool			bYield;				// (another light takes its pictures this frame: these are left as they are, see KFTHud)
 var float			LastFrame, Pace;	// when the last frame was, and how long frames take (eased)
 var vector			ShotEye, ShotWay;	// where the view was, and the way it looked, when the pictures were last taken
 var rotator			ShotTurn;
@@ -135,7 +136,7 @@ var config int		Skip;				// (a tool, for timing: 1 no light on bodies, 2 the pic
 										// 16 no light on what can be seen through, 32 what such things are made of to the log, 64 they are handled as anything else,
 										// 128 the picture of what the light falls on kept, 256 the two fog pictures kept,
 										// 512 and 1024 the pictures taken as they were before 2026-10-13: the view's far end left alone, no end to the plain picture,
-										// 2048 the cones on the level always their full length)
+										// 2048 the cones on the level always their full length, 8192 no light of its own on terrain)
 var bool			bHavePictures;
 var bool			bShow;				// (a tool: the light's pictures are drawn in the corner of the screen)
 var int				ShowPick;			// (a tool: with bShow, one picture alone, as tall as the screen: 1 what the light falls on, 2 the white fog's, 3 the black fog's, 4 how far it sees, 5 what it throws, 6 what a body is lit with, 7 the soft edges)
@@ -198,6 +199,7 @@ var Material		LitFullFall, LitHalfFall;	// the light's material with that in it
 var array<Object>	Made;
 var KFTBody			Shade;				// the light on bodies, in their own colours
 var KFTBody			ShadeX;				// the light on bodies whose skins are made of several textures
+var KFTBody			Ground;				// the light on terrain, on its own colours
 var KFTBody			Fill;				// the half of the light that is not weighed by how a surface faces it
 var KFTBounce		Bounce;				// what the lit place throws back
 var bool			bDressed;
@@ -434,6 +436,18 @@ simulated function Dress()
 	ShadeX = Spawn(class'KFTBody');
 	if (ShadeX != None)
 		ShadeX.Fit(LitFullX, Reach, FOV, int(Throw));
+	Ground = Spawn(class'KFTBody');
+	if (Ground != None)
+	{
+		// (terrain is drawn lit in the light's plain picture, so what the light takes from that is dark at night: it is
+		// lit as a body is, on its own colours. It is fixed to the terrain, not looked up by the renderer: that kind
+		// is put on the level's own surfaces too, whatever it is told. Slopes turned from the light are left to the
+		// shadow test; skipped, they cut the pool along the terrain's triangles.)
+		Ground.MaterialBlendingOp = PB_Modulate;
+		Ground.bProjectTerrain = true;
+		Ground.bProjectOnBackfaces = true;
+		Ground.Fit(LitBody, Reach, FOV, int(Throw));
+	}
 	Sheen = Spawn(class'KFTBody');
 	if (Sheen != None)
 	{
@@ -1327,6 +1341,8 @@ simulated function Dark()
 		Shade.DetachProjector(true);
 	if (ShadeX != None)
 		ShadeX.DetachProjector(true);
+	if (Ground != None)
+		Ground.DetachProjector(true);
 	if (Sheen != None)
 		Sheen.DetachProjector(true);
 	if (SheenX != None)
@@ -1361,6 +1377,9 @@ simulated function Undress()
 	if (ShadeX != None)
 		ShadeX.Destroy();
 	ShadeX = None;
+	if (Ground != None)
+		Ground.Destroy();
+	Ground = None;
 	Shun(false);
 	UnclearParts();
 	if (Sheen != None)
@@ -2033,6 +2052,13 @@ simulated function bool Frame(Canvas C)
 		bSparing = false;
 	// (When it is left to the light, 2, a frame is passed over only while the view is all but still: a light that
 	// stays behind for every other frame of a turn is seen to judder.)
+	if (bYield && bHavePictures)
+	{
+		bYield = false;
+		bSkipped = true;
+		return false;
+	}
+	bYield = false;
 	if (bSparing && bHavePictures && !bSkipped && (Skip & 2) == 0 && (Thrift == 1 || Steady()))
 	{
 		bSkipped = true;
@@ -2044,6 +2070,8 @@ simulated function bool Frame(Canvas C)
 		Shade.DetachProjector(true);
 	if (ShadeX != None)
 		ShadeX.DetachProjector(true);
+	if (Ground != None)
+		Ground.DetachProjector(true);
 	if (Sheen != None)
 		Sheen.DetachProjector(true);
 	if (SheenX != None)
@@ -2195,6 +2223,13 @@ simulated function Join()
 		ShadeX.SetRotation(Rotation);
 		ShadeX.DetachProjector(true);
 		ShadeX.AttachProjector();
+	}
+	if (Ground != None && (Skip & 8192) == 0)
+	{
+		Ground.SetLocation(Location);
+		Ground.SetRotation(Rotation);
+		Ground.DetachProjector(true);
+		Ground.AttachProjector();
 	}
 	if (Sheen != None && (Skip & 16) == 0)
 	{
