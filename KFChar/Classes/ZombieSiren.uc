@@ -74,6 +74,9 @@ function RangedAttack(Actor A)
 
 simulated function int DoAnimAction( name AnimName )
 {
+	// a blast's stumble, as on the others (KFMonster.BlastStagger)
+	if( IsStaggerAction(AnimName) )
+		return Super.DoAnimAction(AnimName);
 	// Her head gone (only that asks her for HitF, which her mesh calls HitReactionF): the flinch ends a scream begun
 	if( AnimName=='HitF' )
 	{

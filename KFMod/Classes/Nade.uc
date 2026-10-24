@@ -18,6 +18,14 @@ var bool bIncendiary, bHealing, bGas; // Is this an incendiary grenade?
 var() class<Actor> IncendiaryGroundFireClass; // Ground fires >:)
 var() int NumGroundFires; // How many ground fires to spawn
 
+var() float CoreDamage;       // more damage close in, falling to none at CoreRadius: a frag at a specimen's feet kills it
+var() float CoreRadius;
+var() int   CoreBigHealth;    // specimens with this much default health or more (Scrake, Fleshpound, Patriarch) take only the outer blast
+var() bool  bZedsFear;        // specimens steer around a frag lying still, as bots do
+var() bool  bFragCover;       // the fragments go by lines to the top, middle and bottom of each body: cover stops them
+var() bool  bBodyShield;      // and so do other bodies and props on the way (off: it took too much from a grenade in a crowd)
+var() float StaggerRadius;    // a specimen left standing this close stumbles (KFMonster.BlastStagger); the big ones do not
+
 replication
 {
     reliable if (Role == ROLE_Authority)
@@ -208,10 +216,68 @@ simulated function HitWall( vector HitNormal, actor Wall )
 	Super.HitWall(HitNormal, Wall);
 	if( VSize(Velocity) < 20.0 )
 	{
-		Fear = Spawn(class'KFAvoidMarker');
+		Fear = Spawn(class'KFAvoidMarker', self);
 		Fear.SetCollisionSize(DamageRadius,DamageRadius);
 		Fear.StartleBots();
 	}
+}
+
+// The close-in part of the blast a specimen takes; people and the big ones take none
+simulated final function float CoreBlast( Actor Victim, float Dist )
+{
+	if ( KFMonster(Victim) == None || CoreRadius <= 0 || class<KFMonster>(Victim.Class).default.Health >= CoreBigHealth )
+		return 0;
+	return CoreDamage * FMax(0, 1 - FMax(0, Dist - Victim.CollisionRadius)/CoreRadius);
+}
+
+// The share of a body the fragments reach: lines from just over the blast to its top, middle and bottom (0.4, 0.3, 0.3),
+// each stopped by cover and, with bBodyShield, by another body or prop on the way, though not by one standing over the
+// blast (they fly out under and around it). Walls gets the share no cover stops, for the blast itself.
+simulated final function float FragReach( Actor Victim, vector HitLocation, out float Walls )
+{
+	local vector From, Spot, HL, HN, D;
+	local Actor A;
+	local float W, Reach;
+	local int i;
+	local bool bStopped;
+
+	From = HitLocation + vect(0,0,15);
+	Walls = 0;
+	for ( i = 0; i < 3; i++ )
+	{
+		Spot = Victim.Location;
+		W = 0.3;
+		if ( i == 0 )
+		{
+			Spot.Z += 0.8 * Victim.CollisionHeight;
+			W = 0.4;
+		}
+		else if ( i == 2 )
+			Spot.Z -= 0.8 * Victim.CollisionHeight;
+		if ( !FastTrace(Spot, From) )
+			continue;
+		Walls += W;
+		bStopped = false;
+		if ( bBodyShield )
+		{
+			foreach TraceActors(class'Actor', A, HL, HN, Spot, From)
+			{
+				if ( A == Victim || (ExtendedZCollision(A) != None && A.Owner == Victim) )
+					break;
+				if ( Pawn(A) == None && ExtendedZCollision(A) == None && KActor(A) == None )
+					continue;
+				D = From - A.Location;
+				D.Z = 0;
+				if ( VSize(D) <= A.CollisionRadius && Abs(From.Z - A.Location.Z) <= A.CollisionHeight )
+					continue;
+				bStopped = true;
+				break;
+			}
+		}
+		if ( !bStopped )
+			Reach += W;
+	}
+	return Reach;
 }
 
 /* HurtRadius()
@@ -220,21 +286,31 @@ simulated function HitWall( vector HitNormal, actor Wall )
 simulated function HurtRadius( float DamageAmount, float DamageRadius, class<DamageType> DamageType, float Momentum, vector HitLocation )
 {
 	local actor Victims;
-	local float damageScale, dist;
+	local float damageScale, dist, Reach, Walls;
 	local vector dir;
+	local bool bOnFeet;
 
 	if ( bHurtEntry )
 		return;
 
 	bHurtEntry = true;
 
-	// It'll be slower, but let's see if this helps the grenades deal damage properly in a radius.
-	foreach VisibleCollidingActors (class 'Actor', Victims, DamageRadius, HitLocation)
+	// Each actor in reach whose middle the blast point sees; with bFragCover each body by the lines FragReach draws, so one
+	// whose middle is hidden can still be caught at its head or feet
+	foreach CollidingActors (class 'Actor', Victims, DamageRadius, HitLocation)
 	{
 		// don't let blast damage affect fluid - VisibleCollisingActors doesn't really work for them - jag
 		if( Victims !=None && Victims != self && Hurtwall != Victims && Victims.Role == ROLE_Authority && !Victims.IsA('FluidSurfaceInfo') && !Victims.IsA('ExtendedZCollision') )
 		{
 			if( (Instigator==None || Instigator.Health<=0) && KFPawn(Victims)!=None )
+				Continue;
+			Reach = 1;
+			Walls = 1;
+			if ( bFragCover && Pawn(Victims) != None && !bIncendiary && !bHealing )
+				Reach = FragReach(Victims, HitLocation, Walls);
+			else if ( !FastTrace(Victims.Location, HitLocation) )
+				Walls = 0;
+			if ( Walls <= 0 )
 				Continue;
 			dir = Victims.Location - HitLocation;
 			dist = FMax(1,VSize(dir));
@@ -253,7 +329,12 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 			{
 				if ( Instigator == None || Instigator.Controller == None )
 					Victims.SetDelayedDamageInstigatorController( InstigatorController );
-				Victims.TakeDamage(damageScale * DamageAmount,Instigator,Victims.Location - 0.5 * (Victims.CollisionHeight + Victims.CollisionRadius) * dir,(damageScale * Momentum * dir),DamageType);
+				bOnFeet = Victims.Physics == PHYS_Walking;
+				Victims.TakeDamage(damageScale * DamageAmount * Reach + CoreBlast(Victims, dist) * Walls,Instigator,Victims.Location - 0.5 * (Victims.CollisionHeight + Victims.CollisionRadius) * dir,(damageScale * Walls * Momentum * dir),DamageType);
+				// what it leaves on its feet near it stumbles (one the hit knocked over stays down: FlipOver)
+				if ( bOnFeet && KFMonster(Victims) != None && KFMonster(Victims).Health > 0 && dist - Victims.CollisionRadius <= StaggerRadius
+				 && class<KFMonster>(Victims.Class).default.Health < CoreBigHealth )
+					KFMonster(Victims).BlastStagger(HitLocation);
 				if (Vehicle(Victims) != None && Vehicle(Victims).Health > 0)
 					Vehicle(Victims).DriverRadiusDamage(DamageAmount, DamageRadius, InstigatorController, DamageType, Momentum, HitLocation);
 			}         
@@ -290,4 +371,9 @@ defaultproperties
 	bNetTemporary=False
 	bNetNotify=true
 	IncendiaryGroundFireClass=Class'KFMod.KFNadeFire'
+	CoreDamage=300.000000
+	CoreRadius=160.000000
+	CoreBigHealth=1000
+	bFragCover=True
+	StaggerRadius=250.000000
 }

@@ -6,6 +6,9 @@ class KFAvoidMarker extends AvoidMarker;
 
 function bool RelevantTo(Pawn P)
 {
+    // Specimens pay a frag no mind unless it says otherwise
+    if ( KFMonster(P) != None && (Nade(Owner) == None || !Nade(Owner).bZedsFear) )
+        return false;
     // Avoid if AI and either the pawn is the instigator (creator) or on a different team
     return (AIController(P.Controller) != None) && 
            (P == Instigator || 

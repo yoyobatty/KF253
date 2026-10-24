@@ -411,6 +411,14 @@ function DoDamageFX( Name boneName, int Damage, class<DamageType> DamageType, Ro
 }
 
 
+// How hard a frag throws the body: the push it took over the push at the heart of a grenade's blast (as KFMonster)
+simulated function float BlastFling( class<DamageType> DamageType )
+{
+	if ( class<DamTypeFrag>(DamageType) == None )
+		return 1;
+	return FClamp(VSize(TearOffMomentum) * Mass / class'Nade'.default.MomentumTransfer, 0, 1);
+}
+
 //Stops the green shit when a player dies.
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 {
@@ -539,8 +547,8 @@ function PlayDyingAnimation(class<DamageType> DamageType, vector HitLoc)
 
 				if( DamageType.default.bKUseOwnDeathVel )
 				{
-					RagDeathVel = DamageType.default.KDeathVel;
-					RagDeathUpKick = DamageType.default.KDeathUpKick;
+					RagDeathVel = DamageType.default.KDeathVel * BlastFling(DamageType);
+					RagDeathUpKick = DamageType.default.KDeathUpKick * BlastFling(DamageType);
 				}
 			}
 

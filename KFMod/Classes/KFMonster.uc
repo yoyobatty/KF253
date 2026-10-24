@@ -1042,6 +1042,45 @@ function bool PerformDodge(eDoubleClickDir DoubleClickMove, vector Dir, vector C
 	return true;
 }
 
+// A blast left it on its feet (Nade): it stumbles where it stands, its attack cut short, and does nothing more until the
+// stumble ends. Knocked off its feet by the push it is set down first, as FlipOver does; not when already knocked over or
+// stumbling, not without the animation.
+function bool BlastStagger( vector BlastSpot )
+{
+	local name Action, Seq;
+	local float Frame, Rate;
+	local vector X, Y, Z, Dir;
+
+	if( Health <= 0 || KFMonsterController(Controller) == None )
+		return false;
+	GetAnimParams(0, Seq, Frame, Rate);
+	if( bShotAnim && IsAnimating(0) && (Seq=='StunState' || Seq==StaggerAnim('BlastStaggerF')) )
+		return false;
+	GetAxes(Rotation, X, Y, Z);
+	Dir = BlastSpot - Location;
+	Dir.Z = 0;
+	Dir = Normal(Dir);
+	if( Dir Dot X > 0.7 )
+		Action = 'BlastStaggerF';
+	else if( Dir Dot X < -0.7 )
+		Action = 'BlastStaggerB';
+	else if( Dir Dot Y > 0 )
+		Action = 'BlastStaggerR';
+	else Action = 'BlastStaggerL';
+	if( StaggerAnim(Action)=='' || !HasAnim(StaggerAnim(Action)) )
+		return false;
+	if( Physics==PHYS_Falling )
+		SetPhysics(PHYS_Walking);
+	bShotAnim = true;
+	SetAnimAction(Action);
+	Acceleration = vect(0, 0, 0);
+	Velocity.X = 0;
+	Velocity.Y = 0;
+	Controller.GoToState('WaitForAnim');
+	KFMonsterController(Controller).bUseFreezeHack = True;
+	return true;
+}
+
 // High damage was taken, make em fall over.
 function bool FlipOver()
 {
@@ -1072,6 +1111,15 @@ function AddVelocity( vector NewVelocity)
 {
 	if( VSize(NewVelocity)>50 )
 		Super.AddVelocity(NewVelocity);
+}
+
+// How hard a frag throws the body: the push it took over the push at the heart of a grenade's blast (TearOffMomentum is
+// that push over the mass), so one killed at the edge drops where it stood
+simulated function float BlastFling( class<DamageType> DamageType )
+{
+	if ( class<DamTypeFrag>(DamageType) == None )
+		return 1;
+	return FClamp(VSize(TearOffMomentum) * Mass / class'Nade'.default.MomentumTransfer, 0, 1);
 }
 
 // Important Block of code controlling how the Zombies (excluding the Bloat and Fleshpound who cannot be stunned, respond to damage from the
@@ -2592,8 +2640,36 @@ simulated function bool IsFlinchAnim( name AnimName )
 		|| AnimName==KFHitRight || AnimName==KFHitLeft;
 }
 
+// The four directions of a blast's stumble (BlastStagger), sent to every machine as the action's name
+simulated function bool IsStaggerAction( name AnimName )
+{
+	return AnimName=='BlastStaggerF' || AnimName=='BlastStaggerB' || AnimName=='BlastStaggerL' || AnimName=='BlastStaggerR';
+}
+
+// The stumble a blast plays: the knock-back stumble, else the whole-body hit reaction from that side (Bloat, Siren)
+simulated function name StaggerAnim( name Action )
+{
+	if( HasAnim('KnockDown') )
+		return 'KnockDown';
+	switch( Action )
+	{
+		case 'BlastStaggerF':	return KFHitFront;
+		case 'BlastStaggerB':	return KFHitBack;
+		case 'BlastStaggerL':	return KFHitLeft;
+		case 'BlastStaggerR':	return KFHitRight;
+	}
+	return '';
+}
+
 simulated function int DoAnimAction( name AnimName )
 {
+	// a blast's stumble takes the whole body: an attack, a scream or a grab under way stops
+	if( IsStaggerAction(AnimName) )
+	{
+		StopAnimating(true);
+		PlayAnim(StaggerAnim(AnimName),, 0.1);
+		Return 0;
+	}
 	if( IsFlinchAnim(AnimName) )
 	{
 		AnimBlendParams(1, 1.0, 0.0,, 'Bip01 Spine1');
@@ -3295,8 +3371,8 @@ simulated function PlayFakeDyingAnimation(class<DamageType> DamageType, vector H
 
 				if( DamageType.default.bKUseOwnDeathVel )
 				{
-					RagDeathVel = DamageType.default.KDeathVel;
-					RagDeathUpKick = DamageType.default.KDeathUpKick;
+					RagDeathVel = DamageType.default.KDeathVel * BlastFling(DamageType);
+					RagDeathUpKick = DamageType.default.KDeathUpKick * BlastFling(DamageType);
 				}
 			}
 
@@ -3470,8 +3546,8 @@ simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLo
 
 				if( DamageType.default.bKUseOwnDeathVel )
 				{
-					RagDeathVel = DamageType.default.KDeathVel;
-					RagDeathUpKick = DamageType.default.KDeathUpKick;
+					RagDeathVel = DamageType.default.KDeathVel * BlastFling(DamageType);
+					RagDeathUpKick = DamageType.default.KDeathUpKick * BlastFling(DamageType);
 				}
 			}
 
