@@ -52,10 +52,14 @@ function float GetAIRating()
     local vector Dir;
     local Controller C;
     local int AlliesWithLAW;
+    local bool bBig;
 
     B = Bot(Instigator.Controller);
     if ( (B == None) || (B.Enemy == None) )
         return Super.GetAIRating();
+    // (KFInvasionBot.bRocketBig) a Fleshpound or Scrake: what the rockets are kept for, the last one too, and one each
+    // from several of us (one rocket does not kill him)
+    bBig = KFInvasionBot(B) != None && KFInvasionBot(B).bRocketBig && KFInvasionBot(B).IsBigSpecimen(B.Enemy);
 
     Dir = B.Enemy.Location - Instigator.Location;
     Dist = VSize(Dir);
@@ -71,7 +75,7 @@ function float GetAIRating()
     else if (Dist > 5000)
         Result -= 0.3;
     
-    if (AmmoAmount(0) > 0)
+    if (AmmoAmount(0) > 0 && !bBig)
         result -= (1.0 / AmmoAmount(0)); // Penalize for low ammo
 
     if(KFInvasionBot(B) != None && (KFInvasionBot(B).ManyEnemiesAround(4, Instigator.Location) || KFInvasionBot(B).EnemyReallyScary()))
@@ -89,13 +93,13 @@ function float GetAIRating()
     }
     // Heavy penalty per ally already using LAW on same target cluster
     // First LAW user gets no penalty, second gets -0.8, third gets -1.6, etc.
-    if (AlliesWithLAW > 0)
+    if (AlliesWithLAW > 0 && !bBig)
         Result -= (AlliesWithLAW * 0.8);
 
     // Reserve LAW for high-value targets: Fleshpounds, Scrakes, and bosses
     if (KFMonster(B.Enemy) != None)
     {
-        if (KFMonster(B.Enemy).bBoss)
+        if (KFMonster(B.Enemy).bBoss || bBig)
             Result += 0.3; // Extra incentive for boss
         else
             Result -= 0.4; // Strong penalty for trash mobs 

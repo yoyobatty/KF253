@@ -53,6 +53,7 @@ var() bool bTacticalReload;		// a part-empty gun reloaded in a lull of the fight
 var() bool bAmmoRun;			// low on ammo in a wave: a box from the map near by (AmmoRunAssignment, state AmmoRun)
 var() bool bBuyOffListAmmo;		// at the trader, ammo too for the guns it does not sell, the 9mm above all (BuyOffListAmmo)
 var() bool bNoStrayBlades;		// only a Berserker buys a blade (GetShoppingWishes): for anyone else it is weight and cash spent on nothing
+var() bool bRocketBig;			// the LAW kept for Fleshpounds and Scrakes and used on them: rated for them, aimed over cover by the head, not held back by a Siren screaming away from its way, and kept out a moment for a clear line rather than swapped away and back (LAW.GetAIRating, RocketSelfDamage, RocketWait)
 var KFAmmoPickup AmmoRunTarget;
 var float NextAmmoRunTime, AmmoRunBestDist;
 var int AmmoRunStalls;
@@ -167,8 +168,8 @@ var float NextHealNadeTime;			// no other one while the last one's cloud lasts
 var vector NadeDangerSpot;
 var float NadeDangerTime;
 var Nade MyLiveNade;
-// When a rocket shot was last held back as unsafe.
-var float RocketUnsafeTime;
+// When a rocket shot was last held back as unsafe, and when one was last clear.
+var float RocketUnsafeTime, RocketSafeTime;
 var float NextHuntCheckTime;
 
 // Roaming: restarts within one tick, and progress towards the goal.
@@ -1569,6 +1570,72 @@ final function bool IsEasyMeleeTarget(Pawn P)
 	return ( P != None && (P.IsA('ZombieClot') || P.IsA('ZombieCrawler') || P.IsA('ZombieStalker')) );
 }
 
+// (bRocketBig) The launcher W out already for a big one that was in a clear shot moments ago, with nothing on us (him
+// included: inside his kite distance he is inside the blast too): only something passing (a body across the line, a
+// scream, a step behind cover) stops the shot, so it stays out, held, rather than swapped away and back.
+final function bool RocketWait(Weapon W)
+{
+	local float D, M;
+
+	if ( !bRocketBig || W == None || W != Pawn.Weapon || RocketClassOf(W) == None || !IsBigSpecimen(Enemy)
+		|| Level.TimeSeconds - RocketSafeTime > 3.f )
+		return false;
+	return ( FindNearestThreat(D, M) == None || M > 0.f );
+}
+
+// What a rocket is for: a Fleshpound or a Scrake with his head on.
+final function bool IsBigSpecimen(Pawn P)
+{
+	return ( KFMonster(P) != None && P.Health > 0 && !KFMonster(P).bDecapitated
+		&& (P.IsA('ZombieFleshPound') || P.IsA('ZombieScrake')) );
+}
+
+// A rocket launcher we carry with a rocket in it.
+final function Weapon LoadedRocket()
+{
+	local Inventory Inv;
+
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+		if ( Weapon(Inv) != None && RocketClassOf(Weapon(Inv)) != None && Weapon(Inv).HasAmmo() )
+			return Weapon(Inv);
+	return None;
+}
+
+// Where to put a rocket on Tgt from Start: its body, else (bRocketBig) its head over whatever hides the body.
+final function vector RocketAimSpot(Actor Tgt, vector Start)
+{
+	local vector Head;
+
+	if ( !bRocketBig || Pawn(Tgt) == None || FastTrace(Tgt.Location, Start) )
+		return Tgt.Location;
+	Head = GetHeadAimLocation(Tgt);
+	if ( FastTrace(Head, Start) )
+		return Head;
+	return Tgt.Location;
+}
+
+// Would Siren S's scream (ZombieSiren.HurtRadius: 700 round her, ahead of her by a dot of 0.45) catch a rocket over the
+// first Len units of its way from Start along Dir? Only there can it set the rocket off close enough to hurt us.
+final function bool ScreamCatches(Pawn S, vector Start, vector Dir, float Len)
+{
+	local vector X, Look;
+	local int i;
+
+	Look = vector(S.Rotation);
+	Look.Z = 0;
+	Look = Normal(Look);
+	for ( i=0; i<=4; i++ )
+	{
+		X = Start + Dir * (Len * i / 4.f) - S.Location;
+		if ( VSize(X) > 730.f )
+			continue;
+		X.Z = 0;
+		if ( (Normal(X) dot Look) >= 0.45f )
+			return true;
+	}
+	return false;
+}
+
 // The blast radius of what W fires if that is a rocket (the LAW), 0 for anything else.
 final function float RocketBlastRadius(Weapon W)
 {
@@ -1596,7 +1663,7 @@ final function float RocketSelfDamage(Actor Tgt, class<Projectile> PC, out vecto
 
 	Radius = PC.default.DamageRadius;
 	Start = Pawn.Location + Pawn.EyePosition();
-	End = Tgt.Location;
+	End = RocketAimSpot(Tgt, Start);
 	Dist = VSize(End - Start);
 	if ( Dist < 60.f )
 		return -1.f;
@@ -1628,8 +1695,9 @@ final function float RocketSelfDamage(Actor Tgt, class<Projectile> PC, out vecto
 		if ( KFMonster(P) == None || P.Health <= 0 )
 			continue;
 		Off = P.Location - Start;
-		// a Siren that is screaming sets it off in the air
-		if ( P.IsA('ZombieSiren') && Monster(P).bShotAnim && VSize(Off) < 1150.f )
+		// a Siren that is screaming sets it off in the air (bRocketBig: if her scream reaches its way while it is close to us)
+		if ( P.IsA('ZombieSiren') && Monster(P).bShotAnim && VSize(Off) < 1150.f
+			&& (!bRocketBig || ScreamCatches(P, Start, Dir, FMin(Dist, Radius + Pawn.CollisionRadius))) )
 			return -1.f;
 		// a specimen in the line, or about to step into it
 		Along = Off dot Dir;
@@ -1649,6 +1717,9 @@ final function float RocketSelfDamage(Actor Tgt, class<Projectile> PC, out vecto
 	Dmg = PC.default.Damage * (1.f - FMax(0.f, (Boom - Pawn.CollisionRadius) / Radius)) * 0.25f;
 	if ( Level.Game.GameDifficulty <= 3 )
 		Dmg *= 0.5f;
+	// and the perk's cut of it (a Support Specialist takes 40% less from his own rockets)
+	if ( bRocketBig && KFPlayerReplicationInfo(PlayerReplicationInfo) != None && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != None )
+		Dmg = KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.ReduceDamage(KFPawn(Pawn), Pawn, int(Dmg), PC.default.MyDamageType);
 	return Dmg - FMin(Pawn.ShieldStrength, 0.75f * Dmg);
 }
 
@@ -1713,8 +1784,13 @@ final function bool HeldRocketSafe(Actor Tgt)
 	local class<Projectile> PC;
 
 	PC = RocketClassOf(Pawn.Weapon);
-	if ( PC == None || RocketShotSafe(Tgt, PC) )
+	if ( PC == None )
 		return true;
+	if ( RocketShotSafe(Tgt, PC) )
+	{
+		RocketSafeTime = Level.TimeSeconds;
+		return true;
+	}
 	RocketUnsafeTime = Level.TimeSeconds;	// RateWeapon: take something else for now
 	return false;
 }
@@ -3740,10 +3816,15 @@ function float RateWeapon(Weapon W)
 		if ( !IsEasyMeleeTarget(Enemy) || CountThreatsWithin(300.f) >= 3 )
 			R *= 0.5;
 	}
-	// A rocket launcher that cannot be fired safely at the enemy is no weapon for now.
-	if ( Enemy != None && RocketClassOf(W) != None
-		&& (Level.TimeSeconds - RocketUnsafeTime < 1.5f || !RocketShotSafe(Enemy, RocketClassOf(W))) )
-		return 0.05;
+	// A rocket launcher that cannot be fired safely at the enemy is no weapon for now (unless it is out and waiting a moment
+	// for a big one's line to clear, RocketWait).
+	if ( Enemy != None && RocketClassOf(W) != None )
+	{
+		if ( Level.TimeSeconds - RocketUnsafeTime >= 1.5f && RocketShotSafe(Enemy, RocketClassOf(W)) )
+			RocketSafeTime = Level.TimeSeconds;
+		else if ( !RocketWait(W) )
+			return 0.05;
+	}
 	// (No more "save the last 9mm magazine": it made a bot with a few rounds left draw the knife instead.)
 	return R;
 }
@@ -4443,7 +4524,7 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 		if ( Target.Physics == PHYS_Walking )
 			FireSpot.Z = Target.Location.Z;
 		if ( !FastTrace(FireSpot, projStart) )
-			FireSpot = Target.Location;
+			FireSpot = RocketAimSpot(Target, projStart);
 		FireRotation = rotator(FireSpot - projStart);
 		FireRotation.Yaw = SetFireYaw(FireRotation.Yaw + AdjustAimError(aimerror, TargetDist, false, false, true) / 2);
 		SetRotation(FireRotation);
@@ -8040,4 +8121,5 @@ defaultproperties
 	bBuyOffListAmmo=True
 	bSirenAware=True
 	bScrakeFocus=True
+	bRocketBig=True
 }
