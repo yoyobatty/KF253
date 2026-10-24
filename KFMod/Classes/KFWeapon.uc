@@ -314,6 +314,8 @@ simulated event RenderOverlays( Canvas Canvas )
         NewRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * (65536.0/360.0) );
         SetRotation(NewRotation);
     }
+    if ( KFPlayerController(Instigator.Controller) != None && KFPlayerController(Instigator.Controller).bSwaying )
+        KFPlayerController(Instigator.Controller).SwayDrawn(self);
     bDrawingFirstPerson = true;
     Canvas.DrawActor(self, false, false, DisplayFOV);
     bDrawingFirstPerson = false;

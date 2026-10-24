@@ -867,9 +867,12 @@ function int ShieldAbsorb( int dam )
 }
 
 // Fixed to make it online compatible.
-simulated function StartFiringX(bool bHeavy, bool bRapid, optional name TPAnim )
+simulated function StartFiringX(bool bHeavy, bool bRapid, optional name TPAnim, optional float TPRate )
 {
 	local name FireAnim;
+
+	if ( TPRate <= 0 )
+		TPRate = 1.0;
 
 	AnimBlendParams(1, 1.0, 0.0, 0.2, FireRootBone);
 
@@ -893,9 +896,21 @@ simulated function StartFiringX(bool bHeavy, bool bRapid, optional name TPAnim )
 		FireAnim = FireHeavyBurstAnim;
 	else FireAnim = FireRifleBurstAnim;
 
-	PlayAnim(FireAnim,, 0.0, 1);
+	PlayAnim(FireAnim, TPRate, 0.0, 1);
 	FireState = FS_PlayOnce;
 
+	IdleTime = Level.TimeSeconds;
+}
+
+// A melee swing on the upper body, without the effects. A dedicated server plays none of a weapon's third-person
+// effects, so KFMeleeFire calls this there for a swing struck by the body's own blade.
+simulated function PlayMeleeSwing( name Anim, float Rate )
+{
+	if ( !HasAnim(Anim) )
+		return;
+	AnimBlendParams(1, 1.0, 0.0, 0.2, FireRootBone);
+	PlayAnim(Anim, Rate, 0.0, 1);
+	FireState = FS_PlayOnce;
 	IdleTime = Level.TimeSeconds;
 }
 

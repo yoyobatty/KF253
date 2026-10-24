@@ -54,6 +54,9 @@ struct Swing
 	var() float StartYaw, StartPitch, EndYaw, EndPitch;	// its line across the view, degrees (right and up are positive)
 	var() float Across;				// its reach to each side of that line, degrees
 	var() float DamageScale;
+	var() name BodyAnim;			// the body's swing (third person), seen by everyone and struck by its blade in behind view
+	var() float BodyFrom, BodyTo;	// when that blade is in front, fractions of BodyAnim
+	var() float Lunge;				// how far the first-person view is pushed forward with the blade
 };
 var() bool bSweep;
 var() array<Swing> Swings;			// played in this order while the player keeps swinging
@@ -64,6 +67,8 @@ var() float RunHitSpeed;			// a swing begun faster than this knocks over a speci
 var() float HitPunch;				// view kick of a blow that lands (rotator units), along the swing
 var() float HitPause;				// seconds the weapon hangs in a body it has hit
 var() bool bSwingDebug;				// each blow to the log
+var() float CamSway;				// degrees the first-person view follows the blade along its line
+var() float BladeSpacing;			// units the blade may travel between two tests of it (behind view)
 
 var int SwingIndex;
 var float LastSwingTime;
@@ -73,6 +78,12 @@ var float SwingDamage, SwingRunSpeed;
 var array<Pawn> SwingHits;			// what this swing has struck already
 var name PausedAnim;
 var float PausedFrame, PauseEnd;
+
+// A swing in behind view is struck by the blade of the body's swing (BladeSwing) instead of rays from the eye
+var bool bBlade, bBladeWas;
+var float BladeEndBy, BladeRate;
+var vector BladePivotWas, BladeBaseWas, BladeTipWas;	// where the arm and blade were at the last test
+var float BodyPauseEnd, BodyPausedFrame;
 
 static final function vector GetAimPos( Actor Other )
 {
@@ -94,7 +105,11 @@ static final function vector GetAimPos( Actor Other )
 simulated function StartSwing()
 {
 	local Swing S;
+	local float Along;
 
+	// (a swing in behind view not yet over is ended first, while SwingIndex is still its own)
+	if ( bBlade )
+		EndBlade();
 	if ( Level.TimeSeconds - LastSwingTime > ChainTime || SwingIndex + 1 >= Swings.Length )
 		SwingIndex = 0;
 	else SwingIndex++;
@@ -115,14 +130,302 @@ simulated function StartSwing()
 	// (taken before the swing brakes the player)
 	SwingRunSpeed = VSize(Instigator.Velocity);
 	PauseEnd = 0;
+
+	BladeRate = FireAnimRate / default.FireAnimRate;
+	if ( KFMeleeAttachment(Weapon.ThirdPersonActor) != None && S.BodyAnim != '' )
+	{
+		KFMeleeAttachment(Weapon.ThirdPersonActor).SwingAnim = S.BodyAnim;
+		KFMeleeAttachment(Weapon.ThirdPersonActor).SwingRate = BladeRate;
+	}
+	bBlade = BladeFits(S);
+	if ( bBlade )
+		StartBlade(S);
+	else if ( KFPlayerController(Instigator.Controller) != None && Instigator.IsLocallyControlled() )
+	{
+		Along = FMax(Sqrt(Square(S.EndYaw - S.StartYaw) + Square(S.EndPitch - S.StartPitch)), 1.0);
+		KFPlayerController(Instigator.Controller).StartSwingSway(SwingFrom - Level.TimeSeconds, SwingTo - Level.TimeSeconds,
+			CamSway * (S.EndYaw - S.StartYaw) / Along, CamSway * (S.EndPitch - S.StartPitch) / Along, S.Lunge);
+	}
 }
 
 event ModeTick( float dt )
 {
 	if ( PauseEnd > 0 && Level.TimeSeconds >= PauseEnd )
 		EndPause();
-	if ( bSwinging && Level.TimeSeconds >= SwingFrom )
+	if ( BodyPauseEnd > 0 && Level.TimeSeconds >= BodyPauseEnd )
+		EndBodyPause();
+	if ( bSwinging && bBlade )
+		BladeSwing();
+	else if ( bSwinging && Level.TimeSeconds >= SwingFrom )
 		SweepSwing();
+}
+
+// ---- swings in behind view, struck by the body's blade
+
+// A player in behind view who holds a weapon whose blade is known, on a body that has this swing
+simulated function bool BladeFits( Swing S )
+{
+	local PlayerController PC;
+
+	PC = PlayerController(Instigator.Controller);
+	return S.BodyAnim != '' && PC != None && PC.bBehindView && KFPawn(Instigator) != None && Instigator.HasAnim(S.BodyAnim)
+		&& KFMeleeAttachment(Weapon.ThirdPersonActor) != None && KFMeleeAttachment(Weapon.ThirdPersonActor).BladeTip != vect(0,0,0);
+}
+
+simulated function StartBlade( Swing S )
+{
+	bBladeWas = false;
+	BladeEndBy = Level.TimeSeconds + FireRate + HitPause + 0.3;
+	// (the bones place the weapon every tick only while this is set)
+	Instigator.bForceSkelUpdate = true;
+	// a dedicated server plays no third-person effects, so the swing is played here
+	if ( Level.NetMode == NM_DedicatedServer )
+		KFPawn(Instigator).PlayMeleeSwing(S.BodyAnim, BladeRate);
+	BendBody();
+}
+
+simulated function EndBlade()
+{
+	bBlade = false;
+	bSwinging = false;
+	if ( Instigator != None )
+		Instigator.bForceSkelUpdate = Instigator.default.bForceSkelUpdate;
+	if ( BodyPauseEnd > 0 )
+		EndBodyPause();
+}
+
+// Where the blade is, each tick from the start of the body's swing; struck along the way it went while in front
+simulated function BladeSwing()
+{
+	local Swing S;
+	local KFMeleeAttachment W;
+	local name Seq;
+	local float Frame, Rate;
+	local vector Pivot, Base, Tip;
+
+	if ( Weapon != None )
+		W = KFMeleeAttachment(Weapon.ThirdPersonActor);
+	if ( W == None || Instigator == None || Instigator.Health <= 0 || KFWeapon(Weapon).bNoHit || Level.TimeSeconds > BladeEndBy )
+	{
+		EndBlade();
+		return;
+	}
+	S = Swings[SwingIndex];
+	Instigator.GetAnimParams(1, Seq, Frame, Rate);
+	if ( Seq != S.BodyAnim )
+	{
+		// (another animation has taken its place)
+		if ( bBladeWas )
+			EndBlade();
+		return;
+	}
+	BendBody();
+	W.BladeEnds(Base, Tip);
+	Pivot = Shoulder();
+	if ( bBladeWas && Frame >= S.BodyFrom )
+	{
+		if ( bSwingDebug )
+			Log("MELEE blade" @ Seq @ "frame" @ Frame @ "tip" @ ((Tip - Instigator.Location) << Instigator.Rotation) @ "authority" @ (Weapon.Role == ROLE_Authority));
+		BladeSweep(Pivot, Base, Tip);
+		if ( !bSwinging )
+			return;
+	}
+	BladePivotWas = Pivot;
+	BladeBaseWas = Base;
+	BladeTipWas = Tip;
+	bBladeWas = true;
+	if ( Frame >= S.BodyTo )
+		EndBlade();
+}
+
+// The upper body leans with the aim only while it is drawn; where it is not (a server), it is leant here, as
+// Pawn.IsHeadShot does
+simulated function BendBody()
+{
+	local int Look;
+
+	if ( Level.TimeSeconds - Instigator.LastRenderTime <= 0.5 || !Instigator.bDoTorsoTwist )
+		return;
+	Instigator.SmoothViewYaw = Instigator.Rotation.Yaw;
+	Instigator.SmoothViewPitch = Instigator.ViewPitch;
+	Look = (256 * Instigator.ViewPitch) & 65535;
+	if ( Look > 32768 )
+		Look -= 65536;
+	Instigator.SetTwistLook(0, Look);
+}
+
+// The middle the arm swings about
+simulated function vector Shoulder()
+{
+	local rotator R;
+
+	R.Yaw = Instigator.Rotation.Yaw;
+	return Instigator.Location + 12.0 * (vect(0,1,0) >> R) + vect(0,0,0.6) * Instigator.CollisionHeight;
+}
+
+// A point of the blade between two tests, taken round the shoulder rather than straight across
+static final function vector ArcPoint( vector PivotA, vector A, vector PivotB, vector B, float T )
+{
+	return PivotA + (PivotB - PivotA) * T + Normal(Normal(A - PivotA) * (1.0 - T) + Normal(B - PivotB) * T)
+		* (VSize(A - PivotA) * (1.0 - T) + VSize(B - PivotB) * T);
+}
+
+// The arm and blade from where they were at the last test to where they are, no more than BladeSpacing apart
+simulated function BladeSweep( vector Pivot, vector Base, vector Tip )
+{
+	local int n, Steps;
+	local float T;
+	local vector B, P, BWas, PWas;
+
+	Steps = Clamp(int(FMax(VSize(Tip - BladeTipWas), VSize(Base - BladeBaseWas)) / BladeSpacing + 0.99), 1, 16);
+	BWas = BladeBaseWas;
+	PWas = BladeTipWas;
+	for ( n=1; n<=Steps && bSwinging; n++ )
+	{
+		T = float(n) / float(Steps);
+		B = ArcPoint(BladePivotWas, BladeBaseWas, Pivot, Base, T);
+		P = ArcPoint(BladePivotWas, BladeTipWas, Pivot, Tip, T);
+		BladeRay(BladePivotWas + (Pivot - BladePivotWas) * T, B, P, B - BWas, P - PWas);
+		BWas = B;
+		PWas = P;
+	}
+}
+
+// The arm (shoulder to hand) and the blade at one moment: the first thing on them, from the shoulder out, is met
+simulated function BladeRay( vector From, vector Base, vector Tip, vector BaseMove, vector TipMove )
+{
+	local Actor A;
+	local Pawn V;
+	local vector HL, HN, Start, End;
+	local int Leg;
+
+	for ( Leg=0; Leg<2; Leg++ )
+	{
+		Start = From;
+		End = Base;
+		if ( Leg == 1 )
+		{
+			Start = Base;
+			End = Tip;
+		}
+		foreach Instigator.TraceActors(class'Actor', A, HL, HN, End, Start)
+		{
+			V = SwingBody(A);
+			if ( V == None )
+			{
+				if ( !SwingStops(A) )
+					continue;
+				if ( !bSwingFlesh )
+					WorldHit(A, HL, From, Normal(End - Start));
+				return;
+			}
+			if ( V == Instigator || SwingPasses(V) )
+				continue;
+			if ( V.Health <= 0 )
+			{
+				if ( !bSwingFlesh )
+					CorpseHit(V, HL, Normal(TipMove));
+			}
+			else if ( !SwingHas(V) )
+				BladeStrike(V, HL, Base, Tip, BaseMove, TipMove);
+			return;
+		}
+	}
+}
+
+// The blade meets a body where it is, going the way it goes; if it is on its way through the head, the head is struck
+simulated function BladeStrike( Pawn V, vector Where, vector Base, vector Tip, vector BaseMove, vector TipMove )
+{
+	local vector Dir, P, D;
+	local float U, W;
+	local int n;
+
+	SwingHits[SwingHits.Length] = V;
+	U = FClamp(((Where - Base) dot (Tip - Base)) / FMax((Tip - Base) dot (Tip - Base), 1.0), 0.0, 1.0);
+	Dir = BladeMove(V, BaseMove, TipMove, U);
+	if ( !BladeMeetsHead(V, Where, Dir) )
+	{
+		// (or another part of the blade, further out, is)
+		for ( n=1; n<=4; n++ )
+		{
+			W = U + (1.0 - U) * float(n) / 4.0;
+			P = Base + (Tip - Base) * W;
+			D = BladeMove(V, BaseMove, TipMove, W);
+			if ( BladeMeetsHead(V, P, D) )
+			{
+				Where = P;
+				Dir = D;
+				break;
+			}
+		}
+	}
+	Strike(V, Where, Dir, false, true);
+}
+
+// Which way a point of the blade (U along it, 0 at the hand) is going
+simulated function vector BladeMove( Pawn V, vector BaseMove, vector TipMove, float U )
+{
+	local vector M;
+
+	M = BaseMove * (1.0 - U) + TipMove * U;
+	if ( VSize(M) < 0.5 )
+		return Normal(V.Location - Instigator.Location);
+	return Normal(M);
+}
+
+// The specimen's own headshot test (KFMonster.IsHeadShot, as for a melee blow): from P along Dir
+simulated function bool BladeMeetsHead( Pawn V, vector P, vector Dir )
+{
+	local KFMonster M;
+	local coords C;
+	local vector Head, Ray, D;
+	local float Scale, T;
+
+	M = KFMonster(V);
+	if ( M == None || M.HeadBone == '' || M.bDecapitated )
+		return false;
+	Scale = 1.0;
+	if ( class<DamTypeMelee>(hitDamageClass) != None )
+		Scale = 1.25;
+	C = M.GetBoneCoords(M.HeadBone);
+	Head = C.Origin + M.HeadHeight * M.HeadScale * Scale * C.XAxis;
+	Ray = Dir * 2.0 * (M.CollisionHeight + M.CollisionRadius);
+	D = Head - P;
+	T = FClamp((Ray dot D) / (Ray dot Ray), 0.0, 1.0);
+	return VSize(D - T * Ray) < M.HeadRadius * M.HeadScale * Scale;
+}
+
+// The body's swing stops for a moment in what it has hit, as the first-person weapon does (FleshFelt)
+simulated function BodyHang()
+{
+	local name Seq;
+	local float Rate;
+
+	if ( HitPause <= 0 || BodyPauseEnd > 0 )
+		return;
+	Instigator.GetAnimParams(1, Seq, BodyPausedFrame, Rate);
+	if ( Seq != Swings[SwingIndex].BodyAnim )
+		return;
+	// (not quite still: KFPawn.AnimEnd puts the idle on an upper body that has stopped)
+	Instigator.PlayAnim(Seq, 0.001, 0.0, 1);
+	Instigator.SetAnimFrame(BodyPausedFrame, 1);
+	BodyPauseEnd = Level.TimeSeconds + HitPause;
+}
+
+simulated function EndBodyPause()
+{
+	local name Seq;
+	local float Frame, Rate;
+
+	BodyPauseEnd = 0;
+	if ( Instigator == None )
+		return;
+	Instigator.GetAnimParams(1, Seq, Frame, Rate);
+	if ( Seq == Swings[SwingIndex].BodyAnim && Rate < 0.01 )
+	{
+		Instigator.PlayAnim(Seq, BladeRate, 0.0, 1);
+		Instigator.SetAnimFrame(Frame, 1);
+	}
 }
 
 // Where the swing is aimed: bots swing at their target's head
@@ -303,13 +606,20 @@ simulated function LandOn( Pawn V, vector Eye, vector Dir, vector Where )
 	Strike(V, Where, Dir, bAimed);
 }
 
-simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed )
+// bBladeHit: struck by the body's blade (BladeStrike), where it met the body and going the way it went
+simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, optional bool bBladeHit )
 {
 	local float Dealt;
 	local bool bFirst;
 
 	Dealt = SwingDamage;
-	if ( !bAimed )
+	if ( bBladeHit )
+	{
+		// the first body it meets takes the whole blow
+		if ( SwingHits.Length > 1 )
+			Dealt *= SideDamageScale;
+	}
+	else if ( !bAimed )
 	{
 		Dealt *= FClamp(Normal(V.Location - Instigator.Location) dot vector(SwingAim(Instigator.Location + Instigator.EyePosition())), SideDamageScale, 1.0);
 		// in level and low: the head is only for the blow that is aimed at it
@@ -321,7 +631,7 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed )
 	bFirst = !bSwingFlesh;
 	bSwingFlesh = true;
 	if ( bSwingDebug )
-		Log("MELEE" @ Weapon.Class.Name @ FireAnim @ "hits" @ V.Name @ "for" @ int(Dealt) @ "aimed" @ bAimed @ "at height" @ int(Where.Z - V.Location.Z)
+		Log("MELEE" @ Weapon.Class.Name @ FireAnim @ "hits" @ V.Name @ "for" @ int(Dealt) @ "aimed" @ bAimed @ "blade" @ bBladeHit @ "at height" @ int(Where.Z - V.Location.Z)
 			@ "after" @ (Level.TimeSeconds - LastSwingTime) @ "health" @ V.Health @ "authority" @ (Weapon.Role == ROLE_Authority));
 
 	if ( Weapon.Role == ROLE_Authority )
@@ -368,18 +678,23 @@ simulated function CentreRay( vector Eye, vector Aim )
 				LandOn(V, Eye, Aim, HL);
 		}
 		else if ( !bSwingFlesh )
-		{
-			// a body on the ground. (One a client keeps for itself is unknown to the server: the blow lands here.)
-			bSwingFlesh = true;
-			if ( Weapon.Role == ROLE_Authority || V.bTearOff )
-				V.TakeDamage(int(SwingDamage), Instigator, HL, Aim, hitDamageClass);
-			if ( Weapon.Role == ROLE_Authority )
-				KFMeleeGun(Weapon).PlayHitSound();
-			else KFMeleeGun(Weapon).PlayHitSoundHere();
-			FleshFelt(true);
-		}
+			CorpseHit(V, HL, Aim);
 		break;
 	}
+}
+
+// A body on the ground. (One a client keeps for itself is unknown to the server: the blow lands here.)
+simulated function CorpseHit( Pawn V, vector Where, vector Dir )
+{
+	bSwingFlesh = true;
+	if ( bSwingDebug )
+		Log("MELEE" @ Weapon.Class.Name @ FireAnim @ "hits the body of" @ V.Name @ "health" @ V.Health @ "torn off" @ V.bTearOff @ "after" @ (Level.TimeSeconds - LastSwingTime) @ "authority" @ (Weapon.Role == ROLE_Authority));
+	if ( Weapon.Role == ROLE_Authority || V.bTearOff )
+		V.TakeDamage(int(SwingDamage), Instigator, Where, Dir, hitDamageClass);
+	if ( Weapon.Role == ROLE_Authority )
+		KFMeleeGun(Weapon).PlayHitSound();
+	else KFMeleeGun(Weapon).PlayHitSoundHere();
+	FleshFelt(true);
 }
 
 simulated function WorldHit( Actor A, vector Where, vector Eye, vector Aim )
@@ -421,6 +736,8 @@ simulated function FleshFelt( bool bFirst )
 		Weapon.Skins[KFMeleeGun(Weapon).BloodSkinSwitchArray] = KFMeleeGun(Weapon).BloodyMaterial;
 		Weapon.Texture = Weapon.default.Texture;
 	}
+	if ( bFirst && bBlade && (Weapon.Role == ROLE_Authority || Instigator.IsLocallyControlled()) )
+		BodyHang();
 	PC = KFPlayerController(Instigator.Controller);
 	if ( !bFirst || PC == None || !Instigator.IsLocallyControlled() )
 		return;
@@ -433,6 +750,9 @@ simulated function FleshFelt( bool bFirst )
 	PC.ViewPunch(HitPunch * (S.EndPitch - S.StartPitch) / Along, HitPunch * (S.EndYaw - S.StartYaw) / Along, HitPunch, HitPunch);
 
 	// and the weapon hangs in the body for a moment
+	if ( bBlade )
+		return;
+	PC.HoldSwingSway(HitPause);
 	if ( HitPause > 0 && PauseEnd <= 0 && Weapon.Mesh != None )
 	{
 		Weapon.GetAnimParams(0, PausedAnim, PausedFrame, Rate);
@@ -722,6 +1042,7 @@ defaultproperties
      ChainTime=0.900000
      SideDamageScale=0.500000
      SweepStep=6.000000
+     BladeSpacing=6.000000
      RunHitSpeed=280.000000
      ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
      ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)

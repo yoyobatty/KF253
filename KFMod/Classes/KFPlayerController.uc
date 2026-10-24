@@ -85,6 +85,24 @@ var() float PunchCeiling;      // Punches that keep coming level off near this m
 var() float PunchLookAhead;    // Seconds of travel counted in when judging how far the view is already kicked
 var() float PunchMaxStep;      // Longest spring step in seconds, so the swing is the same at any frame rate
 
+// Melee swing camera, first person only: the view swings with the blade and lunges on heavy blows (StartSwingSway,
+// from KFMeleeFire), the weapon drawn swings with it, and the aim stays where it is.
+var() float SwayWindUp;        // share of the follow-through the view first draws back the other way
+var() float SwayRoll;          // degrees the view tilts towards the side it swings to, per degree of the swing
+var() float SwayReturn;        // seconds it takes to settle once the blade has passed
+var() float SwayLungeBack;     // share of a lunge the view first draws back
+var bool bSwaying;
+var float SwayClock;           // seconds into the swing; stands still while a blow hangs (HoldSwingSway)
+var float SwayFrom, SwayTo;    // when the blade is in front, seconds into the swing
+var float SwayYaw, SwayPitch, SwayLunge;	// this swing's follow-through (degrees) and lunge (units)
+var float SwayHoldUntil;
+var vector SwayCarry;          // what was left of the swing before (pitch, yaw degrees), faded out over the wind-up
+var float SwayCarryPush;
+var vector SwayNow;            // the view's turn now: pitch, yaw, tilt (degrees)
+var float SwayPush;            // and how far it is pushed forward
+var vector SwayEye;            // this frame's camera before the turn, its axes then and after (SwayDrawn)
+var vector SwayBaseX, SwayBaseY, SwayBaseZ, SwayX, SwayY, SwayZ;
+
 // A gun's own shake turns the engine's way (it collapses back in a few frames), which the guns' numbers were made
 // for; played out in full swings they wobbled for three times as long. Other shakes turn smoothly (CheckShake).
 var bool bGunShakeRot, bGunShakeOffset;	// the rotation / offset shake playing came from a gun
@@ -748,6 +766,123 @@ function UpdateViewPunch( float DeltaTime )
 	ApplyViewPunch();
 }
 
+// A melee swing begins: the view goes with its blade. From and To are when the blade is in front (seconds from now),
+// Yaw and Pitch how far the view follows it (degrees), Lunge how far it is pushed forward (units).
+function StartSwingSway( float From, float To, float Yaw, float Pitch, float Lunge )
+{
+	SwayCarry = SwayNow;
+	SwayCarryPush = SwayPush;
+	SwayClock = 0;
+	SwayFrom = FMax(From, 0.02);
+	SwayTo = FMax(To, SwayFrom + 0.02);
+	SwayYaw = Yaw;
+	SwayPitch = Pitch;
+	SwayLunge = Lunge;
+	SwayHoldUntil = 0;
+	bSwaying = true;
+}
+
+// A blow lands: the view stops with the weapon for a moment
+function HoldSwingSway( float Seconds )
+{
+	if ( bSwaying && Seconds > 0 )
+		SwayHoldUntil = FMax(SwayHoldUntil, Level.TimeSeconds + Seconds);
+}
+
+static final function float Ease( float U )
+{
+	U = FClamp(U, 0.0, 1.0);
+	return U * U * (3.0 - 2.0 * U);
+}
+
+// Where the swing camera is this frame: back before the blade, through with it, home after it
+function UpdateSwingSway( float DeltaTime )
+{
+	local float A, Push, Fade;
+
+	if ( !bSwaying )
+		return;
+	if ( Pawn == None || Pawn.Health <= 0 )
+	{
+		bSwaying = false;
+		SwayNow = vect(0,0,0);
+		SwayPush = 0;
+		return;
+	}
+	if ( Level.TimeSeconds >= SwayHoldUntil )
+		SwayClock += DeltaTime;
+	if ( SwayClock < SwayFrom )
+	{
+		A = -SwayWindUp * Ease(SwayClock / SwayFrom);
+		Push = -SwayLungeBack * Ease(SwayClock / SwayFrom);
+	}
+	else if ( SwayClock < SwayTo )
+	{
+		A = -SwayWindUp + (1.0 + SwayWindUp) * Ease((SwayClock - SwayFrom) / (SwayTo - SwayFrom));
+		Push = -SwayLungeBack + (1.0 + SwayLungeBack) * Ease((SwayClock - SwayFrom) / (SwayTo - SwayFrom));
+	}
+	else
+	{
+		A = 1.0 - Ease((SwayClock - SwayTo) / FMax(SwayReturn, 0.01));
+		Push = A;
+		if ( A <= 0 )
+			bSwaying = false;
+	}
+	Fade = 1.0 - Ease(SwayClock / SwayFrom);
+	SwayNow.X = A * SwayPitch + Fade * SwayCarry.X;
+	SwayNow.Y = A * SwayYaw + Fade * SwayCarry.Y;
+	SwayNow.Z = SwayRoll * SwayNow.Y;
+	SwayPush = Push * SwayLunge + Fade * SwayCarryPush;
+	if ( !bSwaying )
+	{
+		SwayNow = vect(0,0,0);
+		SwayPush = 0;
+	}
+}
+
+function CalcFirstPersonView( out vector CameraLocation, out rotator CameraRotation )
+{
+	Super.CalcFirstPersonView(CameraLocation, CameraRotation);
+	if ( bSwaying )
+		SwayView(CameraLocation, CameraRotation);
+}
+
+// Turns the first-person camera by the swing camera (SwayNow) about the eye and pushes it forward (SwayPush)
+function SwayView( out vector CameraLocation, out rotator CameraRotation )
+{
+	local vector Y, Z;
+	local float Tilt;
+
+	SwayEye = CameraLocation;
+	GetAxes(CameraRotation, SwayBaseX, SwayBaseY, SwayBaseZ);
+	SwayX = Normal(SwayBaseX + SwayBaseY * Tan(SwayNow.Y * Pi / 180.0) + SwayBaseZ * Tan(SwayNow.X * Pi / 180.0));
+	Y = Normal(SwayBaseY - SwayX * (SwayBaseY dot SwayX));
+	Z = SwayX cross Y;
+	// (a positive tilt drops the right side)
+	Tilt = SwayNow.Z * Pi / 180.0;
+	SwayY = Y * Cos(Tilt) - Z * Sin(Tilt);
+	SwayZ = Z * Cos(Tilt) + Y * Sin(Tilt);
+	CameraLocation += SwayPush * SwayX;
+	CameraRotation = OrthoRotation(SwayX, SwayY, SwayZ);
+}
+
+// Moves something drawn in front of the first-person camera (the weapon) the way SwayView moved the camera
+simulated function SwayDrawn( Actor A )
+{
+	local vector D, AX, AY, AZ;
+
+	D = A.Location - SwayEye;
+	A.SetLocation(SwayEye + SwayTurned(D) + SwayPush * SwayX);
+	GetAxes(A.Rotation, AX, AY, AZ);
+	A.SetRotation(OrthoRotation(SwayTurned(AX), SwayTurned(AY), SwayTurned(AZ)));
+}
+
+// A direction given against the untouched camera, against the turned one
+simulated function vector SwayTurned( vector V )
+{
+	return SwayX * (V dot SwayBaseX) + SwayY * (V dot SwayBaseY) + SwayZ * (V dot SwayBaseZ);
+}
+
 // Moves the view by the change in the punch since the last call.
 function ApplyViewPunch()
 {
@@ -1153,6 +1288,7 @@ event PlayerTick( float DeltaTime )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
     Super.PlayerTick(DeltaTime);
     UpdateViewPunch(DeltaTime);
+    UpdateSwingSway(DeltaTime);
     TorchKeyTick(DeltaTime);
     if (bUseKey != 0)
     {
@@ -2193,6 +2329,10 @@ defaultproperties
 	PunchCeiling=2.000000
 	PunchLookAhead=0.050000
 	PunchMaxStep=0.008000
+	SwayWindUp=0.350000
+	SwayRoll=0.800000
+	SwayReturn=0.350000
+	SwayLungeBack=0.250000
 	BuyListHeaders(0)="My Inventory"
 	BuyListHeaders(1)="Melee"
 	BuyListHeaders(2)="Power"
