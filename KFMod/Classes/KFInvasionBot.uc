@@ -107,9 +107,7 @@ var() bool bPerkSwitching;
 var() float PerkStay, PerkMedicNeed, PerkCrowd, PerkSwitchGap;
 var() bool bLateZerkSwap;		// a Berserker takes another perk for the waves with Fleshpounds in them
 
-// Trader: the way into the shop (FindShopEntry), steps walked in, the wave whose personality we have.
-var ShopVolume EntryShop;
-var NavigationPoint ShopEntry;
+// Trader: steps walked into the shop, the wave whose personality we have.
 var int ShopSteps, PersonalityWave;
 
 // Crowd sense (AloneInFight to EscapeFocus, state EscapeCrowd): the specimens known of, the path search's nodes with
@@ -3529,7 +3527,7 @@ function bool GetNearestShop()
 	else ShopVolumeActor = Sp;
 	// Where to walk to: a path node inside the shop, else the one nearest the trader with a clear line to him (the
 	// last steps in are walked straight, see Shopping). Only then the spots players are put out to when it closes.
-	ShoppingPath = FindShopEntry(Sp, ShopVolumeActor);
+	ShoppingPath = Sp.EntryPoint();
 	if ( bBenchDebug )
 		log("SHOP"@PlayerReplicationInfo.PlayerName@Sp@"trader="$ShopVolumeActor@"entry="$ShoppingPath@"inside="$(ShoppingPath != None && Sp.Encompasses(ShoppingPath))
 			@"d="$int(VSize(Sp.Location - Pawn.Location))@"shops="$KFGT.ShopList.Length);
@@ -3548,42 +3546,6 @@ function bool GetNearestShop()
 		ShoppingPath = Sp.BotPoint;
 	}
 	return true;
-}
-
-// A path node inside the shop, the one nearest the trader T; with none inside, the nearest outside that has a clear
-// line to him. Remembered per shop.
-final function NavigationPoint FindShopEntry( ShopVolume S, Actor T )
-{
-	local NavigationPoint N, BestIn, BestOut;
-	local float D, BestInD, BestOutD;
-
-	if ( S == EntryShop )
-		return ShopEntry;
-	for ( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
-	{
-		if ( N.bBlocked || (PathNode(N) == None && PlayerStart(N) == None && InventorySpot(N) == None) )
-			continue;
-		D = VSize(N.Location - T.Location);
-		// (inside the shop counts wherever it is: a shop with no trader has only its brush origin to measure from)
-		if ( S.Encompasses(N) )
-		{
-			if ( BestIn == None || D < BestInD )
-			{
-				BestIn = N;
-				BestInD = D;
-			}
-		}
-		else if ( D <= 1500.f && (BestOut == None || D < BestOutD) && FastTrace(N.Location, T.Location) )
-		{
-			BestOut = N;
-			BestOutD = D;
-		}
-	}
-	EntryShop = S;
-	if ( BestIn != None )
-		ShopEntry = BestIn;
-	else ShopEntry = BestOut;
-	return ShopEntry;
 }
 
 // Inside the shop, where a player can buy.

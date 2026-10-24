@@ -1135,6 +1135,12 @@ function bool WaveRunning()
 	return bWaveInProgress || bWaveBossInProgress;
 }
 
+// The stock "show the path" key (BasePath, M) lays the way to the nearest trader on the floor for this player
+function ShowPathTo(PlayerController P, int TeamNum)
+{
+	Spawn(class'KFTraderPath', P,, P.Pawn.Location);
+}
+
 State MatchInProgress
 {
       function bool UpdateMonsterCount() // To avoid invasion errors.

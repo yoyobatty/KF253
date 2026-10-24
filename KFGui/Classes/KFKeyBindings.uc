@@ -12,5 +12,6 @@ defaultproperties
      KeyData(7)=(Alias="QuickHeal",KeyLabel="Quick Heal")
      KeyData(8)=(Alias="TorchKey | onrelease TorchKeyRelease",KeyLabel="Flashlight / Night Vision (hold)")
      KeyData(9)=(Alias="QuickMelee",KeyLabel="Quick Melee (Zombies)")
+     KeyData(10)=(Alias="BasePath 0",KeyLabel="Find Trader")
 }
 
