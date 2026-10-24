@@ -1461,15 +1461,19 @@ function TakeBileDamage()
 	healthtoGive-=5;
 }
 
-// A tick of bile damage, scaled by difficulty as the vomit's own hit is (it was the same on every difficulty), and
-// rounded up or down at random so that a small share still adds up over the ticks
+// A tick of bile damage, scaled by difficulty as the vomit's own hit is (it was the same on every difficulty) and by 0.75
+// with one player as that hit is, rounded up or down at random so that a small share still adds up over the ticks
 function int BileTick(int Base)
 {
 	local float D;
 
 	D = float(Base);
 	if( Level.Game!=None )
+	{
 		D *= class'KFBloatVomit'.static.DifficultyScale(Level.Game.GameDifficulty);
+		if( Level.Game.NumPlayers == 1 )
+			D *= 0.75;
+	}
 	return int(D+FRand());
 }
 

@@ -17,9 +17,12 @@ simulated function PostBeginPlay()
 	} 
 }
 
-// Scales the damage this Zed deals by the difficulty level
+// Scales the damage this Zed deals by the difficulty level, and by 0.75 with one player as the specimens' blows and the
+// siren's scream are (KFMonster)
 function float DifficultyDamageModifer()
 {
+	if ( Level.Game.NumPlayers == 1 )
+		return 0.75 * DifficultyScale(Level.Game.GameDifficulty);
 	return DifficultyScale(Level.Game.GameDifficulty);
 }
 
@@ -134,7 +137,10 @@ auto state Flying
 	{
 		if( ExtendedZCollision(Other)!=None )
 			Return;
-		if (Other != Instigator && (Pawn(Other)!=None))
+		// a player bursts it where it meets him: it used to hurt him on the way through and again where it landed at his feet
+		if ( Other != Instigator && KFHumanPawn(Other)!=None )
+			BlowUp(HitLocation);
+		else if (Other != Instigator && (Pawn(Other)!=None))
 			HurtRadius(Damage,DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
 		else if ( Other != Instigator && Other.bBlockActors )
 			HitWall( Normal(HitLocation-Location), Other );
