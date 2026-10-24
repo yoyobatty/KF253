@@ -27,6 +27,7 @@ var array<KFPlayerStats.ActStats> ActStats;
 var array<string> ActProgress;	// (how far along each is, as its perk words it: see KFVeterancyTypes.ProgressFor)
 var float NextStatsSend;
 var byte ClientStatsState;
+var KFCheatManager OnlineCheats;	// the cheats' own object online (see CheatsHere)
 var float StatsUdpTimer;
 var int CLStats[11];
 
@@ -103,6 +104,13 @@ replication
 
 	unreliable if( Role < ROLE_Authority )
 		ServerAccumulateUse;
+
+	// (the cheats, typed on a client, run on the server)
+	reliable if( Role < ROLE_Authority )
+		Summon, Summon2, God, Arsenal, Backup, Horde, Horde2, MopUp, StartWave, EndWave, ExtraTime, SetWave, ZedsLeft,
+		ZedCap, PauseSpawns, WaveInfo, Holdout, NextWave, HoldoutTime, HoldoutHealth, EndHoldout, RiotZed, RiotRows,
+		RiotSources, Rush, Crowd, HordeNow, Pace, RiotReset, Heal, HealAll, SetHealth, SetHealthAll, Cash, CashAll,
+		Vest, VestAll, Nuke, AllAmmo, AllAmmoAll, NadeFull, NadeFullAll, GodAll, SuperMan, SuperManAll, ViewZombie, ViewSelf;
 
 	// Functions server can call.
 	reliable if( Role == ROLE_Authority )
@@ -1830,6 +1838,331 @@ state Spectating
 
 function PlayStartupMessage(byte StartupStage)
 {
+}
+
+// Cheats online. The stock cheat manager is made in single player only (and is private to PlayerController), so each of
+// KFCheatManager's commands is here as well, typed the same way: a replicated function, so a client's goes to the server.
+// In single player the cheat manager's own commands come first and these never run.
+function bool CheatsAllowed()
+{
+	Return Level.NetMode==NM_Standalone || Viewport(Player)!=None || (PlayerReplicationInfo!=None && PlayerReplicationInfo.bAdmin);
+}
+
+// Here (the server, or the machine that typed it for those that only show this player something) this player may cheat:
+// for the server's admin, or the player hosting a listen server
+function bool CheatsHere()
+{
+	if( !CheatsAllowed() )
+	{
+		ClientMessage("Cheats are for the server's admin: AdminLogin <password> first.");
+		Return False;
+	}
+	if( OnlineCheats==None )
+		OnlineCheats = new(self) class'KFCheatManager';
+	Return True;
+}
+
+exec function Summon( string ClassName )
+{
+	if( CheatsHere() )
+		OnlineCheats.Summon(ClassName);
+}
+exec function Summon2( string ClassName, int Quantity )
+{
+	if( CheatsHere() )
+		OnlineCheats.Summon2(ClassName, Quantity);
+}
+exec function God()
+{
+	if( CheatsHere() )
+		OnlineCheats.God();
+}
+exec function Arsenal()
+{
+	if( CheatsHere() )
+		OnlineCheats.Arsenal();
+}
+exec function Backup()
+{
+	if( CheatsHere() )
+		OnlineCheats.Backup();
+}
+exec function Horde()
+{
+	if( CheatsHere() )
+		OnlineCheats.Horde();
+}
+exec function Horde2( optional int Quantity )
+{
+	if( CheatsHere() )
+		OnlineCheats.Horde2(Quantity);
+}
+exec function MopUp()
+{
+	if( CheatsHere() )
+		OnlineCheats.MopUp();
+}
+exec function StartWave()
+{
+	if( CheatsHere() )
+		OnlineCheats.StartWave();
+}
+exec function EndWave()
+{
+	if( CheatsHere() )
+		OnlineCheats.EndWave();
+}
+exec function ExtraTime( optional float ExtraSeconds )
+{
+	if( CheatsHere() )
+		OnlineCheats.ExtraTime(ExtraSeconds);
+}
+exec function SetWave( int N )
+{
+	if( CheatsHere() )
+		OnlineCheats.SetWave(N);
+}
+exec function ZedsLeft( int N )
+{
+	if( CheatsHere() )
+		OnlineCheats.ZedsLeft(N);
+}
+exec function ZedCap( int N )
+{
+	if( CheatsHere() )
+		OnlineCheats.ZedCap(N);
+}
+exec function PauseSpawns()
+{
+	if( CheatsHere() )
+		OnlineCheats.PauseSpawns();
+}
+exec function WaveInfo()
+{
+	if( CheatsHere() )
+		OnlineCheats.WaveInfo();
+}
+exec function Holdout()
+{
+	if( CheatsHere() )
+		OnlineCheats.Holdout();
+}
+exec function NextWave( string Kind )
+{
+	if( CheatsHere() )
+		OnlineCheats.NextWave(Kind);
+}
+exec function HoldoutTime( float N )
+{
+	if( CheatsHere() )
+		OnlineCheats.HoldoutTime(N);
+}
+exec function HoldoutHealth( float Share )
+{
+	if( CheatsHere() )
+		OnlineCheats.HoldoutHealth(Share);
+}
+exec function EndHoldout()
+{
+	if( CheatsHere() )
+		OnlineCheats.EndHoldout();
+}
+exec function RiotZed( string Kind )
+{
+	if( CheatsHere() )
+		OnlineCheats.RiotZed(Kind);
+}
+exec function RiotRows( int N )
+{
+	if( CheatsHere() )
+		OnlineCheats.RiotRows(N);
+}
+exec function RiotSources( int N )
+{
+	if( CheatsHere() )
+		OnlineCheats.RiotSources(N);
+}
+exec function Rush( optional string Arg )
+{
+	if( CheatsHere() )
+		OnlineCheats.Rush(Arg);
+}
+exec function Crowd( optional string Kind )
+{
+	if( CheatsHere() )
+		OnlineCheats.Crowd(Kind);
+}
+exec function HordeNow()
+{
+	if( CheatsHere() )
+		OnlineCheats.HordeNow();
+}
+exec function Pace( float Seen, optional float Hidden )
+{
+	if( CheatsHere() )
+		OnlineCheats.Pace(Seen, Hidden);
+}
+exec function RiotReset()
+{
+	if( CheatsHere() )
+		OnlineCheats.RiotReset();
+}
+exec function Heal()
+{
+	if( CheatsHere() )
+		OnlineCheats.Heal();
+}
+exec function HealAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.HealAll();
+}
+exec function SetHealth( int NewHealth )
+{
+	if( CheatsHere() )
+		OnlineCheats.SetHealth(NewHealth);
+}
+exec function SetHealthAll( int NewHealth )
+{
+	if( CheatsHere() )
+		OnlineCheats.SetHealthAll(NewHealth);
+}
+exec function Cash( optional int Amount )
+{
+	if( CheatsHere() )
+		OnlineCheats.Cash(Amount);
+}
+exec function CashAll( optional int Amount )
+{
+	if( CheatsHere() )
+		OnlineCheats.CashAll(Amount);
+}
+exec function Vest()
+{
+	if( CheatsHere() )
+		OnlineCheats.Vest();
+}
+exec function VestAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.VestAll();
+}
+exec function Nuke( optional float Radius )
+{
+	if( CheatsHere() )
+		OnlineCheats.Nuke(Radius);
+}
+exec function AllAmmo()
+{
+	if( CheatsHere() )
+		OnlineCheats.AllAmmo();
+}
+exec function AllAmmoAll( optional bool bSuper )
+{
+	if( CheatsHere() )
+		OnlineCheats.AllAmmoAll(bSuper);
+}
+exec function NadeFull()
+{
+	if( CheatsHere() )
+		OnlineCheats.NadeFull();
+}
+exec function NadeFullAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.NadeFullAll();
+}
+exec function GodAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.GodAll();
+}
+exec function SuperMan()
+{
+	if( CheatsHere() )
+		OnlineCheats.SuperMan();
+}
+exec function SuperManAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.SuperManAll();
+}
+exec function ViewZombie()
+{
+	if( !CheatsHere() )
+		Return;
+	OnlineCheats.ViewZombie();
+	if( Viewport(Player)==None )
+	{
+		ClientSetViewTarget(ViewTarget);
+		ClientSetBehindView(bBehindView);
+	}
+}
+exec function ViewSelf( optional bool bQuiet )
+{
+	if( !CheatsHere() )
+		Return;
+	OnlineCheats.ViewSelf(bQuiet);
+	if( Viewport(Player)==None )
+	{
+		ClientSetViewTarget(ViewTarget);
+		ClientSetBehindView(bBehindView);
+	}
+}
+exec function ShowNav()
+{
+	if( CheatsHere() )
+		OnlineCheats.shownav();
+}
+exec function HideNav()
+{
+	if( CheatsHere() )
+		OnlineCheats.hidenav();
+}
+
+// The cheats, by group (CheatHelp), or every one whose name or group begins with Topic, in full (CheatHelp cash)
+exec function CheatHelp( optional string Topic )
+{
+	local array<string> Lines, Parts;
+	local string Heading, List;
+	local int i;
+
+	Lines = class'KFCheatManager'.default.HelpLines;
+	if( Topic!="" )
+	{
+		for( i=0; i<Lines.Length; i++ )
+		{
+			Split(Lines[i], "|", Parts);
+			if( Left(Parts[1], Len(Topic))~=Topic || Parts[0]~=Topic )
+			{
+				ClientMessage(Parts[1]$": "$Parts[2]);
+				List = "found";
+			}
+		}
+		if( List=="" )
+			ClientMessage("No cheat called "$Topic$". CheatHelp lists them all.");
+		Return;
+	}
+	ClientMessage("Cheats, typed in the console:");
+	for( i=0; i<Lines.Length; i++ )
+	{
+		Split(Lines[i], "|", Parts);
+		if( Parts[0]!=Heading && Heading!="" )
+		{
+			ClientMessage(Heading$": "$List);
+			List = "";
+		}
+		Heading = Parts[0];
+		if( List!="" )
+			List = List$", ";
+		List = List$Parts[1];
+	}
+	if( Heading!="" )
+		ClientMessage(Heading$": "$List);
+	if( Level.NetMode!=NM_Standalone )
+		ClientMessage("Online they are for the server's admin (AdminLogin <password>) or the player hosting.");
+	// (the screen keeps the last few lines only)
+	ClientMessage("The whole list is in the console (~). CheatHelp <name>: what one does.");
 }
 
 defaultproperties

@@ -70,6 +70,14 @@ static function float ModifyRecoilSpread( WeaponFire Other, out float Recoil )
 	Return Recoil;
 }
 
+// (a 5.56 round goes on through the first body)
+static function int ExtraPenetrations( KFFire Other )
+{
+	if( Bullpup(Other.Weapon)!=None )
+		Return 1;
+	Return 0;
+}
+
 static function float GetRecoilMovementSpeedModifier()
 {
 	Return 0.65;
@@ -92,6 +100,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFX.Commando'
 	VeterancyName="Commando"
-    VeterancyDescription="|COMMANDO ||+60% damage with 'Bullpup' weapon|-40% recoil/spread with 'Bullpup' weapon|-10% recoil/spread with all other weapons|+35% faster reloading with all weapons|+15% Faster firing with 'Bullpup' weapon|+25% extra ammo and mag capacity with Bullpup|10% damage resistance vs Stalkers and Crawlers|Enemy health conditions appear on HUD|Automatically reveal cloaked 'Stalkers' in an AOE|+65% reduction in recoil movement penalty"
+    VeterancyDescription="|COMMANDO ||+60% damage with 'Bullpup' weapon|-40% recoil/spread with 'Bullpup' weapon|-10% recoil/spread with all other weapons|+35% faster reloading with all weapons|+15% Faster firing with 'Bullpup' weapon|+25% extra ammo and mag capacity with Bullpup|Bullpup rounds go on through the first specimen they hit|10% damage resistance vs Stalkers and Crawlers|Enemy health conditions appear on HUD|Automatically reveal cloaked 'Stalkers' in an AOE|+65% reduction in recoil movement penalty"
 	VeterancyRequirement="|REQUIREMENTS:||- Kill at least 20 stalkers|- Deal 10,000 damage with 'Bullpup'"
 }

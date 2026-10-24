@@ -289,5 +289,5 @@ defaultproperties
 	TransientSoundVolume=200.000000
 	bNetTemporary=False
 	bNetNotify=true
-	IncendiaryGroundFireClass=Class'KFMod.FuelFlameHurting'
+	IncendiaryGroundFireClass=Class'KFMod.KFNadeFire'
 }

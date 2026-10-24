@@ -347,7 +347,8 @@ simulated function PostBeginPlay()
 {
 	local vector AttachPos;
 	local float HealthScale, DamageScale;
-	local float Difficulty;
+	local float Difficulty, Climb;
+	local KFEndlessGameType E;
 
 	if(ROLE==ROLE_Authority)
 	{
@@ -442,12 +443,19 @@ simulated function PostBeginPlay()
 		GroundSpeed = default.GroundSpeed * (0.9 + 0.2 * FRand());
 		HealthScale = DifficultyHealthScales[DifficultyIndex(Difficulty)];
 		DamageScale = DifficultyDamageScales[DifficultyIndex(Difficulty)];
-		// Endless and Zombies modes keep growing harder wave by wave, as they did (their AdjustedDifficulty climbs 0.1 a wave)
-		if ( KFEndlessGameType(Level.Game) != None )
+		// Endless and Zombies modes grow harder wave by wave, each at its own pace (their AdjustedDifficulty climbs 0.1 a
+		// wave: Climb is the waves climbed)
+		E = KFEndlessGameType(Level.Game);
+		if ( E != None )
 		{
-			HealthScale += 0.3 * FMax(DeathMatch(Level.Game).AdjustedDifficulty - Difficulty, 0.0);
-			DamageScale += 0.3 * FMax(DeathMatch(Level.Game).AdjustedDifficulty - Difficulty, 0.0);
+			Climb = FMax(E.AdjustedDifficulty - Difficulty, 0.0) * 10.0;
+			HealthScale += E.WaveHealthClimb * Climb;
+			if ( E.DamageClimbWaves > 0 )
+				Climb = FMin(Climb, E.DamageClimbWaves);
+			DamageScale += E.WaveDamageClimb * Climb;
 		}
+		if ( KFGameType(Level.Game) != None )
+			HiddenGroundSpeed *= KFGameType(Level.Game).HiddenSpeedScale;
 		GroundSpeed += (Difficulty * 3);
 		AirSpeed += (Difficulty * 3);
 		WaterSpeed += (Difficulty * 3);
@@ -532,9 +540,14 @@ function float NumPlayersHealthModifer()
 // Accessor for GroundSpeed so we can track what is setting it
 simulated function SetGroundSpeed(float NewGroundSpeed)
 {
-	// one on fire is slowed, whatever speed it is told to take
+	// one on fire is slowed, whatever speed it is told to take (the more so when a Firebug lit it)
 	if ( bBurnified )
-		NewGroundSpeed *= BurnSpeedScale;
+	{
+		if ( KFPawn(BurnInstigator) != None && KFPawn(BurnInstigator).GetVeteran() != None )
+			NewGroundSpeed *= KFPawn(BurnInstigator).GetVeteran().static.BurnSlow(BurnSpeedScale);
+		else
+			NewGroundSpeed *= BurnSpeedScale;
+	}
     GroundSpeed = NewGroundSpeed;
     UpdateRunAnim();
 }

@@ -231,6 +231,14 @@ function HandleRecoil()
 	KFWeapon(Weapon).ViewKick(KickScale, 1.0 + FClamp(FireCount/6.f,0.0,2.0), ViewPunchDamping, ViewPunchSpring);
 }
 
+// Bodies a shot goes on through after the first: its own, and its shooter's perk's on top
+function int Penetrations()
+{
+	if ( KFPawn(Instigator) != None && KFPawn(Instigator).GetVeteran() != None )
+		return MaxPenetrations + KFPawn(Instigator).GetVeteran().static.ExtraPenetrations(self);
+	return MaxPenetrations;
+}
+
 function DoTrace(Vector Start, Rotator Dir)
 {
     local Vector X, End, HitLocation, HitNormal;
@@ -238,7 +246,7 @@ function DoTrace(Vector Start, Rotator Dir)
     local Actor DamageTarget;
     local KFWeaponAttachment WeapAttach;
 
-    if ( MaxPenetrations > 0 )
+    if ( Penetrations() > 0 )
     {
         PenetratingTrace(Start, Dir);
         return;
@@ -297,10 +305,11 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 	local array<Actor> Off, Hit;
 	local KFWeaponAttachment WeapAttach;
 	local float HitDamage;
-	local int i, Passed, Tries;
+	local int i, Passed, Tries, Pens;
 	local bool bSeen, bFree;
 
 	MaxRange();
+	Pens = Penetrations();
 	X = Normal(Vector(Dir));
 	End = Start + TraceRange * X;
 	HitDamage = Lerp(FRand(), DamageMin, DamageMax);
@@ -366,7 +375,7 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 
 		if ( !bFree )
 		{
-			if ( Passed++ >= MaxPenetrations )
+			if ( Passed++ >= Pens )
 				break;
 			HitDamage *= PenDamageScale;
 		}

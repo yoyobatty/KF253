@@ -75,6 +75,9 @@ var() float HoldoutChance;         // share of waves from the third on that are 
 var() float HoldoutCapScale;       // specimens at once in a holdout: this times the game's Max Specimens (32 to 128)
 var() float HoldoutLength;         // seconds a holdout keeps spawning
 var() float HoldoutHealthScale;    // a holdout specimen's health (and its head's) is this share of a normal one's
+var() float WaveHealthClimb;       // specimen health added each wave, as a share of Normal's
+var() float WaveDamageClimb;       // specimen damage added each wave, likewise
+var() int DamageClimbWaves;        // damage climbs for this many waves, then holds (0: no end)
 var bool bForceNextType;           // the next wave is of ForcedNextType (cheats Holdout, NextWave)
 var EEndlessWaveType ForcedNextType;
 
@@ -254,7 +257,11 @@ function float GetWaveTotalMonsters(EEndlessWaveType WType)
     local float NewMaxMonsters;
 
     NewMaxMonsters = 15.0 + float(WaveNum) * 3.0;
-    NewMaxMonsters *= (FMin(GameDifficulty, 7.0) + 3.0) / 7.0 * FClamp(float(NumPlayers + NumBots) * 0.8, 2.0, 50.0);
+    // (one player alone fights a wave for one, as in retail; it was sized for two)
+    if (NumPlayers + NumBots <= 1)
+        NewMaxMonsters *= (FMin(GameDifficulty, 7.0) + 3.0) / 7.0;
+    else
+        NewMaxMonsters *= (FMin(GameDifficulty, 7.0) + 3.0) / 7.0 * FClamp(float(NumPlayers + NumBots) * 0.8, 2.0, 50.0);
 
     // Special waves get fewer but more focused monsters
     if (WType != EWT_Normal)
@@ -1395,6 +1402,9 @@ function BoostHoldoutZeds()
 
 defaultproperties
 {
+    WaveHealthClimb=0.015000
+    WaveDamageClimb=0.030000
+    DamageClimbWaves=10
     InitialCountDownValue=15
     bRiver=True
     RiverGap=0.370000

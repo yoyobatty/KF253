@@ -637,6 +637,10 @@ State MatchInProgress
 
 defaultproperties
 {
+    WaveHealthClimb=0.030000
+    WaveDamageClimb=0.030000
+    DamageClimbWaves=0
+    HiddenSpeedScale=1.000000
     BaseWaveMonsters=6.000000
     MonstersPerWave=2.000000
     MonstersPerExtraPlayer=3.000000

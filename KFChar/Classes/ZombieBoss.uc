@@ -49,6 +49,11 @@ var() float ChaingunBackoffDist,ChaingunHoldDist,ChaingunLostSightTime,ChaingunR
 var() float TargetCheckInterval,TargetMinHoldTime,TargetSwitchRatio,TargetVisibleBonus,TargetBusyBonus,TargetIsolatedBonus,TargetWeakBonus,TargetUnreachableScale,UnreachableRangedScale;
 var() float SplashOffsets[4];
 var() int BarrageClusterCount,BarrageExtra,BarrageMax;
+// Flame rocket: the first rocket of a volley may be a BossFlameRocket (a smaller blast, the ground round it set alight),
+// more likely with players bunched, at most once in FlameRocketCooldown seconds
+var() float FlameRocketChance,FlameRocketClusterChance,FlameRocketCooldown,FlameRocketDamage;
+var float NextFlameRocketTime;
+var bool bFlameVolley;
 var() float KiteGraceTime,KiteRampTime,KiteDamagePct,KiteWeightScale,KiteChargeRange;
 var() float TauntInterval;
 var() float CloakFlickerTime,CloakFlickerCooldown;
@@ -1126,8 +1131,15 @@ State FireMissile
 		else if(Level.Game.GameDifficulty >= 5.0 || Level.Game.NumPlayers >= 4)
 			MissilesLeft = 2 + Rand(2);
 		else MissilesLeft = 1 + Rand(2);
+		bFlameVolley = false;
 		if( CountClustered(Controller.Target)>=BarrageClusterCount )
+		{
 			MissilesLeft = Min(MissilesLeft+BarrageExtra, BarrageMax);
+			bFlameVolley = FRand()<FlameRocketClusterChance;
+		}
+		else bFlameVolley = FRand()<FlameRocketChance;
+		if( Level.TimeSeconds<NextFlameRocketTime )
+			bFlameVolley = false;
 		bMissileWindup = true;
 		MissileWindupEndTime = Level.TimeSeconds+MissileWindupTimeout;
 		SavedFireProperties.bInitialized = false; // Reset saved properties
@@ -1167,11 +1179,25 @@ State FireMissile
 		if( Pawn(Controller.Target)!=None && FindSplashPoint(Pawn(Controller.Target), Start, Splash) )
 			R = rotator(Splash-Start);
 		PlaySound(Sound'KFWeaponSound.LAWFire', SLOT_Interact);
-		P = Spawn(SavedFireProperties.ProjectileClass,,,Start,R);
-		if( P != None )
+		if( bFlameVolley )
 		{
-			P.Damage = MissileDamage;
-			P.DamageRadius = MissileRadius;
+			bFlameVolley = false;
+			NextFlameRocketTime = Level.TimeSeconds+FlameRocketCooldown;
+			P = Spawn(class'BossFlameRocket',,,Start,R);
+			if( P != None )
+			{
+				P.Damage = MissileDamage*FlameRocketDamage;
+				P.DamageRadius = MissileRadius*0.8;
+			}
+		}
+		else
+		{
+			P = Spawn(SavedFireProperties.ProjectileClass,,,Start,R);
+			if( P != None )
+			{
+				P.Damage = MissileDamage;
+				P.DamageRadius = MissileRadius;
+			}
 		}
 		bShotAnim = true;
 		Acceleration = vect(0,0,0);
@@ -1873,6 +1899,10 @@ defaultproperties
 	BarrageClusterCount=3
 	BarrageExtra=2
 	BarrageMax=5
+	FlameRocketChance=0.350000
+	FlameRocketClusterChance=0.700000
+	FlameRocketCooldown=20.000000
+	FlameRocketDamage=0.500000
 	KiteGraceTime=8.000000
 	KiteRampTime=10.000000
 	KiteDamagePct=0.080000

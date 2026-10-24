@@ -56,6 +56,12 @@ static function float GetReloadSpeedModifier( KFWeapon Other )
 	Return 1;
 }
 
+// Specimens it sets alight move at 65% of their speed (80% when anyone else does)
+static function float BurnSlow( float Scale )
+{
+	Return FMin(Scale, 0.65);
+}
+
 static function class<DamageType> GetMAC10DamageType()
 {
 	return class'KFMod.DamTypeFlamethrower';
@@ -66,6 +72,6 @@ defaultproperties
 	bHasPerkWeapon=true
 	OnHUDIcon=Texture'KFPatch2.Firebug'
 	VeterancyName="Firebug"
-	VeterancyDescription="|FIREBUG ||Grenades become Incendiary|Immunity to burn damage |+50% Flamethrower damage|+50% Flamethrower range |+75% more ammo for Flamethrower|Shotgun and Bullpup get fire rounds."
+	VeterancyDescription="|FIREBUG ||Grenades become Incendiary|Immunity to burn damage |+50% Flamethrower damage|+50% Flamethrower range |+75% more ammo for Flamethrower|Shotgun and Bullpup get fire rounds.|Specimens you set alight are slowed to 65% speed (80% otherwise)."
 	VeterancyRequirement="|REQUIREMENTS:||- Deal 20,000 damage with the Flamethrower."
 }

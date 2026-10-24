@@ -164,6 +164,18 @@ static function float RageShare( class<DamageType> DmgType )
 	Return 1.0;
 }
 
+// Bodies a shot of this fire mode goes on through, on top of its own (KFFire.Penetrations)
+static function int ExtraPenetrations( KFFire Other )
+{
+	Return 0;
+}
+
+// How fast a specimen this player set alight moves, given its own burning share of its speed
+static function float BurnSlow( float Scale )
+{
+	Return Scale;
+}
+
 defaultproperties
 {
 	bHasPerkWeapon=false

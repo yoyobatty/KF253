@@ -145,6 +145,7 @@ var KFSwarm Swarm;                         // how the specimens of a wave work a
 var() globalconfig float SwarmStrength;    // 0 off, 1 full
 var() globalconfig bool bPerksEnabled;
 var() globalconfig int MaxZombiesOnce;
+var() float HiddenSpeedScale;              // specimens out of sight move at this share of their HiddenGroundSpeed
 
 var bool bWaveBossInProgress,bHasSetViewYet,bBossHasSaidWord;
 var KFMonster ViewingBoss;
@@ -2554,6 +2555,7 @@ static function string GetLoadingHint( PlayerController PC, string MapName, Colo
 
 defaultproperties
 {
+     HiddenSpeedScale=0.800000
      OffFloorSpawnDelay=8.000000
      SpawnCooldownPenalty=8000000.0
      SpawnCooldownTime=30.0
