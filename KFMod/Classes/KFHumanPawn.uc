@@ -520,7 +520,8 @@ simulated function vector CalcDrawOffset(inventory Inv)
 	if ( Controller == None )
 		return (Inv.PlayerViewOffset >> Rotation) + BaseEyeHeight * vect(0,0,1);
 
-	DrawOffset = ((0.9/Weapon.DisplayFOV * 100 * ModifiedPlayerViewOffset(Inv)) >> GetViewRotation() );
+	// (the weapon's own angle as made: the one it is drawn at changes with the screen and the aim)
+	DrawOffset = ((0.9/Weapon.default.DisplayFOV * 100 * ModifiedPlayerViewOffset(Inv)) >> GetViewRotation() );
 	if ( !IsLocallyControlled() )
 		DrawOffset.Z += BaseEyeHeight;
 	else

@@ -3,48 +3,6 @@ class LAW extends KFWeaponShotgun;
 // Killing Floor's Light Anti Tank Weapon.
 // This is probably about as badass as things get....
 
-simulated function PlayAnimZoom( bool bZoomNow )
-{
-	if( bZoomNow )
-	{
-		IdleAnim = 'AimIdle';
-		PlayAnim('Raise');
-	}
-	else if( IdleAnim!=Default.IdleAnim )
-	{
-		IdleAnim = Default.IdleAnim;
-		TweenAnim(IdleAnim,0.5);
-	}
-}
-
-// Draw the Winchester, but zoom in the FOV so you can see down the barrel, too.
-simulated event RenderOverlays(Canvas Canvas)
-{
-	local PlayerController PC;
-
-	PC = PlayerController(KFPawn(Owner).Controller);
-
-	if(PC == None)
-		return;
-
-	LastFOV = PC.DesiredFOV;
-
-	if (!bAimingRifle)
-	{
-		Super.RenderOverlays(Canvas);
-		zoomed=false;
-		//bAimingRifle = false;
-	}
-	else
-	{
-		//SetZoomBlendColor(Canvas);
-		SetLocation( Instigator.Location + Instigator.CalcDrawOffset(self) );
-		SetRotation( Instigator.GetViewRotation() );
-		Canvas.DrawActor(self, false);
-		zoomed = true;
-	}
-}
-
 function float GetAIRating()
 {
     local Bot B;
@@ -123,6 +81,12 @@ function float SuggestDefenseStyle()
    return -1.0;
 }
 
+// (not back up to the shoulder until the next rocket is in)
+simulated function bool CanZoomNow()
+{
+	return Super.CanZoomNow() && Level.TimeSeconds >= FireMode[0].NextFireTime;
+}
+
 defaultproperties
 {
 	ClipCount=1
@@ -142,6 +106,9 @@ defaultproperties
 	Description="The Light Anti Tank Weapon is, as its name suggests, a military grade heavy weapons platform designed to disable or outright destroy armored vehicles."
 	EffectOffset=(X=50.000000,Y=1.000000,Z=10.000000)
 	DisplayFOV=85.000000
+	AimInTime=1.000000
+	AimOutTime=0.500000
+	AimViewOffset=(X=22.000000,Y=22.310000,Z=-0.636000)
 	Priority=50
 	HudColor=(G=0)
 	SmallViewOffset=(X=22.000000,Y=22.500000,Z=-0.560000)

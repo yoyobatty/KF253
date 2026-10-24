@@ -154,6 +154,18 @@ var() vector SprintDownOffset;
 var() float ZombiesSprintBobMulti;
 var bool bUpgraded;
 
+// === Aiming (alt fire held on a weapon whose alt fire is KFZoom) ===
+var() float AimZoom;			// how many times the view is magnified once aimed (1 = not at all)
+var() float AimInTime;			// seconds up to the aim; the raise animation is timed to it
+var() float AimOutTime;			// seconds back down
+var() vector AimViewOffset;		// where the aimed weapon is held: from here its aim animations put the sights on the middle of the view, whatever the hand and weapon size settings
+var() float AimMotionScale;		// share of the sway and bob left on the weapon while aimed
+var() float AimIdleRate;		// how fast the aimed idle plays: 0 holds its first pose, the sights still on the middle
+var() name AimRaiseAnim, AimFireAnim;	// (IdleAimAnim is the aimed idle)
+var float AimFrom, AimSince;	// the aim's blend when it last turned, and when that was
+var bool bAimWas;				// bAimingRifle as the blend last saw it
+var float AirSince;				// when the holder left the ground (0 while on it)
+
 replication
 {
 	//TODO - does ClipCount still need sending,
@@ -236,9 +248,9 @@ function ServerSpawnLight()
 simulated event RenderOverlays( Canvas Canvas )
 {
     local int m;
-    local vector WeaponOffset;
-    local rotator NewRotation, CenteredRotation, SprintRotScaled;
-    local float PivotAmount;
+    local vector WeaponOffset, HipOffset;
+    local rotator NewRotation, SprintRotScaled;
+    local float PivotAmount, Aim, Free, CenterYaw, CenterRoll;
 	local vector X, Y, Z;
 
 	GetViewAxes(X, Y, Z);
@@ -252,6 +264,11 @@ simulated event RenderOverlays( Canvas Canvas )
     if ((Hand < -1.0) || (Hand > 1.0))
         return;
 
+	// How far up to the aim it is, and the share of the sway and bob left on it
+	Aim = AimEase();
+	Free = 1.0 - Aim * (1.0 - AimMotionScale);
+	DisplayFOV = WeaponDrawFOV(Canvas, Aim);
+
     // draw muzzleflashes/smoke for all fire modes so idle state won't
     // cause emitters to just disappear
     for (m = 0; m < NUM_FIRE_MODES; m++)
@@ -263,18 +280,19 @@ simulated event RenderOverlays( Canvas Canvas )
     }
 
     if ( class'PlayerController'.Default.bSmallWeapons )
-        PlayerViewOffset = SmallViewOffset;
+        HipOffset = SmallViewOffset;
     else if ( Mesh == OldMesh )
-        PlayerViewOffset = OldPlayerViewOffset;
+        HipOffset = OldPlayerViewOffset;
     else
-        PlayerViewOffset = Default.PlayerViewOffset;
+        HipOffset = Default.PlayerViewOffset;
     if ( Hand == 0 )
-        PlayerViewOffset.Y = CenteredOffsetY;
+        HipOffset.Y = CenteredOffsetY;
     else
-        PlayerViewOffset.Y *= Hand;
+        HipOffset.Y *= Hand;
+	PlayerViewOffset = HipOffset + (AimViewOffset - HipOffset) * Aim;
 
 	// PivotAmount goes from 0 (far) to 1 (at wall)
-	PivotAmount = 1.0 - WallOffsetFactor;
+	PivotAmount = (1.0 - WallOffsetFactor) * (1.0 - Aim);
 	UpdateWallOffset();
 	// --- Pivot up and to the left as you get close to a wall ---
 	WallPivotRot = default.WallPivotRot * PivotAmount;
@@ -286,34 +304,27 @@ simulated event RenderOverlays( Canvas Canvas )
 	WallPivotOffset += default.SprintDownOffset * SprintFactor;
 	WeaponOffset = (X*WallPivotOffset.X + Y*WallPivotOffset.Y + Z*WallPivotOffset.Z);
 
-    WeaponOffset += VM_PosOffset + Z * BreathOffsetZ;
-    WeaponOffset += X * BobPosOffset.X + Y * (BobPosOffset.Y + StrafeOffsetY) + Z * BobPosOffset.Z;
+    WeaponOffset += (VM_PosOffset + Z * BreathOffsetZ) * Free;
+    WeaponOffset += (X * BobPosOffset.X + Y * (BobPosOffset.Y + StrafeOffsetY) + Z * BobPosOffset.Z) * Free;
 
     SetLocation(Instigator.Location + Instigator.CalcDrawOffset(self) + WeaponOffset);
 
     // Final rotation (add dynamic rotation offset)
+    NewRotation = Instigator.GetViewRotation();
     if ( Hand == 0 )
     {
-        CenteredRotation = Instigator.GetViewRotation();
-        CenteredRotation.Yaw += CenteredYaw + WallPivotRot.Yaw;
-        CenteredRotation.Roll = CenteredRoll + WallPivotRot.Roll;
-        CenteredRotation.Pitch += WallPivotRot.Pitch;
-        CenteredRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * (65536.0/360.0) );
-        CenteredRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * (65536.0/360.0) );
-        CenteredRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * (65536.0/360.0) );
-        SetRotation(CenteredRotation);
+        CenterYaw = CenteredYaw * (1.0 - Aim);
+        CenterRoll = CenteredRoll * (1.0 - Aim);
+        NewRotation.Yaw += int(CenterYaw);
+        NewRotation.Roll = int(CenterRoll);
     }
-    else
-    {
-        NewRotation = Instigator.GetViewRotation();
-        NewRotation.Yaw += WallPivotRot.Yaw;
-        NewRotation.Pitch += WallPivotRot.Pitch;
-        NewRotation.Roll += WallPivotRot.Roll;
-        NewRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * (65536.0/360.0) );
-        NewRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * (65536.0/360.0) );
-        NewRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * (65536.0/360.0) );
-        SetRotation(NewRotation);
-    }
+    NewRotation.Yaw += WallPivotRot.Yaw;
+    NewRotation.Pitch += WallPivotRot.Pitch;
+    NewRotation.Roll += WallPivotRot.Roll;
+    NewRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * Free * (65536.0/360.0) );
+    NewRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * Free * (65536.0/360.0) );
+    NewRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * Free * (65536.0/360.0) );
+    SetRotation(NewRotation);
     if ( KFPlayerController(Instigator.Controller) != None && KFPlayerController(Instigator.Controller).bSwaying )
         KFPlayerController(Instigator.Controller).SwayDrawn(self);
     bDrawingFirstPerson = true;
@@ -321,6 +332,19 @@ simulated event RenderOverlays( Canvas Canvas )
     bDrawingFirstPerson = false;
     if ( Hand == 0 )
         PlayerViewOffset.Y = 0;
+}
+
+// The angle the weapon is drawn at on this screen. At the hip it is DisplayFOV across, as the weapon was made, on any
+// screen up to 16:9; a wider one keeps the weapon the size it is at 16:9 and shows more at the sides. Aimed, it is the
+// game's own view for this screen magnified AimZoom times, so the sights look the same on every screen.
+simulated function float WeaponDrawFOV( Canvas C, float Aim )
+{
+	local float Aspect, HipTan, AimTan;
+
+	Aspect = float(C.SizeX) / FMax(C.SizeY, 1.0);
+	HipTan = Tan(default.DisplayFOV * Pi / 360.0) * FMax(Aspect * 9.0 / 16.0, 1.0);
+	AimTan = FMax(Aspect * 3.0 / 4.0, 1.0) / FMax(AimZoom, 1.0);
+	return ATan(HipTan * (AimTan / HipTan) ** Aim, 1.0) * 360.0 / Pi;
 }
 
 simulated function UpdateWallOffset()
@@ -561,7 +585,6 @@ function ServerSetAiming(bool IsAiming)
 	if( KFHumanPawn(Instigator)!=None )
 		KFHumanPawn(Instigator).SetAiming(IsAiming);
 	bAimingRifle = IsAiming;
-	InterruptReload();
 }
 
 // Up in the hands and not on its way down. A server keeps no ClientState for a weapon held by a player on another
@@ -589,7 +612,8 @@ function bool AllowReload()
 		return true;
 		
 
-	if(FireMode[0].IsFiring() || FireMode[1].IsFiring() ||
+	// (the aim button held does not stop it: the weapon comes down for the reload and goes back up after)
+	if(FireMode[0].IsFiring() || (FireMode[1].IsFiring() && KFZoom(FireMode[1]) == None) ||
 		   bIsReloading || ClipLeft >= ClipCount ||
 		   ClientState == WS_BringUp ||
 		   AmmoAmount(0) <= ClipLeft ||
@@ -924,10 +948,15 @@ simulated function BringUp(optional Weapon PrevWeapon)
 	if( KFHumanPawn(Instigator)!=None )
 		KFHumanPawn(Instigator).SetAiming(False);
 	bAimingRifle = False;
+	bAimWas = False;
+	AimFrom = 0;
+	AirSince = 0;
 	bIsReloading = false;
 	bReloadQueued = false;
 	DrawnTime = Level.TimeSeconds;
 	IdleAnim = Default.IdleAnim;
+	FireMode[0].FireAnim = FireMode[0].default.FireAnim;
+	FireMode[0].FireLoopAnim = FireMode[0].default.FireLoopAnim;
 	//Super.BringUp(PrevWeapon);
 
     // Fix: Initialize viewmodel motion variables to prevent network glitch
@@ -1185,6 +1214,9 @@ simulated function Tick(float DeltaTime)
 {
 	Super.Tick(DeltaTime);
 	WallOffsetFactor += (TargetWallOffsetFactor - WallOffsetFactor) * FMin(DeltaTime * 8.0, 1.0);
+	if ( Instigator != None && Instigator.Weapon == self && KFZoom(FireMode[1]) != None
+		&& PlayerController(Instigator.Controller) != None && Instigator.IsLocallyControlled() )
+		UpdateAim();
     if (Instigator != None && Instigator.Controller != None && Instigator.IsFirstPerson())
 		if (Level.NetMode != NM_DedicatedServer)
         	UpdateViewModelMotion(Instigator.GetViewRotation(), DeltaTime);
@@ -1727,11 +1759,141 @@ simulated function AccuracyUpdate(float Velocity)
  }
 }
 
-simulated function PlayAnimZoom( bool bZoomNow ); // Called from KFZoom whenever start or end the zooming.
+// A player's aim follows the alt fire button: up while it is held and the weapon is free to aim (from the hip only once
+// the trigger is let go), down when it is let go or the weapon is wanted for something else
+simulated function UpdateAim()
+{
+	local bool bWant;
 
+	if ( Instigator.Physics == PHYS_Falling )
+	{
+		if ( AirSince == 0 )
+			AirSince = Level.TimeSeconds;
+	}
+	else AirSince = 0;
+
+	bWant = Instigator.PressingAltFire() && CanZoomNow() && (bAimingRifle || !FireMode[0].bIsFiring);
+	if ( bWant != bAimingRifle )
+		SetAim(bWant);
+}
+
+simulated function SetAim( bool bAim )
+{
+	AimBlend();
+	bAimingRifle = bAim;
+	ServerSetAiming(bAim);
+	PlayAnimZoom(bAim);
+}
+
+// The raise to the aim and the drop from it. A weapon busy with another animation (a shot, a reload) plays it out and
+// then settles into the aimed or the plain idle.
+simulated function PlayAnimZoom( bool bZoomNow )
+{
+	local name Seq;
+	local float Frame, Rate;
+	local bool bSettled;
+
+	GetAnimParams(0, Seq, Frame, Rate);
+	bSettled = !IsAnimating() || Seq == default.IdleAnim || Seq == IdleAimAnim || Seq == AimRaiseAnim;
+	if ( bZoomNow )
+	{
+		if ( HasAnim(IdleAimAnim) )
+			IdleAnim = IdleAimAnim;
+		if ( HasAnim(AimFireAnim) )
+		{
+			FireMode[0].FireAnim = AimFireAnim;
+			FireMode[0].FireLoopAnim = AimFireAnim;
+		}
+		if ( bSettled && HasAnim(AimRaiseAnim) )
+		{
+			PlayAnim(AimRaiseAnim, 1.0, 0.0);
+			GetAnimParams(0, Seq, Frame, Rate);
+			if ( Rate > 0 )
+				PlayAnim(AimRaiseAnim, 1.0 / (Rate * FMax(AimInTime, 0.01)), 0.0);
+			SetAnimFrame(AimBlend());
+		}
+	}
+	else
+	{
+		IdleAnim = default.IdleAnim;
+		FireMode[0].FireAnim = FireMode[0].default.FireAnim;
+		FireMode[0].FireLoopAnim = FireMode[0].default.FireLoopAnim;
+		if ( bSettled )
+			TweenAnim(IdleAnim, FMax(AimBlend() * AimOutTime, 0.05));
+	}
+}
+
+simulated function PlayIdle()
+{
+	if ( !bAimingRifle )
+		Super.PlayIdle();
+	else if ( HasAnim(IdleAimAnim) )
+		LoopAnim(IdleAimAnim, AimIdleRate, 0.2);
+	else if ( HasAnim(AimRaiseAnim) )
+	{
+		// (no aimed idle: held at the top of the raise)
+		LoopAnim(AimRaiseAnim, 0.0, 0.0);
+		SetAnimFrame(0.99);
+	}
+	else Super.PlayIdle();
+}
+
+// (the aim button held is not a shot: the weapon still settles into its idle, aimed or not, once an animation ends)
+simulated function AnimEnd( int Channel )
+{
+	local bool bAimHeld;
+
+	bAimHeld = KFZoom(FireMode[1]) != None && FireMode[1].bIsFiring;
+	if ( bAimHeld )
+		FireMode[1].bIsFiring = false;
+	Super.AnimEnd(Channel);
+	if ( bAimHeld )
+		FireMode[1].bIsFiring = true;
+}
+
+// Whether the weapon may be up at the aim now
 simulated function bool CanZoomNow()
 {
-	Return !FireMode[0].bIsFiring && !KFHumanPawn(Instigator).bIsSprinting && !bIsReloading && ClientState == WS_ReadyToFire;
+	if ( ClientState != WS_ReadyToFire || bIsReloading )
+		return false;
+	if ( KFHumanPawn(Instigator) != None && (KFHumanPawn(Instigator).bIsSprinting || KFHumanPawn(Instigator).bIsDowned) )
+		return false;
+	// (in the air after a jump, or falling further than a step down)
+	return AirSince == 0 || (Instigator.Velocity.Z < 50 && Level.TimeSeconds - AirSince < 0.2);
+}
+
+// The aim's blend, 0 at the hip to 1 aimed. It moves at AimInTime or AimOutTime from wherever it was when bAimingRifle
+// last changed, whoever changed it (a LAW shot and a weapon switch put the aim down too).
+simulated function float AimBlend()
+{
+	if ( bAimingRifle != bAimWas )
+	{
+		AimFrom = AimBlendAs(bAimWas);
+		AimSince = Level.TimeSeconds;
+		bAimWas = bAimingRifle;
+	}
+	return AimBlendAs(bAimingRifle);
+}
+
+simulated function float AimBlendAs( bool bUp )
+{
+	if ( bUp )
+		return FMin(AimFrom + (Level.TimeSeconds - AimSince) / FMax(AimInTime, 0.01), 1.0);
+	return FMax(AimFrom - (Level.TimeSeconds - AimSince) / FMax(AimOutTime, 0.01), 0.0);
+}
+
+simulated function float AimEase()
+{
+	local float T;
+
+	T = AimBlend();
+	return T * T * (3.0 - 2.0 * T);
+}
+
+// How many times the view is magnified right now
+simulated function float AimMagnification()
+{
+	return FMax(AimZoom, 1.0) ** AimEase();
 }
 
 simulated function float GetAmmoMulti()
@@ -1997,6 +2159,16 @@ defaultproperties
 	StrafePosStrength=2.5
 	StrafeLeanSpeed=8.0
 	MoveReactStrength=2.0
+
+	// Aiming
+	AimZoom=1.0
+	AimInTime=0.3
+	AimOutTime=0.3
+	AimMotionScale=0.0
+	AimIdleRate=0.0
+	AimRaiseAnim="Raise"
+	AimFireAnim="AimFire"
+	IdleAimAnim="AimIdle"
 
 	// Jump/Land weapon kick
 	JumpKickPos=25.0

@@ -6,6 +6,7 @@ var float Range;
 var float LastRangingTime;
 
 var() Material ZoomMat;
+var() float ScopeCrossX, ScopeCrossY;	// where the reticle crosses in ZoomMat's 512 square; that point goes on the aim
 var() Sound ZoomSound;
 var bool bArrowRemoved;
 
@@ -93,20 +94,8 @@ simulated function SetZoomBlendColor(Canvas c)
 	c.DrawColor = clr;
 }
 
-simulated function BringUp(optional Weapon PrevWeapon)
-{
-	if ( PlayerController(Instigator.Controller) != None )
-		LastFOV = PlayerController(Instigator.Controller).DesiredFOV;
-	FireMode[0].FireAnim = 'Fire';
-	FireMode[0].FireLoopAnim = 'Fire';
-	IdleAnim = Default.IdleAnim;
-	Super.BringUp(PrevWeapon);
-}
-
 simulated function bool PutDown()
 {
-	if( Instigator.Controller.IsA( 'PlayerController' ) )
-		PlayerController(Instigator.Controller).EndZoom();
 	if ( Super.PutDown() )
 	{
 		GotoState('');
@@ -115,72 +104,35 @@ simulated function bool PutDown()
 	return false;
 }
 
-simulated function WeaponTick(float deltaTime)
-{
-	super.WeaponTick(deltaTime);
-
-	if( Level.NetMode==NM_DedicatedServer )
-		Return;
-
-	if ( bAimingRifle && Instigator!=None && Instigator.Physics==PHYS_Falling )
-	{
-		FireMode[1].bIsFiring = False;
-		bAimingRifle = False;
-		ServerSetAiming(False);
-		if( Role<ROLE_Authority )
-			ServerStopFire(1);
-		PlayAnimZoom(False);
-	}
-	else if( bZooming && ZoomingInTimer<Level.TimeSeconds )
-	{
-		bZooming = False;
-		ZoomLevel = 0.20;
-		if( PlayerController(Instigator.Controller)!=None )
-			PlayerController(Instigator.Controller).DesiredFOV = FClamp(50.0 - (ZoomLevel * 88.0), 1, 170);
-	}
-}
-simulated function bool CanZoomNow()
-{
-	Return (!FireMode[0].bIsFiring && Instigator!=None && Instigator.Physics!=PHYS_Falling);
-}
-
-// Draw the Winchester, but zoom in the FOV so you can see down the barrel, too.
+// The bow drawn up to the eye, and the view through its scope once it is there
 simulated event RenderOverlays(Canvas Canvas)
 {
-	local PlayerController PC;
-
-	if( Instigator==None )
-		return;
-	PC = PlayerController(Instigator.Controller);
-	if(PC == None)
+	if( Instigator==None || PlayerController(Instigator.Controller)==None )
 		return;
 
-	LastFOV = PC.DesiredFOV;
-
-	if (PC.DesiredFOV == PC.DefaultFOV || (Level.bClassicView && PC.DesiredFOV == 90))
+	if( AimBlend() < 1.0 )
 	{
 		Super.RenderOverlays(Canvas);
 		zoomed=false;
+		return;
 	}
-	else
-	{
-		SetZoomBlendColor(Canvas);
 
-		//Black-out either side of the main zoom circle.
-		Canvas.Style = ERenderStyle.STY_Normal;
-		Canvas.SetPos(0, 0);
-		Canvas.DrawTile(ZoomMat, (Canvas.SizeX - Canvas.SizeY) / 2, Canvas.SizeY, 0.0, 0.0, 8, 8);
-		Canvas.SetPos(Canvas.SizeX, 0);
-		Canvas.DrawTile(ZoomMat, -(Canvas.SizeX - Canvas.SizeY) / 2, Canvas.SizeY, 0.0, 0.0, 8, 8);
+	SetZoomBlendColor(Canvas);
 
-		//The view through the scope itself.
-		Canvas.Style = 255;
-		Canvas.SetPos((Canvas.SizeX - Canvas.SizeY) / 2,0);
-		Canvas.DrawTile(ZoomMat, Canvas.SizeY, Canvas.SizeY, 0.0, 0.0, 512, 512);
+	//Black-out either side of the main zoom circle.
+	Canvas.Style = ERenderStyle.STY_Normal;
+	Canvas.SetPos(0, 0);
+	Canvas.DrawTile(ZoomMat, (Canvas.SizeX - Canvas.SizeY) / 2, Canvas.SizeY, 0.0, 0.0, 8, 8);
+	Canvas.SetPos(Canvas.SizeX, 0);
+	Canvas.DrawTile(ZoomMat, -(Canvas.SizeX - Canvas.SizeY) / 2, Canvas.SizeY, 0.0, 0.0, 8, 8);
 
-		DrawRangeFinder(Canvas);
-		zoomed = true;
-	}
+	//The view through the scope itself.
+	Canvas.Style = 255;
+	Canvas.SetPos((Canvas.SizeX - Canvas.SizeY) / 2,0);
+	Canvas.DrawTile(ZoomMat, Canvas.SizeY, Canvas.SizeY, ScopeCrossX - 256, ScopeCrossY - 256, 512, 512);
+
+	DrawRangeFinder(Canvas);
+	zoomed = true;
 }
 
 // What the scope is on and how far off it is, worked out only while looking through it. A look at nothing within
@@ -223,35 +175,11 @@ simulated function DrawRangeFinder(Canvas Canvas)
 	Canvas.DrawText("Target: " $ TargetName);
 }
 
-simulated function PlayAnimZoom( bool bZoomNow )
-{
-	if( bZoomNow )
-	{
-		IdleAnim = 'AimIdle';
-		PlayAnim('Raise');
-		//FireMode[0].FireAnim = 'AimFire';
-		//FireMode[0].FireLoopAnim = 'AimFire';
-		PrePivot=vect(0,0,0);
-		BobDamping=1.0;
-		bZooming = True;
-		ZoomingInTimer = Level.TimeSeconds+0.3;
-	}
-	else if( IdleAnim!=Default.IdleAnim )
-	{
-		//FireMode[0].FireAnim = 'Fire';
-		//FireMode[0].FireLoopAnim = 'Fire';
-		IdleAnim = Default.IdleAnim;
-		TweenAnim(IdleAnim,0.5);
-		bZooming = False;
-		ZoomLevel=0.0;
-		if(PlayerController(Instigator.Controller)!=none)
-			PlayerController(Instigator.Controller).DesiredFOV = PlayerController(Instigator.Controller).DefaultFOV;
-	}
-}
-
 defaultproperties
 {
      ZoomMat=FinalBlend'KillingFloorWeapons.Xbow.CommandoCrossFinalBlend'
+     ScopeCrossX=260.000000
+     ScopeCrossY=279.600000
      ClipCount=1
      ReloadRate=0.010000
      bLoadsWithFire=True
@@ -272,6 +200,8 @@ defaultproperties
      OldCenteredRoll=3000
      Description="A recreational hunting weapon, featuring a firing trigger and an a powerful integrated scope. "
      DisplayFOV=80.000000
+     AimZoom=4.600000
+     AimViewOffset=(X=-5.000000,Y=18.000000,Z=-15.000000)
      Priority=10
      SmallViewOffset=(X=-5.000000,Y=18.000000,Z=-15.000000)
      CenteredOffsetY=-5.000000

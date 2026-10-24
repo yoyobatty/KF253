@@ -20,21 +20,7 @@ event ModeDoFire()
 
 		Instigator.DeactivateSpawnProtection();
 	}
-	// client
-	if (Instigator.IsLocallyControlled())
-	{
-		if( KFWeapon(Weapon)!=none )
-		{
-			KFWeapon(Weapon).bAimingRifle = True;
-			KFWeapon(Weapon).ServerSetAiming(True);
-			KFWeapon(Weapon).PlayAnimZoom(True);
-		}
-		if( KFHumanPawn(Instigator)!=None )
-			KFHumanPawn(Instigator).SetAiming(True);
-	}
-
-
-       // Weapon.IncrementFlashCount(ThisModeNum);
+	// (a player's aim follows the button itself: KFWeapon.UpdateAim)
 
 	// set the next firing time. must be careful here so client and server do not get out of sync
 	if (bFireOnRelease)
@@ -58,27 +44,9 @@ event ModeDoFire()
 	}
 }
 
-function PlayFireEnd()
-{
-	if( KFWeapon(Weapon)!=none )
-	{
-		KFWeapon(Weapon).bAimingRifle = False;
-		KFWeapon(Weapon).ServerSetAiming(False);
-		KFWeapon(Weapon).PlayAnimZoom(False);
-	}
-	if( KFHumanPawn(Instigator)!=None )
-		KFHumanPawn(Instigator).SetAiming(False);
-		
-
-	Super.PlayFireEnd();
-}
-
+// (always: a press must still reach StartFire, which stops a shell-by-shell reload)
 simulated function bool AllowFire()
 {
-	if (Weapon.Owner.Physics == PHYS_Falling)
-		return false;
-	if( !KFWeapon(Weapon).CanZoomNow() )
-		return false; 
 	return true;
 }
 

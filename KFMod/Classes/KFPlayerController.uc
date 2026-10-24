@@ -36,6 +36,8 @@ var()   float       TargetFOV;                      // The FOV that the Camera i
 var		float		TransitionStartFOV;             // The FOV that was being used at the start of the FOV Transition
 var		float		TransitionTimeElapsed;          // How long (in seconds) the camera has been transitioning to TargetFOV
 var		float		TransitionTimeTotal;            // How long it should take to transition to the target FOV
+var float FOVAspect;			// the screen shape the view was last set for (SetAspectFOV)
+var bool bAimFOV;			// the view is narrowed for an aiming weapon (UpdateAimFOV)
 
 //var     config  bool    bUseTrueWideScreenFOV; 
 
@@ -209,43 +211,51 @@ simulated final function GiveKey( string KeyName, string StockBind, string NewBi
 // Set up the widescreen FOV values for this player
 simulated final function InitFOV()
 {
-	local float ResX, ResY;
-	local float AspectRatio;
-	local float OriginalAspectRatio;
-	local float NewFOV;
+	local float ResY;
 
-    ResX = float(GUIController(Player.GUIController).ResX);
-    ResY = float(GUIController(Player.GUIController).ResY);
-    AspectRatio = ResX / ResY;
+	ResY = float(GUIController(Player.GUIController).ResY);
+	if ( ResY > 0 )
+		SetAspectFOV(float(GUIController(Player.GUIController).ResX) / ResY);
+	else SetAspectFOV(4.0 / 3.0);
+}
 
-	if ( AspectRatio >= 1.60 ) //1.6 = 16/10 which is 16:10 ratio and 16:9 comes to 1.77
+// (from the HUD every frame: a new resolution or window shape sets the view again)
+simulated final function CheckAspect( float W, float H )
+{
+	if ( H > 0 && Abs(W / H - FOVAspect) > 0.001 )
+		SetAspectFOV(W / H);
+}
+
+// The view is 90 degrees across on a 4:3 screen, and a wider one shows more at the sides at the same height of view
+simulated final function SetAspectFOV( float Aspect )
+{
+	FOVAspect = Aspect;
+	DefaultFOV = ATan(FMax(Aspect * 0.75, 1.0), 1.0) * 360.0 / Pi;
+	default.DefaultFOV = DefaultFOV;
+	if ( !bAimFOV )
+		TransitionFOV(DefaultFOV, 0.0);
+}
+
+// The view narrows with an aiming weapon's magnification, and is put back once the weapon is down or gone
+simulated final function UpdateAimFOV()
+{
+	local float Zoom;
+
+	Zoom = 1.0;
+	if ( Pawn != None && KFWeapon(Pawn.Weapon) != None )
+		Zoom = KFWeapon(Pawn.Weapon).AimMagnification();
+	if ( Zoom > 1.0 )
 	{
-        OriginalAspectRatio = 4/3;
-
-        NewFOV = (ATan((Tan((90.0*Pi)/360.0)*(AspectRatio/OriginalAspectRatio)),1)*360.0)/Pi;
-
-        default.DefaultFOV = NewFOV;
-        DefaultFOV = NewFOV;
-
-        // 16X9
-        if( AspectRatio >= 1.70 )
-        {
-            //log("Detected 16X9: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
-        }
-        else
-        {
-            //log("Detected 16X10: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
-        }
-    }
-	else
-	{
-            //log("Detected 4X3: "$(float(GUIController(Player.GUIController).ResX) / GUIController(Player.GUIController).ResY));
-            default.DefaultFOV = 90.0;
-            DefaultFOV = 90.0;
+		bAimFOV = true;
+		FOVAngle = ATan(Tan(DefaultFOV * Pi / 360.0) / Zoom, 1.0) * 360.0 / Pi;
+		DesiredFOV = FOVAngle;
 	}
-
-	// Set the FOV to the default FOV
-	TransitionFOV(DefaultFOV,0.);
+	else if ( bAimFOV )
+	{
+		bAimFOV = false;
+		FOVAngle = DefaultFOV;
+		DesiredFOV = DefaultFOV;
+	}
 }
 
 function AdjustView(float DeltaTime )
@@ -1287,6 +1297,8 @@ event PlayerTick( float DeltaTime )
 	if( bHasDelayedSong && Player!=None )
 		NetPlayMusic(DelayedSongToPlay,0.5,0);
     Super.PlayerTick(DeltaTime);
+    if ( Viewport(Player) != None )
+        UpdateAimFOV();
     UpdateViewPunch(DeltaTime);
     UpdateSwingSway(DeltaTime);
     TorchKeyTick(DeltaTime);

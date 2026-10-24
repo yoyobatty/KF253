@@ -259,6 +259,11 @@ simulated function DrawCrosshair (Canvas C)
     if (!bCrosshairShow || Crosshairs.Length == 0)
         return;
 
+	// (the sights take over once a weapon is halfway up to the eye)
+	if ( !PlayerOwner.bBehindView && PawnOwner != None && KFWeapon(PawnOwner.Weapon) != None
+		&& KFWeapon(PawnOwner.Weapon).AimBlend() > 0.5 )
+		return;
+
 	if ( bUseCustomWeaponCrosshairs && (PawnOwner != None) && (PawnOwner.Weapon != None) )
 	{
 		CurrentCrosshair = PawnOwner.Weapon.CustomCrosshair;
@@ -1317,6 +1322,8 @@ simulated event PostRender( canvas Canvas )
 	Canvas.ColorModulate.W = HudOpacity/255;
 
 	LinkActors();
+	if ( KFPlayerController(PlayerOwner) != None )
+		KFPlayerController(PlayerOwner).CheckAspect(Canvas.SizeX, Canvas.SizeY);
 
 	// One scale both ways, so that nothing is drawn wider than it is tall on a wide screen (it used to be
 	// SizeX/640 across and SizeY/480 down). On a 4:3 screen the two are the same number.
