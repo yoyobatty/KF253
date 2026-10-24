@@ -41,7 +41,12 @@ var		float		TransitionTimeTotal;            // How long it should take to transi
 
 var KFSPNoteMessage ActiveNote;
 
-var Rotator								BehindViewAimRotator;
+// Over the shoulder behind view: the camera looks along the view from a point beside the eye (ShoulderPoint), and
+// shots go from the eye to whatever that line meets first (TraceView), so they land under the crosshair.
+var() float BehindViewBack;		// how far behind that point the camera sits
+var() float BehindViewSide;		// the point: to the right of the eye
+var() float BehindViewUp;		// and above it
+var Rotator BehindViewAimRotator;
 
 var() float FlySpeedMulti;
 var bool bWantsSprint;
@@ -1189,11 +1194,11 @@ function ServerAccumulateUse(float DeltaTime)
 function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, float Dist)
 {
     local vector View,HitLocation,HitNormal;
-    local float ViewDist,RealDist;
+    local float ViewDist;
     local vector globalX,globalY,globalZ;
     local vector localX,localY,localZ;
 
-	if (ViewTarget != Pawn || !Pawn.bProjTarget)
+	if (ViewTarget != Pawn || !Pawn.bProjTarget || Vehicle(Pawn) != None)
 	{
 		Super.CalcBehindView(CameraLocation, CameraRotation, Dist);
 		return;
@@ -1201,12 +1206,7 @@ function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, f
 
     CameraRotation = Rotation;
     CameraRotation.Roll = 0;
-	
-	GetAxes(CameraRotation, localX, localY, localZ);
-	
-	CameraLocation.Z += 22;
-	CameraLocation += localY * 1.8 * CameraDist;
-	CameraLocation += localZ * 3.4 * CameraDist;
+	CameraLocation = ShoulderPoint();
 
     // add view rotation offset to cameraview (amb)
     CameraRotation += CameraDeltaRotation;
@@ -1214,10 +1214,9 @@ function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, f
     View = vect(1,0,0) >> CameraRotation;
 
     // add view radius offset to camera location and move viewpoint up from origin (amb)
-    RealDist = Dist;
-    Dist += CameraDeltaRad;
+    Dist = BehindViewBack + CameraDeltaRad;
 
-    if( Trace( HitLocation, HitNormal, CameraLocation - Dist * vector(CameraRotation), CameraLocation,false,vect(12,12,12) ) != None )
+    if( Trace( HitLocation, HitNormal, CameraLocation - Dist * vector(CameraRotation), CameraLocation,false,vect(6,6,6) ) != None )
         ViewDist = FMin( (CameraLocation - HitLocation) Dot View, Dist );
     else
         ViewDist = Dist;
@@ -1245,26 +1244,39 @@ function CalcBehindView(out vector CameraLocation, out rotator CameraRotation, f
 //Free aim in behind view.
 simulated function rotator GetViewRotation()
 {
-	if (Pawn != None)
-	{	
-		if ( bBehindView )
-		{
-			return TraceView();
-			//return Rotation;	
-		}
-	}
+	if ( Pawn != None && bBehindView && Vehicle(Pawn) == None )
+		return TraceView();
     return Rotation;
 }
 
+// The behind view camera looks from here; the eye's height (not the body's middle) keeps it low when crouched.
+// Pulled in when a wall or ceiling is nearer than the full offset.
+simulated function vector ShoulderPoint()
+{
+	local vector X, Y, Z, Eye, Point, HitLocation, HitNormal;
+	local rotator R;
+
+	R = Rotation;
+	R.Roll = 0;
+	GetAxes(R, X, Y, Z);
+	Eye = Pawn.Location + Pawn.EyeHeight * vect(0,0,1);
+	Point = Eye + BehindViewSide * Y + BehindViewUp * vect(0,0,1);
+	if ( Trace(HitLocation, HitNormal, Point, Eye, false, vect(6,6,6)) != None )
+		Point = HitLocation;
+	return Point;
+}
+
+// Worked out fresh from the view and the body each time, the same way here and on the server. Specimens and players
+// count, so the shot meets the one under the crosshair rather than the wall behind it.
 simulated function rotator TraceView()
 {
-	local Vector HitLocation, HitNormal;
-	
-	if ( LastPlayerCalcView == Level.TimeSeconds && CalcViewActor != None && CalcViewActor.Location == CalcViewActorLocation )
-		return BehindViewAimRotator;
-	if (Trace( HitLocation, HitNormal, 15000 * vector(OldCameraRot) + OldCameraLoc, OldCameraLoc,false) != None)
-		BehindViewAimRotator = Rotator(HitLocation - (Pawn.Location + Pawn.EyePosition()));
-	else BehindViewAimRotator = Rotator(15000 * vector(OldCameraRot) + OldCameraLoc - (Pawn.Location + Pawn.EyePosition()));
+	local vector Start, End, HitLocation, HitNormal;
+
+	Start = ShoulderPoint();
+	End = Start + 15000 * vector(Rotation);
+	if ( Pawn.Trace(HitLocation, HitNormal, End, Start, true) == None )
+		HitLocation = End;
+	BehindViewAimRotator = rotator(HitLocation - (Pawn.Location + Pawn.EyePosition()));
 	return BehindViewAimRotator;
 }
 
@@ -1727,7 +1739,7 @@ state PlayerWalking
 		if (!bBehindView)
 			Pawn.SetViewPitch(Rotation.Pitch);
 		else
-			Pawn.SetViewPitch(BehindViewAimRotator.Pitch);
+			Pawn.SetViewPitch(TraceView().Pitch);
 
         if ( Pawn.Physics != PHYS_Falling )
         {
@@ -2198,4 +2210,7 @@ defaultproperties
 	MidGameMenuClass="KFGUI.KFInvasionLoginMenu"
 	PlayerReplicationInfoClass=Class'KFMod.KFPlayerReplicationInfo'
 	FlySpeedMulti=2.500000
+	BehindViewBack=110.000000
+	BehindViewSide=22.000000
+	BehindViewUp=8.000000
 }
