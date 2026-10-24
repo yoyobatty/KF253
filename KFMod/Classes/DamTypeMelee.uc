@@ -1,6 +1,10 @@
 class DamTypeMelee extends KFWeaponDamageType
 	abstract;
 
+// A killing blow takes the part its edge passes through this often (KFMonster.BladeCut); 0 for a blunt weapon
+var() float CutChance;
+var() bool bChops;		// whole limbs and the head; otherwise only a forearm or the head
+
 defaultproperties
 {
      HeadShotDamageMult=1.250000

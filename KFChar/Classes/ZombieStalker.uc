@@ -143,7 +143,7 @@ function RemoveHead()
 
 // RemoveHead only runs on the server. This runs on every machine that draws her, so a network
 // player also sees the cloak drop with the head.
-simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread )
+simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread, optional class<DamageType> DamageType )
 {
 	if ( !bShownHeadless && !bAshen && Level.NetMode != NM_DedicatedServer )
 	{
@@ -151,7 +151,7 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
 		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 	}
-	Super.SeverHead(bThrow, Dir, Spread);
+	Super.SeverHead(bThrow, Dir, Spread, DamageType);
 }
 
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)

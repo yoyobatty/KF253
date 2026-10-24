@@ -133,7 +133,8 @@ var() class<Emitter> CorpseSmokeClass;
 
 // Blood by the size of the hit: HeavyHitDamage and over gets the heavy puff. A blow of BurstHitDamage,
 // or a power weapon that has done BurstBlastDamage in one blast, bursts out of the far side as well.
-var() class<Actor> HeavyBloodClass, BurstBloodClass;
+// A blade's hit is BladeBloodClass, whatever its size.
+var() class<Actor> HeavyBloodClass, BurstBloodClass, BladeBloodClass;
 var() int HeavyHitDamage, BurstHitDamage;
 var() float BurstBlastDamage;
 var float LastBurstTime;
@@ -190,6 +191,18 @@ var() float LimbBlast, TorsoBlast, BodyBlast, BlastWindow;
 var float BlastDamage, BlastTime, BlastKillTime;
 var bool bDeathGoreDone;				// the killing blow has had its say
 var() int CorpseGibHealth;				// a body knocked down to this health can be blown to pieces
+
+// The blow a blade is striking now (KFMeleeFire.Strike): where it meets the body, which way it goes, the line
+// of its edge, and the way the body is to be thrown if it dies of it (its length is how hard)
+var vector BladeSpot, BladeMotion, BladeEdge, BladeThrow;
+var float BladeTime;
+var() float DownCutReach;				// a blade landing on a body lying down takes a part this near where it lands
+var() float SmackSpeed;					// a body a blade has thrown smacks into what it hits this fast
+var() int SmackMarks;					// smacks a thrown body has in it
+var() array<Sound> SmackSounds;
+var int SmacksLeft;
+var float LastSmackTime;
+var() bool bOwnLimbs;					// a limb or head that comes off is this specimen's own (KFLimbGib), not a clot's giblet
 
 var bool bDiffAdjusted; // has this monster had it's stats adjusted for the server's difficulty? Do once.
 
@@ -1246,6 +1259,11 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 	local bool bBlast;
 	local int i;
 
+	if ( BladeFresh(DamageType) )
+	{
+		BladeGore(Damage, DamageType);
+		return;
+	}
 	if ( IsPowerHit(DamageType) && Level.TimeSeconds - BlastTime <= BlastWindow )
 	{
 		BlastDamage += PelletsStillComing(InstigatedBy);
@@ -1288,6 +1306,225 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 	}
 	else
 		DoDamageFX(HitBone, Damage, DamageType, r);
+}
+
+// A blade's blow is about to land (KFMeleeFire.Strike, CorpseHit). What it does to the body is worked out from it.
+simulated function NoteBlade( vector Spot, vector Motion, vector Edge, vector Throw )
+{
+	BladeSpot = Spot;
+	BladeMotion = Normal(Motion);
+	BladeEdge = Normal(Edge);
+	BladeThrow = Throw;
+	BladeTime = Level.TimeSeconds;
+}
+
+// The melee weapons with gore of their own: the knife, axe and pipe, the ones that throw what they kill
+simulated function bool BladeGoreType( class<DamageType> DamageType )
+{
+	return class<DamTypeMelee>(DamageType) != None && DamageType.default.bKUseOwnDeathVel;
+}
+
+// The hit being dealt is the blow just noted
+simulated function bool BladeFresh( class<DamageType> DamageType )
+{
+	return BladeTime == Level.TimeSeconds && BladeGoreType(DamageType);
+}
+
+// What comes off a body to a blade flies on along the blow, and up
+simulated function rotator BladeFlight()
+{
+	local rotator R;
+
+	R = rotator(Normal(Normal(BladeThrow) + vect(0,0,0.7)));
+	R.Pitch -= 16384;			// a giblet flies along the up axis of the rotation it is given
+	return R;
+}
+
+// Killed by a blade's blow and thrown along it (PlayDying), as every machine sees it
+simulated function bool BladeThrown()
+{
+	return class<DamTypeMelee>(HitDamageType) != None && VSize(TearOffMomentum) > 50.0;
+}
+
+// A cutting blow that kills slings a streak of blood off along it, onto the floor or wall beyond the body
+simulated function BladeMark()
+{
+	local vector Dir, HitLoc, HitNorm, Along;
+	local class<DamTypeMelee> DamageType;
+
+	DamageType = class<DamTypeMelee>(HitDamageType);
+	if ( Level.NetMode == NM_DedicatedServer || DamageType == None || DamageType.default.CutChance <= 0
+		|| class'GameInfo'.static.UseLowGore() || !EffectIsRelevant(TakeHitLocation, false) )
+		return;
+	Dir = Normal(Normal(TearOffMomentum) - vect(0,0,0.5));
+	if ( Trace(HitLoc, HitNorm, TakeHitLocation + 250.0 * Dir, TakeHitLocation, false) == None )
+		return;
+	// laid along the way it was flung
+	Along = Dir - HitNorm * (Dir dot HitNorm);
+	if ( VSize(Along) < 0.1 )
+		Along = HitNorm cross vect(0,0,1);
+	if ( VSize(Along) < 0.1 )
+		Along = vect(1,0,0);
+	Along = Normal(Along);
+	Spawn(class'KFBladeStreak',,, HitLoc + 20.0 * HitNorm, OrthoRotation(-HitNorm, Along, -HitNorm cross Along));
+}
+
+// A blade takes the part its edge goes through, if it takes one at all; otherwise it only draws blood
+function BladeGore( int Damage, class<DamageType> DamageType )
+{
+	local name Cut;
+
+	Cut = BladeCut(class<DamTypeMelee>(DamageType));
+	if ( Cut != 'None' )
+		DoDamageFX(Cut, 1000, DamageType, BladeFlight());
+	else
+		DoDamageFX('None', Damage, DamageType, BladeFlight());
+}
+
+// The part a blade's edge comes to first on its way through the body, as the joint it comes off at, when it is
+// one the blade can take. The cut is the plane the edge sweeps. The trunk stops it, and a part the cut runs
+// along rather than across is split, not taken off.
+function name BladeCut( class<DamTypeMelee> DamageType )
+{
+	local vector N;
+	local float Best, At, Reach;
+	local byte Across, BestAcross;
+	local coords C;
+	local name Cut;
+	local int i;
+
+	if ( DamageType == None || DamageType.default.CutChance <= 0 || FRand() >= DamageType.default.CutChance )
+		return 'None';
+	N = BladeEdge cross BladeMotion;
+	if ( VSize(N) < 0.1 )
+		return 'None';
+	N = Normal(N);
+	// (a body lying down is struck where the blade lands, not swept through)
+	if ( bPlayedDeath )
+		return DownCut(DamageType, N);
+	Reach = 2.0 * CollisionRadius + 30.0;
+	Best = 100000.0;
+	Cut = 'None';
+	if ( Severed[5] == 0 && EdgeMeets(GetBoneCoords('Bip01 Pelvis').Origin, GetBoneCoords('Bip01 Neck').Origin, N, 9.0 * GibScale, Reach, At, Across) )
+		Best = At;
+	// a head this same blow has burst is still there to be met
+	if ( Severed[4] == 0 && (!bDecapitated || DecapTime == Level.TimeSeconds) )
+	{
+		C = GetBoneCoords(HeadBone);
+		if ( EdgeMeets(GetBoneCoords('Bip01 Neck').Origin, C.Origin + 2.0 * HeadHeight * HeadScale * C.XAxis, N, 4.0 * GibScale, Reach, At, Across) && At < Best )
+		{
+			Best = At;
+			Cut = HeadBone;
+			BestAcross = Across;
+		}
+	}
+	for ( i=0; i<ArrayCount(LimbJoints); i++ )
+	{
+		if ( Severed[SeverSlot(LimbJoints[i])] == 0
+			&& EdgeMeets(GetBoneCoords(LimbJoints[i]).Origin, GetBoneCoords(LimbEnds[i]).Origin, N, 3.0 * GibScale, Reach, At, Across) && At < Best )
+		{
+			Best = At;
+			Cut = LimbJoints[i];
+			BestAcross = Across;
+		}
+	}
+	if ( BestAcross == 0 )
+		return 'None';
+	// a knife only gets through a forearm or the neck
+	if ( !DamageType.default.bChops && Cut != HeadBone && Cut != 'Bip01 L Forearm' && Cut != 'Bip01 R Forearm' )
+		return 'None';
+	return Cut;
+}
+
+// The part of a body lying down that a blade lands on, as the joint it comes off at, when it is one the blade
+// can take: the part nearest where it lands, if the cut goes across it. The trunk, when it is nearest, keeps it.
+function name DownCut( class<DamTypeMelee> DamageType, vector N )
+{
+	local float Best, D;
+	local byte Across, BestAcross;
+	local coords C;
+	local name Cut;
+	local int i;
+
+	Best = DownCutReach;
+	Cut = 'None';
+	if ( Severed[5] == 0 )
+		Best = FMin(Best, LandsOn(GetBoneCoords('Bip01 Pelvis').Origin, GetBoneCoords('Bip01 Neck').Origin, N, 9.0 * GibScale, Across));
+	if ( Severed[4] == 0 && (!bDecapitated || DecapTime == Level.TimeSeconds) )
+	{
+		C = GetBoneCoords(HeadBone);
+		D = LandsOn(GetBoneCoords('Bip01 Neck').Origin, C.Origin + 2.0 * HeadHeight * HeadScale * C.XAxis, N, 4.0 * GibScale, Across);
+		if ( D < Best )
+		{
+			Best = D;
+			Cut = HeadBone;
+			BestAcross = Across;
+		}
+	}
+	for ( i=0; i<ArrayCount(LimbJoints); i++ )
+	{
+		if ( Severed[SeverSlot(LimbJoints[i])] != 0 )
+			continue;
+		D = LandsOn(GetBoneCoords(LimbJoints[i]).Origin, GetBoneCoords(LimbEnds[i]).Origin, N, 3.0 * GibScale, Across);
+		if ( D < Best )
+		{
+			Best = D;
+			Cut = LimbJoints[i];
+			BestAcross = Across;
+		}
+	}
+	if ( BestAcross == 0 )
+		return 'None';
+	if ( !DamageType.default.bChops && Cut != HeadBone && Cut != 'Bip01 L Forearm' && Cut != 'Bip01 R Forearm' )
+		return 'None';
+	return Cut;
+}
+
+// How far from where the blade lands the bone from A to B (Thick about it) is, and whether the cut, the plane
+// through BladeSpot across N, goes across it
+function float LandsOn( vector A, vector B, vector N, float Thick, out byte Across )
+{
+	local float DA, DB, u;
+	local vector E;
+
+	DA = (A - BladeSpot) dot N;
+	DB = (B - BladeSpot) dot N;
+	Across = 0;
+	if ( (DA > 0) != (DB > 0) && Abs(DA - DB) >= 0.25 * VSize(B - A) )
+		Across = 1;
+	E = B - A;
+	if ( (E dot E) > 0.001 )
+		u = FClamp(((BladeSpot - A) dot E) / (E dot E), 0.0, 1.0);
+	return VSize(A + E * u - BladeSpot) - Thick;
+}
+
+// Whether the blade's cut, the plane through BladeSpot across N, meets the bone from A to B (Thick about it) within
+// Reach of the spot. At is how far along the blow it is met; Across is 1 when the cut goes across it, not along it.
+function bool EdgeMeets( vector A, vector B, vector N, float Thick, float Reach, out float At, out byte Across )
+{
+	local float DA, DB;
+	local vector C;
+
+	DA = (A - BladeSpot) dot N;
+	DB = (B - BladeSpot) dot N;
+	Across = 0;
+	if ( (DA > 0) != (DB > 0) && Abs(DA - DB) >= 0.25 * VSize(B - A) )
+	{
+		C = A + (B - A) * (DA / (DA - DB));
+		Across = 1;
+	}
+	else if ( Abs(DA) <= Thick && (Abs(DB) > Thick || ((B - A) dot BladeMotion) > 0) )
+		C = A;
+	else if ( Abs(DB) <= Thick )
+		C = B;
+	else if ( (DA > 0) != (DB > 0) )
+		C = A + (B - A) * (DA / (DA - DB));
+	else
+		return false;
+	if ( Abs((C - BladeSpot) dot BladeEdge) > Reach || Abs((C - BladeSpot) dot BladeMotion) > Reach )
+		return false;
+	At = ((C - BladeSpot) dot BladeMotion) - Thick;
+	return true;
 }
 
 // Shortest distance between a shot (from Start along Dir, or just the point Start when Dir is zero)
@@ -1373,6 +1610,10 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 
 	HitDamageType = DamageType; // these are replicated to other clients
 	TakeHitLocation = HitLoc;
+	// a body a blade has killed goes along the blow; how hard is carried in the length (PlayDyingAnimation),
+	// which comes through in whole units to the other machines
+	if ( Level.NetMode != NM_Client && BladeFresh(DamageType) )
+		TearOffMomentum = 100.0 * BladeThrow;
 
 	// Noted on every machine, because each keeps and hits its own copy of the body: the killing blow
 	// is past, and the rest of a blast that killed is about to land on the corpse
@@ -1390,6 +1631,11 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 	// a head lost while alive stays lost
 	if ( bDecapitated )
 		SeverHead(false);
+	if ( BladeThrown() )
+	{
+		SmacksLeft = SmackMarks;
+		BladeMark();
+	}
 
 	if ( DamageType != None )
 	{
@@ -1742,7 +1988,7 @@ simulated function ProcessHitFX()
 		}
 
 		if( HitFX[SimHitFxTicker].bSever )
-			Sever(Bone, HitFX[SimHitFxTicker].rotDir, HitFX[SimHitFxTicker].damtype.default.GibPerterbation);
+			Sever(Bone, HitFX[SimHitFxTicker].rotDir, HitFX[SimHitFxTicker].damtype.default.GibPerterbation, HitFX[SimHitFxTicker].damtype);
 	}
 }
 
@@ -1798,9 +2044,10 @@ simulated function DropStump( int Slot )
 
 // The head goes: hidden, the neck capped. bThrow adds the head and bits of brain flying off; without
 // it the head is simply gone, for a machine that learns of it late.
-simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread )
+simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread, optional class<DamageType> DamageType )
 {
 	local coords C;
+	local bool bCut, bBurst;
 
 	if ( Severed[4] != 0 || Level.NetMode == NM_DedicatedServer || class'GameInfo'.static.UseLowGore() )
 		return;
@@ -1808,12 +2055,25 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 	if ( bThrow )
 	{
 		C = GetBoneCoords(HeadBone);
-		Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
-		SpawnGiblet(MonsterHeadGiblet, C.Origin, Dir, Spread);
-		if ( EffectIsRelevant(Location, false) )
+		// a blade takes the head off whole and a pipe bursts it; anything else throws a piece of it
+		bCut = BladeGoreType(DamageType) && class<DamTypeMelee>(DamageType).default.CutChance > 0;
+		bBurst = BladeGoreType(DamageType) && !bCut;
+		// (a clean cut bleeds from the neck and the head, not as a mist)
+		if ( !bCut || !ThrowLimb(HeadBone, Dir, Spread) )
 		{
-			SpawnGiblet(class'KFMod.KFGibBrain', C.Origin, Rotation, 0.06);
-			SpawnGiblet(class'KFMod.KFGibBrainb', C.Origin, Rotation, 0.06);
+			Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
+			if ( !bBurst )
+				SpawnGiblet(MonsterHeadGiblet, C.Origin, Dir, Spread);
+			if ( EffectIsRelevant(Location, false) )
+			{
+				SpawnGiblet(class'KFMod.KFGibBrain', C.Origin, Rotation, 0.06);
+				SpawnGiblet(class'KFMod.KFGibBrainb', C.Origin, Rotation, 0.06);
+				if ( bBurst )
+				{
+					SpawnGiblet(class'KFMod.KFGibBrain', C.Origin, Dir, 0.3);
+					SpawnGiblet(class'KFMod.KFGibBrainb', C.Origin, Dir, 0.3);
+				}
+			}
 		}
 		PlaySound(sound'PlayerSounds.NewGibs.NewGib2', SLOT_Misc, 255);
 	}
@@ -1830,81 +2090,99 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 
 // A joint comes apart on this machine: what hangs from it is thrown as giblets and hidden, and the
 // joint is capped. A part goes only once, and not after the part it hangs from.
-simulated function Sever( name Bone, rotator Dir, float Spread )
+simulated function Sever( name Bone, rotator Dir, float Spread, optional class<DamageType> DamageType )
 {
 	local coords C;
-	local int Slot;
+	local int Slot, Below;
+	local bool bWhole;
 
 	Slot = SeverSlot(Bone);
 	if ( Slot < 0 || Severed[Slot] != 0 )
 		return;
 	if ( Slot == 4 )
 	{
-		SeverHead(true, Dir, Spread);
+		SeverHead(true, Dir, Spread, DamageType);
 		return;
 	}
 	C = GetBoneCoords(Bone);
 
-	switch ( Slot )
+	// the limb itself when it can be shown, and what still hangs from it goes with it;
+	// otherwise a clot's giblets stand in for it
+	if ( Slot != 5 && ThrowLimb(Bone, Dir, Spread) )
 	{
-		case 0:		// a leg at the hip; the shin may have gone before it
-			if ( Severed[6] == 0 )
-				GibAt(MonsterLegGiblet, 'Bip01 L Calf', Dir, Spread);
-			Severed[6] = 1;
-			DropStump(6);
-			SpawnGiblet(MonsterThighGiblet, C.Origin, Dir, Spread);
-			break;
-		case 1:
-			if ( Severed[7] == 0 )
-				GibAt(MonsterLegGiblet, 'Bip01 R Calf', Dir, Spread);
-			Severed[7] = 1;
-			DropStump(7);
-			SpawnGiblet(MonsterThighGiblet, C.Origin, Dir, Spread);
-			break;
-		case 6:		// below the knee
-		case 7:
-			SpawnGiblet(MonsterLegGiblet, C.Origin, Dir, Spread);
-			break;
-		case 8:		// an arm at the shoulder; the forearm may have gone before it
-			if ( Severed[3] == 0 )
-				GibAt(MonsterArmGiblet, 'Bip01 L Forearm', Dir, Spread);
-			Severed[3] = 1;
-			DropStump(3);
-			SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
-			break;
-		case 9:
-			if ( Severed[2] == 0 )
-				GibAt(MonsterArmGiblet, 'Bip01 R Forearm', Dir, Spread);
-			Severed[2] = 1;
-			DropStump(2);
-			SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
-			break;
-		case 2:		// below the elbow
-		case 3:
-			SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
-			break;
-		case 5:		// blown in half: the chest goes, and with it the head and whatever is left of the arms
-			if ( Severed[4] == 0 )
-				GibAt(MonsterHeadGiblet, HeadBone, Dir, Spread);
-			if ( Severed[3] == 0 )
-				GibAt(MonsterArmGiblet, 'Bip01 L Forearm', Dir, Spread);
-			if ( Severed[2] == 0 )
-				GibAt(MonsterArmGiblet, 'Bip01 R Forearm', Dir, Spread);
-			GibAt(MonsterTorsoGiblet, 'Bip01 Spine2', Dir, Spread);
-			Severed[2] = 1;
-			Severed[3] = 1;
-			Severed[4] = 1;
-			Severed[8] = 1;
-			Severed[9] = 1;
-			DropStump(2);
-			DropStump(3);
-			DropStump(4);
-			DropStump(8);
-			DropStump(9);
-			break;
+		bWhole = true;
+		Below = SeverSlot(LimbBelow(Bone));
+		if ( Below >= 0 )
+		{
+			Severed[Below] = 1;
+			DropStump(Below);
+		}
+	}
+	else
+	{
+		switch ( Slot )
+		{
+			case 0:		// a leg at the hip; the shin may have gone before it
+				if ( Severed[6] == 0 )
+					GibAt(MonsterLegGiblet, 'Bip01 L Calf', Dir, Spread);
+				Severed[6] = 1;
+				DropStump(6);
+				SpawnGiblet(MonsterThighGiblet, C.Origin, Dir, Spread);
+				break;
+			case 1:
+				if ( Severed[7] == 0 )
+					GibAt(MonsterLegGiblet, 'Bip01 R Calf', Dir, Spread);
+				Severed[7] = 1;
+				DropStump(7);
+				SpawnGiblet(MonsterThighGiblet, C.Origin, Dir, Spread);
+				break;
+			case 6:		// below the knee
+			case 7:
+				SpawnGiblet(MonsterLegGiblet, C.Origin, Dir, Spread);
+				break;
+			case 8:		// an arm at the shoulder; the forearm may have gone before it
+				if ( Severed[3] == 0 )
+					GibAt(MonsterArmGiblet, 'Bip01 L Forearm', Dir, Spread);
+				Severed[3] = 1;
+				DropStump(3);
+				SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
+				break;
+			case 9:
+				if ( Severed[2] == 0 )
+					GibAt(MonsterArmGiblet, 'Bip01 R Forearm', Dir, Spread);
+				Severed[2] = 1;
+				DropStump(2);
+				SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
+				break;
+			case 2:		// below the elbow
+			case 3:
+				SpawnGiblet(MonsterArmGiblet, C.Origin, Dir, Spread);
+				break;
+			case 5:		// blown in half: the chest goes, and with it the head and whatever is left of the arms
+				if ( Severed[4] == 0 )
+					GibAt(MonsterHeadGiblet, HeadBone, Dir, Spread);
+				if ( Severed[3] == 0 )
+					GibAt(MonsterArmGiblet, 'Bip01 L Forearm', Dir, Spread);
+				if ( Severed[2] == 0 )
+					GibAt(MonsterArmGiblet, 'Bip01 R Forearm', Dir, Spread);
+				GibAt(MonsterTorsoGiblet, 'Bip01 Spine2', Dir, Spread);
+				Severed[2] = 1;
+				Severed[3] = 1;
+				Severed[4] = 1;
+				Severed[8] = 1;
+				Severed[9] = 1;
+				DropStump(2);
+				DropStump(3);
+				DropStump(4);
+				DropStump(8);
+				DropStump(9);
+				break;
+		}
 	}
 
-	Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
+	// (a blade's clean cut bleeds from the stump and the part, not as a mist)
+	if ( !bWhole || !BladeGoreType(DamageType) )
+		Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
 	if ( Slot == 5 )
 		PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc, 255);
 	else
@@ -1912,6 +2190,68 @@ simulated function Sever( name Bone, rotator Dir, float Spread )
 	Severed[Slot] = 1;
 	HideBone(Bone);
 	AddStump(Slot, Bone);
+}
+
+// The part that hangs from Joint thrown whole: this specimen's own arm, leg or head (KFLimbGib)
+simulated function bool ThrowLimb( name Joint, rotator Dir, float Spread )
+{
+	local KFLimbGib L;
+	local vector X, Y, Z;
+	local name Below;
+
+	if ( !bOwnLimbs || Level.bDropDetail || Level.DetailMode == DM_Low || Mesh == None )
+		return false;
+	Below = LimbBelow(Joint);
+	if ( Below != 'None' && Severed[SeverSlot(Below)] == 0 )
+		Below = 'None';
+	Instigator = self;
+	L = Spawn(class'KFLimbGib',,, GetBoneCoords(Joint).Origin, Rotation);
+	if ( L == None )
+		return false;
+	if ( !L.TakeLimb(self, Joint, LimbTip(Joint), Below, StumpSize[SeverSlot(Joint)] * GibScale * DrawScale) )
+	{
+		L.Destroy();
+		return false;
+	}
+	L.bFlaming = bFlaming;
+	L.SpawnTrail();
+	Spread *= 32768.0;
+	Dir.Pitch += (FRand() * 2.0 - 1.0) * Spread;
+	Dir.Yaw += (FRand() * 2.0 - 1.0) * Spread;
+	Dir.Roll += (FRand() * 2.0 - 1.0) * Spread;
+	GetAxes(Dir, X, Y, Z);
+	L.Velocity = Velocity + Z * (350.0 + 200.0 * FRand());
+	return true;
+}
+
+// The far end of the part that comes off at Joint; None for the head
+simulated function name LimbTip( name Joint )
+{
+	switch ( Joint )
+	{
+		case 'Bip01 L UpperArm':
+		case 'Bip01 L Forearm':		return 'Bip01 L Hand';
+		case 'Bip01 R UpperArm':
+		case 'Bip01 R Forearm':		return 'Bip01 R Hand';
+		case 'Bip01 L Thigh':
+		case 'Bip01 L Calf':		return 'Bip01 L Foot';
+		case 'Bip01 R Thigh':
+		case 'Bip01 R Calf':		return 'Bip01 R Foot';
+	}
+	return 'None';
+}
+
+// The joint further down the part that comes off at Joint, where a part of it can come off on its own
+simulated function name LimbBelow( name Joint )
+{
+	switch ( Joint )
+	{
+		case 'Bip01 L UpperArm':	return 'Bip01 L Forearm';
+		case 'Bip01 R UpperArm':	return 'Bip01 R Forearm';
+		case 'Bip01 L Thigh':		return 'Bip01 L Calf';
+		case 'Bip01 R Thigh':		return 'Bip01 R Calf';
+	}
+	return 'None';
 }
 
 // Nothing left but pieces: every part still on the body is thrown from where it was.
@@ -2674,7 +3014,7 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 		}
 		else
 		{
-			BloodHit = BloodSpurt(Spawn(BloodClassFor(Damage),InstigatedBy,, HitLocation, Rotator(HitNormal)));
+			BloodHit = BloodSpurt(Spawn(BloodClassFor(Damage, DamageType),InstigatedBy,, HitLocation, Rotator(HitNormal)));
 			ExitBurst(Damage, InstigatedBy, HitLocation, DamageType, Momentum, HitRay);
 		}
 		if ( BloodHit != None )
@@ -2701,6 +3041,9 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 		bDeathGoreDone = true;
 		DeathGore(HitBone, Damage, DamageType, InstigatedBy, Rotator(HitNormal));
 	}
+	// a blade cuts a body that is down as it cuts one it kills
+	else if ( Health <= 0 && BladeFresh(DamageType) )
+		BladeGore(Damage, DamageType);
 	// the rest of a blast that killed has been counted already; its late pellets add nothing
 	else if ( Health > 0 || !IsPowerHit(DamageType) || Level.TimeSeconds - BlastKillTime > BlastWindow )
 		DoDamageFX( HitBone, Damage, DamageType, Rotator(HitNormal) );
@@ -2709,9 +3052,12 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 		SetOverlayMaterial( DamageType.default.DamageOverlayMaterial, DamageType.default.DamageOverlayTime, false );
 }
 
-// The blood off a hit is as big as the hit
-function class<Actor> BloodClassFor( float Damage )
+// The blood off a hit is as big as the hit. A blade's is small: it is struck at arm's length, where a puff
+// fills the view of the one swinging it, and its own spray is its big blood (KFMeleeFire.BladeSpray).
+function class<Actor> BloodClassFor( float Damage, class<DamageType> DamageType )
 {
+	if ( BladeGoreType(DamageType) && BladeBloodClass != None )
+		return BladeBloodClass;
 	if ( Damage >= HeavyHitDamage && HeavyBloodClass != None )
 		return HeavyBloodClass;
 	return GibGroupClass.default.BloodHitClass;
@@ -2724,7 +3070,8 @@ function ExitBurst( float Damage, Pawn InstigatedBy, vector HitLocation, class<D
 	local vector Dir, Flat, Spot;
 	local BloodSpurt Burst;
 
-	if ( BurstBloodClass == None || Level.TimeSeconds - LastBurstTime < 0.3 )
+	// (a blade's blow sprays along the swing instead, KFMeleeFire.BladeSpray)
+	if ( BurstBloodClass == None || Level.TimeSeconds - LastBurstTime < 0.3 || BladeGoreType(DamageType) )
 		return;
 	if ( IsPowerHit(DamageType) )
 	{
@@ -3131,6 +3478,9 @@ simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLo
 			// Set the dude moving in direction he was shot in general
 			shotDir = Normal(TearOffMomentum);
 			shotStrength = RagDeathVel * shotDir;
+			// a blade's blow throws harder from behind, or on the run (KFMeleeFire.BodyThrow)
+			if ( BladeThrown() )
+				shotStrength *= FClamp(VSize(TearOffMomentum) / 100.0, 1.0, 2.0);
 
 			// Calculate angular velocity to impart, based on shot location.
 			hitLocRel = TakeHitLocation - Location;
@@ -3326,9 +3676,6 @@ event KImpact(actor other, vector pos, vector impactVel, vector impactNorm)
 	local Vector HitDir;
 	local KFBloodStreakDecal Streak;
 
-	//Log(VSize(Velocity));
-	BloodStreakInterval -= (0.001 * VSize(Velocity));
-
 	HitDir = LastBloodHitDirection;
 	numSounds = RagImpactSounds.Length;
 
@@ -3341,9 +3688,10 @@ event KImpact(actor other, vector pos, vector impactVel, vector impactNorm)
 	}
 	HitDir = Normal(HitDir);
 
-	WallActor = Trace(WallHit, WallNormal, Location + 50 * Velocity, Location, false);
-	if ( WallActor != None && Level.TimeSeconds > LastStreakTime + BloodStreakInterval
-		&& Level.TimeSeconds - LastRenderTime < 1.0 )
+	// a streak on the wall or floor a moving body is up against, now and then
+	if ( VSize(Velocity) > 150 && Level.TimeSeconds > LastStreakTime + BloodStreakInterval && Level.TimeSeconds - LastRenderTime < 1.0 )
+		WallActor = Trace(WallHit, WallNormal, Location + 60 * Normal(Velocity), Location, false);
+	if ( WallActor != None )
 	{
 		Streak= spawn(class 'KFMod.KFBloodStreakDecal',,,WallHit + 20 * (WallNormal + VRand()), rotator(-WallNormal));
 		if (Streak != none)
@@ -3359,6 +3707,28 @@ event KImpact(actor other, vector pos, vector impactVel, vector impactNorm)
 		PlaySound(RagImpactSounds[soundNum], SLOT_Pain, RagImpactVolume);
 		RagLastSoundTime = Level.TimeSeconds;
 	}
+	Smack(pos, impactVel, impactNorm);
+}
+
+// A body a blade has thrown smacks into what it comes down on: a thud, louder the harder it hits, and a little
+// blood where it hit, the first few times. Only the speed into the surface counts; a body sliding or
+// dragging its feet along it does not smack.
+simulated function Smack( vector Pos, vector ImpactVel, vector ImpactNorm )
+{
+	local vector HitLoc, HitNorm;
+	local float Into;
+
+	Into = ImpactVel dot ImpactNorm;
+	if ( SmacksLeft <= 0 || Into < SmackSpeed || Level.TimeSeconds - LastSmackTime < 0.25 )
+		return;
+	SmacksLeft--;
+	LastSmackTime = Level.TimeSeconds;
+	if ( SmackSounds.Length > 0 )
+		PlaySound(SmackSounds[Rand(SmackSounds.Length)], SLOT_None, FMin(Into / SmackSpeed, 2.0) * RagImpactVolume);
+	if ( Level.TimeSeconds - LastRenderTime > 1.0 || class'GameInfo'.static.UseLowGore() )
+		return;
+	if ( Trace(HitLoc, HitNorm, Pos - 40.0 * ImpactNorm, Pos + 20.0 * ImpactNorm, false) != None )
+		Spawn(class'KFBloodSmack',,, HitLoc + 20.0 * HitNorm, rotator(-HitNorm));
 }
 
 
@@ -3478,6 +3848,14 @@ defaultproperties
      BodyBlast=2.500000
      BlastWindow=0.250000
      CorpseGibHealth=-400
+     DownCutReach=12.000000
+     SmackSpeed=300.000000
+     SmackMarks=2
+     SmackSounds(0)=Sound'PlayerSounds.ImpactSounds.BodyHit3'
+     SmackSounds(1)=Sound'PlayerSounds.ImpactSounds.BodyHit4'
+     SmackSounds(2)=Sound'PlayerSounds.ImpactSounds.BodyHit5'
+     SmackSounds(3)=Sound'PlayerSounds.ImpactSounds.BodyHit6'
+     bOwnLimbs=True
      LimbJoints(0)="Bip01 L UpperArm"
      LimbJoints(1)="Bip01 L Forearm"
      LimbJoints(2)="Bip01 R UpperArm"
@@ -3597,6 +3975,7 @@ defaultproperties
 	 CorpseSmokeClass=Class'KFMod.KFCorpseSmoke'
 	 HeavyBloodClass=Class'KFMod.KFBloodPuffHeavy'
 	 BurstBloodClass=Class'KFMod.KFBloodBurst'
+	 BladeBloodClass=Class'KFMod.KFBladeHitPuff'
 	 HeavyHitDamage=50
 	 BurstHitDamage=150
 	 BurstBlastDamage=60.000000

@@ -25,6 +25,12 @@ var bool bDoCombos; // DISABLE FOR NOW
 var float MeleeWeaponRange; // How far the weapon can reach. Used for bots to anticipate attacks. Just a helper, don't set this in defaultproperties!
 var float DamDelay; // How long it takes to do damage after the attack is initiated. Used for bots to anticipate attacks. Just a helper, don't set this in defaultproperties!
 
+replication
+{
+	reliable if( Role == ROLE_Authority )
+		ClientKillFelt;
+}
+
 function GiveTo(pawn other, optional pickup pickup)
 {
 	local KFMeleeFire F;
@@ -89,6 +95,13 @@ simulated function PlayHitSoundHere()
 {
 	if( MeleeHitSounds.Length>0 && MeleeHitSounds[0]!=None )
 		PlaySound(MeleeHitSounds[Rand(MeleeHitSounds.Length)], SLOT_None, MeleeHitVolume);
+}
+
+// The server's word that a blow felt on this machine killed (KFMeleeFire.KillFelt)
+simulated function ClientKillFelt( byte Mode )
+{
+	if( Mode < NUM_FIRE_MODES && KFMeleeFire(FireMode[Mode]) != None )
+		KFMeleeFire(FireMode[Mode]).KillFelt(true);
 }
 
 simulated function DisplayDebug(Canvas Canvas, out float YL, out float YPos)

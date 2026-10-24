@@ -69,6 +69,7 @@ var() float HitPause;				// seconds the weapon hangs in a body it has hit
 var() bool bSwingDebug;				// each blow to the log
 var() float CamSway;				// degrees the first-person view follows the blade along its line
 var() float BladeSpacing;			// units the blade may travel between two tests of it (behind view)
+var() float KillPause;				// seconds the weapon hangs longer in a body its blow has killed
 
 var int SwingIndex;
 var float LastSwingTime;
@@ -84,6 +85,9 @@ var bool bBlade, bBladeWas;
 var float BladeEndBy, BladeRate;
 var vector BladePivotWas, BladeBaseWas, BladeTipWas;	// where the arm and blade were at the last test
 var float BodyPauseEnd, BodyPausedFrame;
+
+// The blow being struck: which way the blade goes, and the line of its edge (KFMonster.NoteBlade)
+var vector StrikeMotion, StrikeEdge;
 
 static final function vector GetAimPos( Actor Other )
 {
@@ -324,7 +328,11 @@ simulated function BladeRay( vector From, vector Base, vector Tip, vector BaseMo
 			if ( V.Health <= 0 )
 			{
 				if ( !bSwingFlesh )
+				{
+					StrikeEdge = Normal(Tip - Base);
+					StrikeMotion = Normal(TipMove);
 					CorpseHit(V, HL, Normal(TipMove));
+				}
 			}
 			else if ( !SwingHas(V) )
 				BladeStrike(V, HL, Base, Tip, BaseMove, TipMove);
@@ -359,6 +367,8 @@ simulated function BladeStrike( Pawn V, vector Where, vector Base, vector Tip, v
 			}
 		}
 	}
+	StrikeEdge = Normal(Tip - Base);
+	StrikeMotion = Dir;
 	Strike(V, Where, Dir, false, true);
 }
 
@@ -395,21 +405,26 @@ simulated function bool BladeMeetsHead( Pawn V, vector P, vector Dir )
 	return VSize(D - T * Ray) < M.HeadRadius * M.HeadScale * Scale;
 }
 
-// The body's swing stops for a moment in what it has hit, as the first-person weapon does (FleshFelt)
-simulated function BodyHang()
+// The body's swing stops for Seconds in what it has hit, as the first-person weapon does (HangWeapon)
+simulated function BodyHang( float Seconds )
 {
 	local name Seq;
 	local float Rate;
 
-	if ( HitPause <= 0 || BodyPauseEnd > 0 )
+	if ( Seconds <= 0 )
 		return;
+	if ( BodyPauseEnd > 0 )
+	{
+		BodyPauseEnd = FMax(BodyPauseEnd, Level.TimeSeconds + Seconds);
+		return;
+	}
 	Instigator.GetAnimParams(1, Seq, BodyPausedFrame, Rate);
 	if ( Seq != Swings[SwingIndex].BodyAnim )
 		return;
 	// (not quite still: KFPawn.AnimEnd puts the idle on an upper body that has stopped)
 	Instigator.PlayAnim(Seq, 0.001, 0.0, 1);
 	Instigator.SetAnimFrame(BodyPausedFrame, 1);
-	BodyPauseEnd = Level.TimeSeconds + HitPause;
+	BodyPauseEnd = Level.TimeSeconds + Seconds;
 }
 
 simulated function EndBodyPause()
@@ -603,15 +618,54 @@ simulated function LandOn( Pawn V, vector Eye, vector Dir, vector Where )
 			Dir = Normal(At - Eye);
 		}
 	}
+	StrikeEdge = Dir;
+	StrikeMotion = SwingMotion();
 	Strike(V, Where, Dir, bAimed);
+}
+
+// Which way the first-person blade is crossing the view, in the world
+simulated function vector SwingMotion()
+{
+	local Swing S;
+	local vector X, Y, Z;
+
+	S = Swings[SwingIndex];
+	GetAxes(SwingAim(Instigator.Location + Instigator.EyePosition()), X, Y, Z);
+	return Normal(Y * (S.EndYaw - S.StartYaw) + Z * (S.EndPitch - S.StartPitch));
+}
+
+// Which way a body this blow kills is thrown, away from the player and along the blade; longer than one for a
+// blow from behind or at a run, which throw harder
+simulated function vector BodyThrow( Pawn V, bool bBehind )
+{
+	local float Scale;
+
+	Scale = 1.0;
+	if ( bBehind )
+		Scale *= 1.25;
+	if ( SwingRunSpeed > RunHitSpeed )
+		Scale *= 1.25;
+	return Normal(Normal((V.Location - Instigator.Location) * vect(1,1,0)) + 0.6 * StrikeMotion) * Scale;
+}
+
+// Blood flicked off along the blade, seen by the player swinging
+simulated function BladeSpray( Pawn V, vector Where )
+{
+	if ( Level.NetMode == NM_DedicatedServer || !Instigator.IsLocallyControlled() || class'GameInfo'.static.NoBlood()
+		|| (KFMonster(V) == None && KFHumanPawn(V) == None) )
+		return;
+	Spawn(class'KFBladeSpray',,, Where, rotator(Normal(StrikeMotion + 0.4 * Normal(V.Location - Instigator.Location))));
 }
 
 // bBladeHit: struck by the body's blade (BladeStrike), where it met the body and going the way it went
 simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, optional bool bBladeHit )
 {
 	local float Dealt;
-	local bool bFirst;
+	local bool bFirst, bBehind;
+	local vector Spot;
 
+	// (where the blade really met it, before the side blow is kept off the head)
+	Spot = Where;
 	Dealt = SwingDamage;
 	if ( bBladeHit )
 	{
@@ -626,7 +680,8 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, option
 		Where.Z = FMin(Where.Z, V.Location.Z + 0.3 * V.CollisionHeight);
 		Dir = Normal(Dir * vect(1,1,0));
 	}
-	if ( Normal(V.Location - Instigator.Location) dot vector(V.Rotation) > 0 )
+	bBehind = Normal(V.Location - Instigator.Location) dot vector(V.Rotation) > 0;
+	if ( bBehind )
 		Dealt *= 2; // Backstab >:P
 	bFirst = !bSwingFlesh;
 	bSwingFlesh = true;
@@ -636,6 +691,8 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, option
 
 	if ( Weapon.Role == ROLE_Authority )
 	{
+		if ( KFMonster(V) != None )
+			KFMonster(V).NoteBlade(Spot, StrikeMotion, StrikeEdge, BodyThrow(V, bBehind));
 		V.TakeDamage(int(Dealt), Instigator, Where, Dir, hitDamageClass);
 		if ( SwingHits.Length <= 2 )
 			KFMeleeGun(Weapon).PlayHitSound();
@@ -649,7 +706,15 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, option
 	}
 	else if ( SwingHits.Length <= 2 )
 		KFMeleeGun(Weapon).PlayHitSoundHere();
+	BladeSpray(V, Spot);
 	FleshFelt(bFirst);
+	if ( Weapon.Role == ROLE_Authority && V.Health <= 0 )
+	{
+		if ( Instigator.IsLocallyControlled() )
+			KillFelt();
+		else
+			KFMeleeGun(Weapon).ClientKillFelt(ThisModeNum);
+	}
 }
 
 // The line under the crosshair: what the sweep has not found there (a body lying dead, a door, a wall)
@@ -678,7 +743,11 @@ simulated function CentreRay( vector Eye, vector Aim )
 				LandOn(V, Eye, Aim, HL);
 		}
 		else if ( !bSwingFlesh )
+		{
+			StrikeEdge = Aim;
+			StrikeMotion = SwingMotion();
 			CorpseHit(V, HL, Aim);
+		}
 		break;
 	}
 }
@@ -690,10 +759,15 @@ simulated function CorpseHit( Pawn V, vector Where, vector Dir )
 	if ( bSwingDebug )
 		Log("MELEE" @ Weapon.Class.Name @ FireAnim @ "hits the body of" @ V.Name @ "health" @ V.Health @ "torn off" @ V.bTearOff @ "after" @ (Level.TimeSeconds - LastSwingTime) @ "authority" @ (Weapon.Role == ROLE_Authority));
 	if ( Weapon.Role == ROLE_Authority || V.bTearOff )
+	{
+		if ( KFMonster(V) != None )
+			KFMonster(V).NoteBlade(Where, StrikeMotion, StrikeEdge, BodyThrow(V, false));
 		V.TakeDamage(int(SwingDamage), Instigator, Where, Dir, hitDamageClass);
+	}
 	if ( Weapon.Role == ROLE_Authority )
 		KFMeleeGun(Weapon).PlayHitSound();
 	else KFMeleeGun(Weapon).PlayHitSoundHere();
+	BladeSpray(V, Where);
 	FleshFelt(true);
 }
 
@@ -729,7 +803,7 @@ simulated function FleshFelt( bool bFirst )
 {
 	local Swing S;
 	local KFPlayerController PC;
-	local float Along, Rate;
+	local float Along;
 
 	if ( KFMeleeGun(Weapon).BloodyMaterial != None )
 	{
@@ -737,7 +811,7 @@ simulated function FleshFelt( bool bFirst )
 		Weapon.Texture = Weapon.default.Texture;
 	}
 	if ( bFirst && bBlade && (Weapon.Role == ROLE_Authority || Instigator.IsLocallyControlled()) )
-		BodyHang();
+		BodyHang(HitPause);
 	PC = KFPlayerController(Instigator.Controller);
 	if ( !bFirst || PC == None || !Instigator.IsLocallyControlled() )
 		return;
@@ -753,16 +827,54 @@ simulated function FleshFelt( bool bFirst )
 	if ( bBlade )
 		return;
 	PC.HoldSwingSway(HitPause);
-	if ( HitPause > 0 && PauseEnd <= 0 && Weapon.Mesh != None )
+	HangWeapon(HitPause);
+}
+
+// The first-person weapon stands still in the body until Seconds from now
+simulated function HangWeapon( float Seconds )
+{
+	local float Rate;
+
+	if ( Seconds <= 0 || Weapon.Mesh == None )
+		return;
+	if ( PauseEnd > 0 )
 	{
-		Weapon.GetAnimParams(0, PausedAnim, PausedFrame, Rate);
-		if ( PausedAnim == FireAnim && PausedFrame > 0 )
-		{
-			Weapon.PlayAnim(PausedAnim, 0.0, 0.0);
-			Weapon.SetAnimFrame(PausedFrame);
-			PauseEnd = Level.TimeSeconds + HitPause;
-		}
+		PauseEnd = FMax(PauseEnd, Level.TimeSeconds + Seconds);
+		return;
 	}
+	Weapon.GetAnimParams(0, PausedAnim, PausedFrame, Rate);
+	if ( PausedAnim == FireAnim && PausedFrame > 0 )
+	{
+		Weapon.PlayAnim(PausedAnim, 0.0, 0.0);
+		Weapon.SetAnimFrame(PausedFrame);
+		PauseEnd = Level.TimeSeconds + Seconds;
+	}
+}
+
+// A blow that kills hangs on in the body a little longer. bLate: the server's word, come after the hit was felt here,
+// so only a hold still going is drawn out.
+simulated function KillFelt( optional bool bLate )
+{
+	local KFPlayerController PC;
+
+	if ( KillPause <= 0 || Instigator == None || Weapon == None )
+		return;
+	if ( bLate )
+	{
+		if ( bBlade && BodyPauseEnd > 0 )
+			BodyPauseEnd += KillPause;
+		else if ( !bBlade && PauseEnd > 0 )
+			PauseEnd += KillPause;
+		else
+			return;
+	}
+	else if ( bBlade )
+		BodyHang(HitPause + KillPause);
+	else
+		HangWeapon(HitPause + KillPause);
+	PC = KFPlayerController(Instigator.Controller);
+	if ( PC != None && !bBlade )
+		PC.HoldSwingSway(FMax(PauseEnd - Level.TimeSeconds, 0.0));
 }
 
 simulated function EndPause()
@@ -1043,6 +1155,7 @@ defaultproperties
      SideDamageScale=0.500000
      SweepStep=6.000000
      BladeSpacing=6.000000
+     KillPause=0.050000
      RunHitSpeed=280.000000
      ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
      ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)

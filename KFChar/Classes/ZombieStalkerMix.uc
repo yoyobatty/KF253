@@ -32,14 +32,14 @@ function RemoveHead()
 		Skins = Default.Skins;
 }
 
-simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread )
+simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread, optional class<DamageType> DamageType )
 {
 	if ( !bShownHeadless && !bAshen && Level.NetMode != NM_DedicatedServer )
 	{
 		bShownHeadless = true;
 		Skins = Default.Skins;
 	}
-	Super(KFMonster).SeverHead(bThrow, Dir, Spread);
+	Super(KFMonster).SeverHead(bThrow, Dir, Spread, DamageType);
 }
 
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)

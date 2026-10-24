@@ -30,9 +30,9 @@ function RemoveHead()
 	Super(KFMonster).RemoveHead();
 }
 
-simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread )
+simulated function SeverHead( bool bThrow, optional rotator Dir, optional float Spread, optional class<DamageType> DamageType )
 {
-	Super(KFMonster).SeverHead(bThrow, Dir, Spread);
+	Super(KFMonster).SeverHead(bThrow, Dir, Spread, DamageType);
 }
 
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
