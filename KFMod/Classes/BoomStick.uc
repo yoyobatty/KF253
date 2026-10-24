@@ -69,6 +69,8 @@ function bool BotWantsBoth()
 	Dist = BotEnemyDist();
 	if ( Dist < 0 )
 		return false;
+	if ( KFInvasionBot(Instigator.Controller) != None && KFInvasionBot(Instigator.Controller).bBarrelSense )
+		return KFInvasionBot(Instigator.Controller).WantsBothBarrels(self);
 	return Dist < BotBothRange || Instigator.Controller.Enemy.Health > BotBothHealth;
 }
 

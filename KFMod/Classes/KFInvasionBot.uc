@@ -18,6 +18,7 @@ var float RetreatTime,LastEnemyEncounter,LastChatTime,LastCalloutTime;
 var Pawn CalledOut;			// the big specimen this bot last called out
 var float NextHoldChat, LastHoldChat;
 var float LastFallbackMoveTime;
+var vector RetreatAway;
 var NavigationPoint CurrentMov,OldMoves[4],PreviousNavPath;
 var array<NavigationPoint> TempBlockedPaths;
 
@@ -54,6 +55,19 @@ var() bool bAmmoRun;			// low on ammo in a wave: a box from the map near by (Amm
 var() bool bBuyOffListAmmo;		// at the trader, ammo too for the guns it does not sell, the 9mm above all (BuyOffListAmmo)
 var() bool bNoStrayBlades;		// only a Berserker buys a blade (GetShoppingWishes): for anyone else it is weight and cash spent on nothing
 var() bool bRocketBig;			// the LAW kept for Fleshpounds and Scrakes and used on them: rated for them, aimed over cover by the head, not held back by a Siren screaming away from its way, and kept out a moment for a clear line rather than swapped away and back (LAW.GetAIRating, RocketSelfDamage, RocketWait)
+var() bool bSoloPerk;			// on our own (no team-mate alive), Field Medic counts against a perk: there is nobody to heal, and its guns are the 9mm and what it buys off-perk (PerkFit)
+var() bool bMainGunFirst;		// no rocket launcher off the shop list before a gun for the ordinary specimens: a Support bot spent 800 of its first 1200 on a LAW and met wave 1 with it and the 9mm (GetShoppingWishes)
+var() bool bStandToFP;			// with two of us or fewer left, one Fleshpound coming for us is not by itself a reason to run: he outruns us once raging, and the retreat only stops the shooting (EnemyReallyScary)
+var() bool bRetreatStep;		// retreating with no path node to go to: a step with room for it, away from what is close, else stand and shoot; not a blind move that can push into a wall until it times out (Retreating)
+var() bool bSirenFirst;			// a Siren with her head on within reach of her scream comes first for every perk while nothing is on top of us: her scream hurts through armour, everyone in front of her (GetEnemyDesire)
+var() bool bShopFirst;			// shop as soon as a wave ends (it was put off a tick, long enough for a heal chase to take the whole trader time), and give up a heal chase that has not reached the team-mate in HealChaseTime (ShouldGoShopping, Healing)
+var() float HealChaseTime;
+var float HealChaseStart;
+var() bool bGunsFirst;			// at the trader the perk guns before a full top-up of ammo: a Support's double barrel (600 of the 1200 at Skilled) was filled with the other 600 and the pump shotgun never bought (DoTrading, BuyWeapon)
+var() bool bBarrelSense;		// both barrels of the double barrel only when one would not do it (WantsBothBarrels, BoomStick.BotWantsBoth)
+var() bool bPumpFirst;			// the double barrel not before another gun for the ordinary specimens: a lone Support met wave 1 with it and was reloading three quarters of the time a specimen was within 300 (GetShoppingWishes)
+var() bool bVestEarly;			// armour as soon as there is a gun for the ordinary specimens, before more guns: lone bots met wave 1 without any, every one of them (DoTrading)
+var() bool bShotgunLine;		// a shot of pellets goes down the line through the most specimens: each pellet goes on through two bodies (eight for Support), and the bot aimed at the one it was fighting only (AdjustAim, PelletLineSpot)
 var KFAmmoPickup AmmoRunTarget;
 var float NextAmmoRunTime, AmmoRunBestDist;
 var int AmmoRunStalls;
@@ -397,6 +411,8 @@ function bool ShouldGoShopping()
 	{
 		bWasWaveInProgress = false;
 		LastShopTime = Level.TimeSeconds;
+		if ( bShopFirst )
+			LastShopTime -= 0.1;
 	}
     if( PlayerReplicationInfo.Score < 50 )
         return false;
@@ -516,7 +532,7 @@ function AnswerBeggerNow()
 }
 
 
-final function int FillAllAmmo( Class<Ammunition> AClass, float PriceScale )
+final function int FillAllAmmo( Class<Ammunition> AClass, float PriceScale, optional float Share )
 {
     local Inventory I;
     local float Price;
@@ -549,6 +565,8 @@ final function int FillAllAmmo( Class<Ammunition> AClass, float PriceScale )
 	mxam = AM.MaxAmmo;
 	if( KW==MyGrenades )
 		mxam = Min(mxam,5); // Cap grenades
+	if ( Share > 0 )
+		mxam = Max(1, int(mxam * Share));
 
     if ( AM.AmmoAmount >= mxam )
         return 0;
@@ -682,7 +700,8 @@ function bool EnemyReallyScary()
 		{
 			// (every specimen spawns a little faster than its class default, for the difficulty, so this takes any Fleshpound
 			// after us within 1000, raging or not; tested against a true rage check, the early retreat did as well or better)
-			if (HPFactor > 0.5 && C.Enemy==Pawn && (D < 600.f || (D < 1000.f && M.GroundSpeed > M.default.GroundSpeed)))
+			if (HPFactor > 0.5 && C.Enemy==Pawn && (D < 600.f || (D < 1000.f && M.GroundSpeed > M.default.GroundSpeed))
+				&& (!bStandToFP || TeamAlive() > 2))
 				return true;
 			DangerScore += 5.0 * HPFactor;
 		}
@@ -1479,12 +1498,14 @@ final function vector GetScatterDir()
 // Where to go to get away from what is close (specimens, bile, our own grenade): a straight step if there is room
 // for it, else one of the two diagonals, else the path node that leads away. Sets Destination and clears MoveTarget,
 // or sets MoveTarget to the path node. False if there is nothing to get away from, or nowhere to go.
-final function bool PickAwayMove(float StepSize)
+final function bool PickAwayMove(float StepSize, optional vector Fallback)
 {
 	local vector Away, Side, Ext, Dir, HitLocation, HitNormal;
 	local int i;
 
 	Away = GetThreatAwayDir();
+	if ( Away == vect(0,0,0) )
+		Away = Fallback;
 	if ( Away == vect(0,0,0) )
 		Away = GetScatterDir();
 	if ( Away == vect(0,0,0) )
@@ -2885,7 +2906,12 @@ final function float PerkFit( class<KFVeterancyTypes> V )
 			Fit += W.default.AIRating;
 	}
 	if ( V.default.VeterancyName == "Field Medic" && TeamOnPerk(V) == 0 )
-		Fit += PerkMedicNeed;
+	{
+		if ( bSoloPerk && !HaveTeamMate() )
+			Fit -= PerkMedicNeed;
+		else
+			Fit += PerkMedicNeed;
+	}
 	if ( V == KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill )
 		Fit += PerkStay;
 	if ( bLateZerkSwap && V.default.VeterancyName == "Berserker" && FleshpoundWave() )
@@ -2914,6 +2940,29 @@ final function bool FleshpoundWave()
 					return true;
 		Bit *= 2;
 	}
+	return false;
+}
+
+// The team alive, us included (players and bots).
+final function int TeamAlive()
+{
+	local Controller C;
+	local int N;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C.bIsPlayer && KFHumanPawn(C.Pawn) != None && C.Pawn.Health > 0 )
+			N++;
+	return N;
+}
+
+// Another team-mate (player or bot) alive.
+final function bool HaveTeamMate()
+{
+	local Controller C;
+
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+		if ( C != self && C.bIsPlayer && KFHumanPawn(C.Pawn) != None && C.Pawn.Health > 0 )
+			return true;
 	return false;
 }
 
@@ -3297,7 +3346,7 @@ final function BuyKevlar()
 }
 
 // One visit to the trader. Ammo for the perk guns first, then up to three guns in order of wish, then the other guns'
-// ammo, then armour. A bot whose perk has guns of its own and who cannot get the one it wants most yet saves for it:
+// ammo, then armour (bVestEarly: before any gun after the first). A bot whose perk has guns of its own and who cannot get the one it wants most yet saves for it:
 // no off-perk guns, and armour only when it is down to half.
 function DoTrading()
 {
@@ -3314,9 +3363,15 @@ function DoTrading()
 	else LastShopTime = Level.TimeSeconds + 60 + 60*FRand();
 
 	MaybeSwitchPerk();	// before buying, as a player picks his perk at the trader
-	BuyAmmoFor(true);
+	// (bGunsFirst) the perk guns' ammo to half, the guns (with the ammo they come with), then the perk ammo full unless saving
+	if ( bGunsFirst )
+		BuyAmmoFor(true, 0.5f);
+	else
+		BuyAmmoFor(true);
 	for ( Bought=0; Bought<3; Bought++ )
 	{
+		if ( bVestEarly && Pawn.ShieldStrength < 50 && HasMainGun() )
+			BuyKevlar();
 		GetShoppingWishes(Wish);
 		bAny = false;
 		for ( i=0; i<Wish.Length && !bAny; i++ )
@@ -3331,6 +3386,8 @@ function DoTrading()
 		if ( !bAny )
 			break;
 	}
+	if ( bGunsFirst && Saving == None )
+		BuyAmmoFor(true);
 	BuyAmmoFor(false);
 	PlayerReplicationInfo.Score = FMax(PlayerReplicationInfo.Score,0);
 	if( PlayerReplicationInfo.Score>0 && (Saving == None || Pawn.ShieldStrength < 50) )
@@ -3396,6 +3453,10 @@ final function GetShoppingWishes( out array<class<KFWeaponPickup> > Wish )
 		D = PC.default.MaxDesireability * (1.f + FRand() * 0.5f);
 		if ( WeaponIsForPerk(PC) )
 			D *= 4.f;
+		if ( bMainGunFirst && RocketPickup(PC) && !HasMainGun() )
+			D *= 0.25f;
+		if ( bPumpFirst && class<BoomStick>(PC.default.InventoryType) != None && !HasMainGun(true) )
+			D *= 0.25f;
 		j = 0;
 		while ( j < Des.Length && Des[j] >= D )
 			j++;
@@ -3404,6 +3465,37 @@ final function GetShoppingWishes( out array<class<KFWeaponPickup> > Wish )
 		Wish[j] = PC;
 		Des[j] = D;
 	}
+}
+
+// A launcher whose shots are rockets (see RocketClassOf), from its pickup.
+final function bool RocketPickup( class<KFWeaponPickup> PC )
+{
+	local class<KFWeapon> WC;
+	local class<WeaponFire> FC;
+
+	WC = class<KFWeapon>(PC.default.InventoryType);
+	if ( WC == None || WC.default.bMeleeWeapon )
+		return false;
+	FC = WC.default.FireModeClass[0];
+	return ( FC != None && FC.default.bSplashDamage && FC.default.ProjectileClass != None && class<Nade>(FC.default.ProjectileClass) == None
+		&& FC.default.ProjectileClass.default.DamageRadius >= 250.f );
+}
+
+// A loaded gun for the ordinary specimens: rated as a Deagle or better, not a blade, a tool, a grenade or a rocket launcher
+// (nor the double barrel, bNotBarrels).
+final function bool HasMainGun( optional bool bNotBarrels )
+{
+	local Inventory Inv;
+	local KFWeapon W;
+
+	for ( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+	{
+		W = KFWeapon(Inv);
+		if ( W != None && !W.bMeleeWeapon && Welder(W) == None && Syringe(W) == None && Frag(W) == None && W.default.AIRating >= 0.55f
+			&& RocketClassOf(W) == None && W.HasAmmo() && !(bNotBarrels && BoomStick(W) != None) )
+			return true;
+	}
+	return false;
 }
 
 // Buys a gun the way a player does (KFPawn.PurchaseWeapon) and fills its ammo. For a perk gun it cannot afford or carry
@@ -3429,7 +3521,7 @@ final function bool BuyWeapon( class<KFWeaponPickup> PC )
 	if ( !KFHumanPawn(Pawn).PurchaseWeapon(WC, Price) )
 		return false;
 	W = KFWeapon(Pawn.FindInventoryType(WC));
-	if ( W != None )
+	if ( W != None && !bGunsFirst )
 	{
 		FillAllAmmo(W.GetAmmoClass(0),1.f);
 		if ( W.GetAmmoClass(1) != None && W.GetAmmoClass(1) != W.GetAmmoClass(0) )
@@ -3540,7 +3632,7 @@ final function BuyOffListAmmo()
 }
 
 // Fills the ammo of the guns on sale here that the bot carries: its perk guns, or the others.
-final function BuyAmmoFor( bool bPerkGuns )
+final function BuyAmmoFor( bool bPerkGuns, optional float Share )
 {
 	local array<class<Pickup> > L;
 	local class<KFWeaponPickup> PC;
@@ -3556,10 +3648,10 @@ final function BuyAmmoFor( bool bPerkGuns )
 		W = FindWeaponInInv(PC);
 		if ( W == None )
 			continue;
-		FillAllAmmo(W.GetAmmoClass(0),1.f);
+		FillAllAmmo(W.GetAmmoClass(0),1.f,Share);
 		// secondary ammo (e.g. explosive shells) if the weapon has a distinct secondary ammo type
 		if ( W.GetAmmoClass(1) != None && W.GetAmmoClass(1) != W.GetAmmoClass(0) )
-			FillAllAmmo(W.GetAmmoClass(1),1.f);
+			FillAllAmmo(W.GetAmmoClass(1),1.f,Share);
 	}
 }
 
@@ -3894,6 +3986,7 @@ ignores WaitForMover;
 	{
 		SetBotSprinting(true);
 		Pawn.bWantsToCrouch = false;
+		HealChaseStart = Level.TimeSeconds;
 	}
 	function EndState()
 	{
@@ -3928,6 +4021,7 @@ ignores WaitForMover;
 		InjuredAlly.GiveHealth(HealSum, InjuredAlly.HealthMax);
 		MySyringe.PlayOwnedSound(Sound'KFWeaponSound.SyringeFire',SLOT_Interact,F.TransientSoundVolume,,F.TransientSoundRadius,,false);
 		MySyringe.IncrementFlashCount(0);
+		HealChaseStart = Level.TimeSeconds;
 		return true;
 	}
 	function Timer()
@@ -3947,6 +4041,14 @@ ignores WaitForMover;
 			InjuredAlly = None;
 			LastHealTime = level.TimeSeconds+1;
 			WhatToDoNext(162);
+			return;
+		}
+		// (bShopFirst) a team-mate on the move that we have not caught up with: let him be for a while
+		if( bShopFirst && Level.TimeSeconds - HealChaseStart > HealChaseTime )
+		{
+			InjuredAlly = None;
+			LastHealTime = level.TimeSeconds+8;
+			WhatToDoNext(169);
 			return;
 		}
 		if ( Pawn.Weapon==MySyringe )
@@ -4476,6 +4578,163 @@ final function vector GetHeadAimLocation(Actor Tgt)
 	return Tgt.Location + Tgt.CollisionHeight * vect(0,0,0.5);
 }
 
+// (bShotgunLine) The share of a shot's pellets that meets a body Off from the middle of the shot, the shot W wide on
+// either side of its middle there and the body R on either side of its own
+final function float PelletShare( float Off, float R, float W )
+{
+	Off = Abs(Off);
+	return FClamp((FMin(Off + R, W) - FMax(Off - R, -W)) / (2.f * W), 0.f, 1.f);
+}
+
+// (bShotgunLine) What a shot of the shotgun in hand, fired from Start along Dir, would do: the damage each specimen in its
+// way takes (the pellets that reach it, less what they lost going through the bodies before it, as ShotgunBullet.ProcessTouch,
+// no more than its health), summed. Full is the whole shot on one body, N how many it reaches, bHasTgt whether Tgt is one.
+final function float PelletLineWorth( vector Start, vector Dir, Pawn Tgt, out float Full, out int N, out byte bHasTgt, optional float Barrels, optional out float TgtDmg )
+{
+	local WeaponFire F;
+	local class<ShotgunBullet> PC;
+	local Controller C;
+	local KFMonster M;
+	local array<KFMonster> Ms;
+	local array<float> Ts, Ss;
+	local vector P, HitLocation, HitNormal;
+	local float TanH, Keep, Left, Len, T, W, S, Worth, Passed, Dmg;
+	local int i, Bodies;
+
+	N = 0;
+	bHasTgt = 0;
+	Full = 0;
+	TgtDmg = 0;
+	// (a shotgun: the flamethrower's flames are ShotgunBullets too)
+	if ( Pawn == None || KFWeaponShotgun(Pawn.Weapon) == None )
+		return 0;
+	F = Pawn.Weapon.GetFireMode(0);
+	if ( ProjectileFire(F) == None )
+		return 0;
+	PC = class<ShotgunBullet>(F.ProjectileClass);
+	if ( PC == None )
+		return 0;
+	if ( Barrels <= 0 )
+		Barrels = FMax(F.Load, 1.f);
+	Full = ProjectileFire(F).ProjPerFire * Barrels * PC.default.Damage;
+	TanH = Tan(ProjectileFire(F).Spread * Pi / 65536.f);
+	if ( KFPawn(Pawn) != None && ClassIsChildOf(KFPawn(Pawn).GetVeteran(), class'KFVetSupportSpec') )
+	{
+		Keep = PC.default.PenDamageReductionPerked;
+		Full = class'KFVetSupportSpec'.static.AddDamage(None, KFPawn(Pawn), int(Full), PC.default.MyDamageType);
+	}
+	else
+		Keep = PC.default.PenDamageReduction;
+	// a pellet goes through Bodies bodies: it is gone once its damage is down to Keep/MaxPenetrations of what it was
+	Bodies = 1;
+	Left = Keep;
+	while ( Left > Keep / Max(PC.default.MaxPenetrations, 1) && Bodies < 8 )
+	{
+		Left *= Keep;
+		Bodies++;
+	}
+	if ( Trace(HitLocation, HitNormal, Start + 1500.f * Dir, Start, false) != None )
+		Len = VSize(HitLocation - Start);
+	else
+		Len = 1500.f;
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		M = KFMonster(C.Pawn);
+		if ( M == None || M.Health <= 0 )
+			continue;
+		P = M.Location - Start;
+		T = P Dot Dir;
+		if ( T <= 0.f || T > Len + M.CollisionRadius )
+			continue;
+		P -= T * Dir;
+		W = FMax(T * TanH, 1.f);
+		S = PelletShare(VSize(P * vect(1,1,0)), M.CollisionRadius, W) * PelletShare(P.Z, M.CollisionHeight, W);
+		if ( S < 0.05f )
+			continue;
+		i = 0;
+		while ( i < Ts.Length && Ts[i] < T )
+			i++;
+		Ms.Insert(i, 1);
+		Ts.Insert(i, 1);
+		Ss.Insert(i, 1);
+		Ms[i] = M;
+		Ts[i] = T;
+		Ss[i] = S;
+	}
+	for ( i=0; i<Ms.Length && Passed < Bodies - 0.5f; i++ )
+	{
+		Dmg = Ss[i] * Full * (Keep ** Passed);
+		Worth += FMin(Dmg, Ms[i].Health);
+		Passed += Ss[i];
+		N++;
+		if ( Ms[i] == Tgt )
+		{
+			bHasTgt = 1;
+			TgtDmg = Dmg;
+		}
+	}
+	return Worth;
+}
+
+// (bShotgunLine) Where to aim a shot of pellets meant for Tgt at Spot: the head of another specimen ahead of us when the line
+// to it does a third of a shot more, and goes through Tgt too when Tgt is close
+final function vector PelletLineSpot( Pawn Tgt, vector Start, vector Spot )
+{
+	local Controller C;
+	local KFMonster M;
+	local vector Dir, S, Best;
+	local float W, BestW, Full;
+	local int N;
+	local byte bHas;
+	local bool bClose;
+
+	Dir = Normal(Spot - Start);
+	BestW = PelletLineWorth(Start, Dir, Tgt, Full, N, bHas) + Full / 3.f;
+	Best = Spot;
+	bClose = VSize(Tgt.Location - Pawn.Location) < 300.f;
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		M = KFMonster(C.Pawn);
+		if ( M == None || M == Tgt || M.Health <= 0 || VSize(M.Location - Start) > 1500.f )
+			continue;
+		S = GetHeadAimLocation(M);
+		if ( (Normal(S - Start) Dot Dir) < 0.8f || !FastTrace(S, Start) )
+			continue;
+		W = PelletLineWorth(Start, Normal(S - Start), Tgt, Full, N, bHas);
+		if ( W > BestW && (!bClose || bHas == 1) )
+		{
+			BestW = W;
+			Best = S;
+		}
+	}
+	return Best;
+}
+
+// (bBarrelSense) Both barrels at a close enemy only when one would leave it standing (what one barrel along our line does to
+// it, short of its health) or the second would do half a barrel more to what stands behind it; else one, and the other barrel
+// is still loaded for the next specimen. A big one (BoomStick.BotBothHealth) gets both from anywhere, as before.
+final function bool WantsBothBarrels( BoomStick B )
+{
+	local vector Start, Spot;
+	local float One, Two, Full, TgtDmg;
+	local int N;
+	local byte bHas;
+
+	if ( Enemy == None || Enemy.Health > B.BotBothHealth )
+		return ( Enemy != None );
+	if ( VSize(Enemy.Location - Pawn.Location) >= B.BotBothRange )
+		return false;
+	Start = Pawn.Location + Pawn.EyePosition();
+	Spot = GetHeadAimLocation(Enemy);
+	if ( !FastTrace(Spot, Start) )
+		Spot = Enemy.Location;
+	One = PelletLineWorth(Start, Normal(Spot - Start), Enemy, Full, N, bHas, 1, TgtDmg);
+	if ( TgtDmg < Enemy.Health )
+		return true;
+	Two = PelletLineWorth(Start, Normal(Spot - Start), Enemy, Full, N, bHas, 2, TgtDmg);
+	return ( Two - One > Full / 4.f );
+}
+
 function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int aimerror)
 {
 	local rotator FireRotation, TargetLook;
@@ -4622,6 +4881,8 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 		FireSpot.Z = Target.Location.Z;
  		bClean = FastTrace(FireSpot, ProjStart);
 	}
+	if ( bShotgunLine && bClean && KFMonster(Target) != None && class<ShotgunBullet>(FiredAmmunition.ProjectileClass) != None && KFWeaponShotgun(Pawn.Weapon) != None )
+		FireSpot = PelletLineSpot(Pawn(Target), ProjStart, FireSpot);
 	if ( FiredAmmunition.bTossed && !bClean && bEnemyInfoValid )
 	{
 		FireSpot = LastSeenPos;
@@ -6152,6 +6413,24 @@ Moving:
 		}
 		LastFallbackMoveTime = Level.TimeSeconds;
 		PickNextRetMove();
+		if( MoveTarget==None && bRetreatStep )
+		{
+			RetreatAway = Pawn.Location-Enemy.Location;
+			RetreatAway.Z = 0;
+			if( PickAwayMove(400.f, Normal(RetreatAway)) )
+			{
+				if( MoveTarget!=None )
+					MoveToward(MoveTarget,Enemy,GetDesiredOffset(),ShouldStrafeTo(MoveTarget));
+				else
+					MoveTo(Destination,Enemy);
+			}
+			else if( Enemy!=None )
+			{
+				GoalString = "Cornered: stand and shoot";
+				DoRangedAttackOn(Enemy);
+			}
+			break;
+		}
 		if( MoveTarget==None )
 		{
 			MoveTo(Normal(Pawn.Location-Enemy.Location)*400.f+VRand()*300.f+Pawn.Location,Enemy);
@@ -6970,6 +7249,8 @@ final function float GetEnemyDesire( KFMonster M, bool bCheckedSight )
     // a Berserker with a gun and nothing on top of him shoots Sirens first, from where he is
     if( bZerkGun && M.IsA('ZombieSiren') && !M.bDecapitated && VSize(M.Location-Pawn.Location)<1200.f && GetPerkName()=="Berserker"
         && HasLoadedGun() && CountThreatsWithin(300.f) == 0 )
+        Cost*=0.4f;
+    else if( bSirenFirst && M.IsA('ZombieSiren') && !M.bDecapitated && VSize(M.Location-Pawn.Location)<900.f && CountThreatsWithin(200.f) == 0 )
         Cost*=0.4f;
     // (bScrakeFocus) a Scrake within 700 with his head on comes first: he charges at two and a half times his pace at
     // anyone who turns away from him, so a player keeps him in front while backing off
@@ -8122,4 +8403,16 @@ defaultproperties
 	bSirenAware=True
 	bScrakeFocus=True
 	bRocketBig=True
+	bSoloPerk=True
+	bMainGunFirst=True
+	bStandToFP=True
+	bRetreatStep=True
+	bSirenFirst=True
+	bShopFirst=True
+	HealChaseTime=8.0
+	bShotgunLine=True
+	bGunsFirst=True
+	bBarrelSense=True
+	bPumpFirst=True
+	bVestEarly=True
 }

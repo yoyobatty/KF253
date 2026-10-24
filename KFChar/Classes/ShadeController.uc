@@ -150,7 +150,7 @@ function bool PlanWallRun( vector Start, vector WallHit, vector N, vector R, flo
 		A1 = ((HitLocation-Line) Dot A) - 8;
 	Extent.Z = Pawn.CollisionHeight;
 	foreach Pawn.TraceActors(class'Pawn', P, HitLocation, HitNormal, Line+A*A1, Line+A*A0, Extent)
-		if( P!=Pawn )
+		if( P!=None && P!=Pawn )
 			A1 = FMin(A1, ((P.Location-Line) Dot A) - P.CollisionRadius - Pawn.Default.CollisionRadius - 8);
 	if( A1<AMin )
 		Return False;
