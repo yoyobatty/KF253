@@ -94,9 +94,15 @@ simulated function Tick(float DT)
 		SoundVolume = byte(float(default.SoundVolume) * FClamp(DownLeft/(DieDownTime*0.6),0.0,1.0));
 		return;
 	}
-	BurnTime-=DT;
-	if (BurnTime <= 0)
+	if ( BurnOut(DT) )
 		DieDown();
+}
+
+// Its time burning is up (FlameGroundFire burns on fuel instead)
+simulated function bool BurnOut(float DT)
+{
+	BurnTime -= DT;
+	return BurnTime <= 0;
 }
 
 // The fire dies down: no more harm and no more flames; those alight burn out and the smoke drifts off, and then it

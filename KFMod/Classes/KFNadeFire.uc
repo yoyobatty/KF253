@@ -1,5 +1,6 @@
-// A fire an incendiary grenade leaves on the ground: FuelFlameHurting's burning, its own look (one flame of the fire
-// sheet to a sprite, warm colours, darker smoke, a few embers going up)
+// A fire an incendiary grenade leaves on the ground: FuelFlameHurting's burning, its own look (upright tongues of
+// LargeFlames lifted off the floor, as FlameGroundFire's: KF's fire3 is bright to its frame edges and the floor cut the
+// sprites; warm colours, darker smoke, a few embers going up)
 class KFNadeFire extends FuelFlameHurting;
 
 defaultproperties
@@ -11,9 +12,8 @@ defaultproperties
          SpinParticles=True
          UseSizeScale=True
          UseRegularSizeScale=False
-         UniformSize=True
          UseRandomSubdivision=True
-         Acceleration=(Z=100.000000)
+         Acceleration=(Z=85.000000)
          ColorScale(0)=(Color=(B=40,G=90,R=200))
          ColorScale(1)=(RelativeTime=0.250000,Color=(B=150,G=225,R=255))
          ColorScale(2)=(RelativeTime=0.700000,Color=(B=40,G=135,R=255))
@@ -21,20 +21,21 @@ defaultproperties
          ColorMultiplierRange=(Y=(Min=0.850000,Max=1.000000),Z=(Min=0.600000,Max=0.900000))
          FadeOutStartTime=0.600000
          FadeInEndTime=0.150000
-         MaxParticles=12
-         StartLocationShape=PTLS_Sphere
-         SphereRadiusRange=(Max=10.000000)
-         SpinsPerSecondRange=(X=(Max=0.070000))
-         StartSpinRange=(X=(Max=1.000000))
-         SizeScale(0)=(RelativeSize=1.000000)
-         SizeScale(1)=(RelativeTime=1.000000,RelativeSize=0.450000)
-         StartSizeRange=(X=(Min=40.000000,Max=58.000000))
-         Texture=Texture'KillingFloorTextures.LondonCommon.fire3'
+         MaxParticles=18
+         StartLocationOffset=(Z=17.000000)
+         StartLocationRange=(X=(Min=-18.000000,Max=18.000000),Y=(Min=-18.000000,Max=18.000000),Z=(Max=8.000000))
+         SpinsPerSecondRange=(X=(Min=-0.040000,Max=0.040000))
+         StartSpinRange=(X=(Min=-0.060000,Max=0.060000))
+         SizeScale(0)=(RelativeSize=0.700000)
+         SizeScale(1)=(RelativeTime=0.250000,RelativeSize=1.000000)
+         SizeScale(2)=(RelativeTime=1.000000,RelativeSize=0.400000)
+         StartSizeRange=(X=(Min=26.000000,Max=36.000000),Y=(Min=40.000000,Max=56.000000))
+         Texture=Texture'EmitterTextures.MultiFrame.LargeFlames'
          TextureUSubdivisions=4
          TextureVSubdivisions=4
          SecondsBeforeInactive=30.000000
          LifetimeRange=(Min=0.750000,Max=1.200000)
-         StartVelocityRange=(X=(Min=-10.000000,Max=10.000000),Y=(Min=-10.000000,Max=10.000000),Z=(Min=25.000000,Max=75.000000))
+         StartVelocityRange=(X=(Min=-10.000000,Max=10.000000),Y=(Min=-10.000000,Max=10.000000),Z=(Min=18.000000,Max=55.000000))
      End Object
      Emitters(0)=SpriteEmitter'KFMod.KFNadeFire.NadeFireFlames'
 
@@ -54,7 +55,7 @@ defaultproperties
          FadeOutStartTime=1.200000
          FadeInEndTime=0.500000
          MaxParticles=7
-         StartLocationOffset=(Z=40.000000)
+         StartLocationOffset=(Z=70.000000)
          StartLocationShape=PTLS_Sphere
          SphereRadiusRange=(Max=15.000000)
          SpinsPerSecondRange=(X=(Min=-0.050000,Max=0.050000))
@@ -76,7 +77,6 @@ defaultproperties
          UseColorScale=True
          FadeOut=True
          UniformSize=True
-         UseRandomSubdivision=True
          Acceleration=(Z=60.000000)
          ColorScale(0)=(Color=(B=110,G=210,R=255))
          ColorScale(1)=(RelativeTime=1.000000,Color=(B=10,G=40,R=150))
@@ -84,10 +84,8 @@ defaultproperties
          MaxParticles=6
          StartLocationShape=PTLS_Sphere
          SphereRadiusRange=(Max=25.000000)
-         StartSizeRange=(X=(Min=2.000000,Max=3.500000))
-         Texture=Texture'KillingFloorTextures.LondonCommon.fire3'
-         TextureUSubdivisions=4
-         TextureVSubdivisions=4
+         StartSizeRange=(X=(Min=3.000000,Max=5.000000))
+         Texture=Texture'EmitterTextures.Flares.EFlareOY'
          SecondsBeforeInactive=30.000000
          LifetimeRange=(Min=1.000000,Max=1.600000)
          StartVelocityRange=(X=(Min=-30.000000,Max=30.000000),Y=(Min=-30.000000,Max=30.000000),Z=(Min=60.000000,Max=140.000000))

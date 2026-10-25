@@ -5,9 +5,10 @@ class FlameTendril extends ShotgunBullet;
 
 var bool bRing,bHitWater,bWaterStart;
 var Effects Corona;
-var Emitter FlameTrail;
 var float FlightStart;		// when it left the nozzle
 var() float FlightTime;		// how long it flies before it burns out; the perk's ExtraRange adds a share of it
+var bool bAirborne;			// it ends in the air (burnt out, or struck a body): its fuel falls (KFFlameFuelDrop)
+var Actor LandBase;			// what it struck, when that can move
 
 simulated function PostBeginPlay()
 {
@@ -16,16 +17,10 @@ simulated function PostBeginPlay()
 	SetTimer(0.2, true);
 	FlightStart = Level.TimeSeconds;
 
-	Velocity = Speed * Vector(Rotation); // starts off slower so combo can be done closer
-
-	if ( Level.NetMode != NM_DedicatedServer )
-	{
-		if (!PhysicsVolume.bWaterVolume)
-		{
-			FlameTrail = Spawn(class'FlameThrowerFlameB',self);
-			Trail = Spawn(class'FlameThrowerFlame',self);
-		}
-	}
+	// (it is seen as KFFlameStream, so it carries no picture of its own; it carries its shooter's speed)
+	Velocity = Speed * Vector(Rotation);
+	if ( Role == ROLE_Authority && Instigator != None )
+		Velocity += Instigator.Velocity;
 	Velocity.z += TossZ;
 }
 
@@ -63,7 +58,6 @@ simulated function PostNetBeginPlay()
 
 simulated function Landed( vector HitNormal )
 {
-	Scorch(HitNormal);
 	Explode(Location,HitNormal);
 }
 
@@ -75,59 +69,22 @@ static function float FlightFor(Pawn P)
 	return default.FlightTime;
 }
 
-// A scorch mark on the floor or wall it hit, aimed into it (it was aimed along the shot: smeared on a floor)
-simulated function Scorch(vector HitNormal)
-{
-	if ( ExplosionDecal != None && EffectIsRelevant(Location,false) )
-		Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
-}
-
-simulated function bool CanSpawnFuelFlameNear(int MaxPerArea, float Radius)
-{
-    local FuelFlameHurting F;
-    local int Count;
-
-    foreach RadiusActors(class'FuelFlameHurting', F, Radius, Location)
-    {
-        // (one dying down does no harm any more: counted, it kept the spot under a held stream dark for 3 s)
-        if (F.Instigator == Instigator && !F.bDyingDown)
-        {
-            Count++;
-            if (Count >= MaxPerArea)
-                return false; // already enough nearby flames from this instigator
-        }
-    }
-    return true;
-}
-
+// Its fuel burns where it struck (FlameGroundFire.Lay), or falls from the air
 simulated function Explode(vector HitLocation,vector HitNormal)
 {
-    local bool bRelevant;
-
     if ( Role == ROLE_Authority )
         HurtRadius(Damage, DamageRadius, MyDamageType, MomentumTransfer, HitLocation );
     else if ( Level.NetMode == NM_Client )
         class'KFMonster'.static.IgniteBodiesNear(self, DamageRadius, HitLocation);
-    bRelevant = EffectIsRelevant(Location,false);
-    if ( (bRelevant || Level.NetMode != NM_Client) && CanSpawnFuelFlameNear(3, 36.0) )
-        Spawn(class'FlameGroundFire',Instigator,,Location + vect(0,0,1));
+    if ( !PhysicsVolume.bWaterVolume && (Level.NetMode != NM_Client || EffectIsRelevant(Location,false)) )
+    {
+        if ( bAirborne )
+            class'KFFlameFuelDrop'.static.Drop(self, Location, Velocity * 0.3, class'FlameGroundFire'.default.DropFuel);
+        else
+            class'FlameGroundFire'.static.Lay(self, HitLocation, HitNormal, LandBase);
+    }
     SetCollisionSize(0.0, 0.0);
     Destroy();
-}
-
-simulated function Destroyed()
-{
-	if (Trail != None)
-	{
-		Trail.mRegen=False;
-		Trail.SetPhysics(PHYS_None);
-	}
-	if (FlameTrail != None)
-	{
-		FlameTrail.Kill();
-		//FlameTrail.SetPhysics(PHYS_None);
-	}
-	Super.Destroyed();
 }
 
 simulated function ProcessTouch (Actor Other, vector HitLocation)
@@ -150,7 +107,12 @@ simulated function ProcessTouch (Actor Other, vector HitLocation)
     //if ( (Damage / default.Damage <= PenDamageReduction / MaxPenetrations) || Speed < (default.Speed * 0.25))
     //    Explode(Location,VRand());
 	if (FlameTendril(Other)==None && FuelFlameHurting(Other)==None)
+	{
+		// (what struck a body runs off it to the floor)
+		bAirborne = true;
+		Velocity *= 0.25;
 		Explode(Location,VRand());
+	}
 
 }
 
@@ -167,7 +129,8 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 		}
 		MakeNoise(1.0);
 	}
-	Scorch(HitNormal);
+	if ( Wall != None && !Wall.bStatic )
+		LandBase = Wall;
 	Explode(Location + ExploWallOut * HitNormal, HitNormal);
 	HurtWall = None;
 }
@@ -178,17 +141,13 @@ simulated function Timer()
 
 	Velocity =  Default.Speed * Normal(Velocity);
 
-	if (Trail != none)
-	{
-		Trail.mSizeRange[0] *= 1.8;
-		Trail.mSizeRange[1] *= 1.8;
-	}
-	if (FlameTrail != none)
-		FlameTrail.SetDrawScale(FlameTrail.DrawScale * 1.5);
 	// Burnt out after its flight time (the last step shortened to land on it: whole 0.2 s steps made the Firebug's +50% a +33%)
 	Left = FlightFor(Instigator) - (Level.TimeSeconds - FlightStart);
 	if ( Left < 0.01 )
+	{
+		bAirborne = true;
 		Explode(Location,VRand());
+	}
 	else if ( Left < 0.2 )
 		SetTimer(Left, false);
 }
@@ -206,7 +165,6 @@ defaultproperties
      DamageRadius=150.000000
      MomentumTransfer=0.000000
      MyDamageType=Class'KFMod.DamTypeFlamethrower'
-     ExplosionDecal=Class'KFMod.KFScorchMark'
      DrawType=DT_None
      StaticMesh=None
      Physics=PHYS_Falling

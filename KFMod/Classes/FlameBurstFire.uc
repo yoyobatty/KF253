@@ -89,7 +89,7 @@ defaultproperties
     bAttachSmokeEmitter=True
     TransientSoundVolume=95.000000
     TransientSoundRadius=500.000000
-    FireSound=Sound'KFWeaponSound.FlameThrowerFire'
+    FireSound=None
     FireRate=0.070000
     AmmoClass=Class'KFMod.FlameAmmo'
     ShakeRotMag=(X=0.000000,Y=0.000000,Z=0.000000)
@@ -98,7 +98,7 @@ defaultproperties
     ShakeOffsetRate=(X=0.000000,Y=0.000000,Z=0.000000)
     ProjectileClass=Class'KFMod.FlameTendril'
     BotRefireRate=0.990000
-    FlashEmitterClass=Class'KFMod.KFFlameMuzzFlash'
+    FlashEmitterClass=None
     aimerror=0.000000
     Spread=0.000000
     SpreadStyle=SS_Random

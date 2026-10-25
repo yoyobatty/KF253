@@ -112,6 +112,7 @@ var int BurnDown ; // Number of times our zombie must suffer Fire Damage.
 var bool bAshen; // is our Zed crispy yet? (burnt through, as the server sees it)
 var class<Emitter> BurnEffect;  // The appearance of the flames we are attaching to our Zed.
 var int LastBurnDamage; // Record the last amount of Fire damage the pawn suffered.
+var bool bBurnTick;		// the harm being taken is its own burning (TakeFireDamage), not fresh fire
 var() float BurnSpeedScale;				// a specimen on fire moves this much slower
 
 // A body chars for as long as it burns: each machine drawing it lets the burnt skin come in over CharTime
@@ -1933,6 +1934,14 @@ simulated function Timer()
 	// lets see if this helps the soldier bots pick up on the fact that there's a growling zombie right behind them
 	MakeNoise(1.0);
 
+	// water puts it out
+	if ( BurnDown > 0 && PhysicsVolume.bWaterVolume )
+	{
+		BurnDown = 0;
+		bBurnified = false;
+		if ( CanSpeedAdjust() )
+			SetGroundSpeed(OriginalGroundSpeed);
+	}
 	if (BurnDown > 0)
 	{
 		TakeFireDamage(LastBurnDamage + rand(2) + 3 , LastDamagedBy);
@@ -2837,6 +2846,9 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			}
 			else HeatAmount++;
 		}
+		// fresh fire on one already burning keeps it burning longer
+		else if ( !bBurnTick && BurnDown < 10 )
+			BurnDown++;
 	}
 
 	if ( KFPawn(instigatedBy) != none && instigatedBy.PlayerReplicationInfo != none )
@@ -3726,7 +3738,9 @@ function TakeFireDamage(int Damage,pawn Instigator)
         return;
 
 	//Log("Burned");
+	bBurnTick = true;
 	TakeDamage(Damage,BurnInstigator,DummyHitLoc,DummyMomentum,class 'DamTypeFlamethrower');
+	bBurnTick = false;
 	if (BurnDown > 0)
 		BurnDown --; // Decrement the number of FireDamage calls left before our Zombie is extinguished :)
 
