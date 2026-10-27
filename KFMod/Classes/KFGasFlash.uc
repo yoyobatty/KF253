@@ -45,6 +45,8 @@ simulated function Tick( float DT )
 				break;
 			}
 		S = 0.75 + 0.35 * FMin(float(Big) / 100.0, 2.0);
+		// (one going up in the player's face is smaller: KFNearFade)
+		S *= class'KFNearFade'.static.ViewK(self, Location, 140.0, 460.0, 0.25);
 		class'KFGib'.static.Blast(self, Location, 0.25 * S, 0.6, true);
 		for ( i = 0; i < Emitters.Length; i++ )
 		{

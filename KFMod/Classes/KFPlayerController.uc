@@ -8,6 +8,8 @@ const LIBLIST_CATS=3;
 
 //TODO: Kill these last remenants of the old buy system
 var string BuyListHeaders[BUYLIST_CATS];
+var float WarpStart, WarpApplied, WarpedFOV;	// the Void Executioner's blink widening the view (StartWarp)
+var() float WarpKick, WarpRise, WarpFall;		// ...how many degrees, how soon, and back over how long
 var string LibraryListHeaders[LIBLIST_CATS];
 
 var bool bChoseStarting, bClassChosen;
@@ -267,6 +269,9 @@ function AdjustView(float DeltaTime )
 {
     local bool bReachedTargetFOV;
 
+	// (the blink's widening is taken off while the view's own field is worked out, and put back as it is drawn)
+	UnWarpFOV();
+
 	// Updating the FOV
 	if( TransitionTimeTotal > 0.0f && FOVAngle != TargetFOV )
 	{
@@ -287,6 +292,45 @@ function AdjustView(float DeltaTime )
 	}
 
     super.AdjustView(DeltaTime);
+}
+
+// The Void Executioner's blink: the view flares wide and eases back (KFVoidArrival)
+simulated function StartWarp()
+{
+	WarpStart = Level.TimeSeconds;
+}
+
+simulated final function UnWarpFOV()
+{
+	if ( WarpApplied != 0.0 && FOVAngle == WarpedFOV )
+		FOVAngle -= WarpApplied;
+	WarpApplied = 0.0;
+}
+
+// (as the view is worked out for drawing)
+simulated final function WarpFOV()
+{
+	local float T, K;
+
+	UnWarpFOV();
+	if ( WarpStart <= 0.0 )
+		return;
+	T = Level.TimeSeconds - WarpStart;
+	if ( T >= WarpRise + WarpFall || T < 0.0 )
+	{
+		WarpStart = 0.0;
+		return;
+	}
+	if ( T < WarpRise )
+		K = 1.0 - Square(1.0 - T / WarpRise);
+	else
+	{
+		K = (T - WarpRise) / WarpFall;
+		K = 1.0 - K * K * (3.0 - 2.0 * K);
+	}
+	WarpApplied = FMin(WarpKick * K, 165.0 - FOVAngle);
+	FOVAngle += WarpApplied;
+	WarpedFOV = FOVAngle;
 }
 
 function TransitionFOV(float NewFOV, float TransitionTime)
@@ -545,6 +589,7 @@ function UndoPropTurn()
 
 event PlayerCalcView(out actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
 {
+	WarpFOV();
 	UndoPropTurn();
 	Super.PlayerCalcView(ViewActor, CameraLocation, CameraRotation);
 }
@@ -2358,6 +2403,9 @@ exec function CheatHelp( optional string Topic )
 
 defaultproperties
 {
+     WarpKick=30.000000
+     WarpRise=0.070000
+     WarpFall=0.500000
 	bGunShakeEngineTurn=True
 	CashThrowAmount=50
 	UseSendInterval=0.100000

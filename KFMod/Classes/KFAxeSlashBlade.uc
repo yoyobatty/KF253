@@ -8,6 +8,7 @@ class KFAxeSlashBlade extends Actor;
 #exec NEW StaticMesh File="..\KFMod254\KFMod\Models\KFAxeSlashBlade.ase" Name="KFAxeSlashBlade"
 #exec TEXTURE IMPORT NAME=KFAxeSlashGlow FILE=..\KFMod254\KFMod\Textures\KFAxeSlashGlow.tga MIPS=ON UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 
+var() Texture	GlowTex;			// the picture of its glow
 var() float		Bright;				// its glow, over the picture's own
 var() float		FadeTime;
 var float		Age, FadeAge;
@@ -22,7 +23,7 @@ simulated function PostBeginPlay()
 	Tone = ConstantColor(Level.ObjectPool.AllocateObject(class'ConstantColor'));
 	Tone.Color = class'Canvas'.static.MakeColor(255, 255, 255, 255);
 	Lit = Combiner(Level.ObjectPool.AllocateObject(class'Combiner'));
-	Lit.Material1 = Texture'KFAxeSlashGlow';
+	Lit.Material1 = GlowTex;
 	Lit.Material2 = Tone;
 	Lit.Mask = None;
 	Lit.CombineOperation = CO_Multiply;
@@ -96,6 +97,7 @@ simulated function Destroyed()
 
 defaultproperties
 {
+     GlowTex=Texture'KFAxeSlashGlow'
      Bright=1.700000
      FadeTime=0.250000
      DrawType=DT_StaticMesh

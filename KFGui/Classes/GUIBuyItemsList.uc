@@ -1,15 +1,22 @@
 class GUIBuyItemsList extends GUIVertList;
 
+// What the trader sells, down the right of its menu (GUITraderInvList, a subclass, is what the player has, down the left).
+// A row's buttons are drawn by the menu (GUIBuyMenu.DrawButton), which notes where; a press on one does its job.
+
 var array< GUIBuyable > Elements;
 var float RowShare;		// each row's share of the list's height
 var color Unbuyable;	// the colour of what stops a row being bought
 
-
-event InitComponent(GUIController MyController, GUIComponent MyOwner)
+struct HitBox
 {
-	OnDrawItem=DrawBuyItem;
-	Super.InitComponent(MyController,MyOwner);
-}
+	var int Item;
+	var byte Act;
+	var float X1, Y1, X2, Y2;
+};
+var array<HitBox> Hits;	// the buttons as last drawn
+
+const ACT_BUY=10;
+
 
 function Clear()
 {
@@ -61,100 +68,130 @@ function string GetItemAtIndex( int idx )
 	return Elements[idx].ItemName;
 }
 
+// (a row chosen again, as one on the other list was chosen in between, is shown again)
+function int SetIndex(int NewIndex)
+{
+	local int R;
+
+	R = Super.SetIndex(NewIndex);
+	if ( GUIBuyMenu(PageOwner) != None )
+		GUIBuyMenu(PageOwner).ListChose(self);
+	return R;
+}
+
 function SelectNewItem(GUIComponent Sender)
 {
-	if(GUIBuyMenu(PageOwner) == None)
-		return;
-	if(Elements.Length <= 0)
-		GUIBuyMenu(PageOwner).NewInfo(None);
-	else
-		GUIBuyMenu(PageOwner).NewInfo(Elements[Index]);
-
-
+	if(GUIBuyMenu(PageOwner) != None)
+		GUIBuyMenu(PageOwner).ListChose(self);
 }
 
 function bool OnDblClick(GUIComponent Sender)
 {
-	// HAHAH typecasting nightmare.
-	// All we're doing here is hacking the Items in the buymenu list so when you
-	// double clickem, it runs a quick check to see if you can buy / sell this, and acts
-	// like you had clicked the footer.
-	// Because the Sender (the actual button we're double clicking) has fuck all to do with the GUIBuyable itself, 
-	// we've gotta route everything back through the BuyMenu... 
-	// Care of Alex
-	if (GUIBuyMenu(PageOwner).CanAfford(GUIBuyMenu(PageOwner).ItemsBox.List.Elements[GUIBuyMenu(PageOwner).ItemsBox.List.Index] )
-	 && GUIBuyMenu(PageOwner).ItemsBox.List.Elements[GUIBuyMenu(PageOwner).ItemsBox.List.Index].CanButtonMe(PlayerOwner()
-	 ,GUIBuyMenu(PageOwner).myCategories.Index!=0) )
-		GUIBuyMenuFooter(GUIBuyMenu(PageOwner).t_Footer).OnFooterClick(GUIBuyMenuFooter(GUIBuyMenu(PageOwner).t_Footer).b_Buy);
+	if ( GUIBuyMenu(PageOwner) != None && Index >= 0 && Index < Elements.Length )
+		GUIBuyMenu(PageOwner).BuyGun(Elements[Index]);
 	Return False;
 }
 
+// (each frame the buttons are noted again as they are drawn)
+function bool HitsPreDraw(Canvas C)
+{
+	Hits.Length = 0;
+	return false;
+}
 
+function AddHit(int Item, byte Act, float X, float Y, float W, float H)
+{
+	local int n;
+
+	n = Hits.Length;
+	Hits.Length = n + 1;
+	Hits[n].Item = Item;
+	Hits[n].Act = Act;
+	Hits[n].X1 = X;
+	Hits[n].Y1 = Y;
+	Hits[n].X2 = X + W;
+	Hits[n].Y2 = Y + H;
+}
+
+// The button under a point of the screen, or -1
+function int HitAt(float MX, float MY)
+{
+	local int i;
+
+	for (i = 0; i < Hits.Length; i++)
+	{
+		if (MX >= Hits[i].X1 && MX <= Hits[i].X2 && MY >= Hits[i].Y1 && MY <= Hits[i].Y2)
+			return i;
+	}
+	return -1;
+}
+
+// (the list's own click chooses the row first)
+function bool BuyClick(GUIComponent Sender)
+{
+	local int i;
+
+	InternalOnClick(Sender);
+	i = HitAt(Controller.MouseX, Controller.MouseY);
+	if ( i < 0 || GUIBuyMenu(PageOwner) == None || Hits[i].Item >= Elements.Length )
+		return false;
+	GUIBuyMenu(PageOwner).BuyGun(Elements[Hits[i].Item]);
+	return true;
+}
+
+// A row: its BUY (UPGRADE) button, then its name, and what it costs and weighs (in red when that is why it cannot be bought;
+// an upgrade says whose gun it is for)
 function DrawBuyItem(Canvas c, int Item, float X, float Y, float W, float HT, bool bSelected, bool bPending)
 {
-	local string Left, Right;
-	local float Iheight,Itop,Ileft,Iwidth,Half,Gap;
-	local eMenuState drawState;
+	local string Left, Right, Cap;
+	local float L, BW, BH, TH;
 	local GUIBuyMenu M;
 	local GUIBuyable b;
-	local int Have,Most,Clip;
 	local bool bDear,bHeavy;
 
 	M = GUIBuyMenu(PageOwner);
+	if ( M == None || Item >= Elements.Length )
+		return;
 	b = Elements[Item];
-	if(!bSelected)
-		drawState = MSAT_Blurry;
+	bDear = M.TooDear(b);
+	bHeavy = M.TooHeavy(b);
+
+	BW = W * 0.2;
+	BH = HT * 0.62;
+	Cap = "BUY";
+	if ( BuyableUpgrade(b) != None )
+		Cap = "UPGRADE";
+	M.DrawButton(c, self, X, Y + (HT - BH) * 0.5, BW, BH, Cap, -1, M.CanAfford(b), 0, Item, ACT_BUY);
+
+	L = X + BW + W * 0.02;
+	TH = HT * 0.86;
+	if ( bSelected && !M.bOwnChosen )
+		SectionStyle.Draw(c, MSAT_Watched, L, Y + (HT - TH) * 0.5, X + W - L, TH);
 	else
-		drawState = MSAT_Watched;
+		SectionStyle.Draw(c, MSAT_Blurry, L, Y + (HT - TH) * 0.5, X + W - L, TH);
 
-	Iheight = HT*0.86;
-	Itop = Y+(HT-Iheight)/2;
-	SectionStyle.Draw(c,drawState,X,Itop,W,Iheight);
-	Ileft = X+W*0.04;
-	Iwidth = W-W*0.08;
-
-	// below the name: what it costs (or sells for) and weighs; for ammo, a clip's price and the rounds held
-	if( M!=None && M.myCategories.Index==0 )
+	Left = "Cost:"@int(b.cost);
+	if ( BuyableUpgrade(b) != None )
 	{
-		Left = "Sells for:"@int(b.sellValue);
+		Right = "Your"@BuyableUpgrade(b).Base.default.ItemName;
+		if ( bHeavy )
+			Right = "Weight: +"$int(b.weight);
+	}
+	else if ( b.weight > 0 )
 		Right = "Weight:"@int(b.weight);
-	}
-	else if( BuyableAmmo(b)!=None )
-	{
-		Left = "Clip:"@int(b.cost);
-		if( BuyableAmmo(b).Holding(PlayerOwner().Pawn,Have,Most,Clip) )
-			Right = "Rounds:"@Have$"/"$Most;
-	}
-	else
-	{
-		Left = "Cost:"@int(b.cost);
-		if( b.weight>0 )
-			Right = "Weight:"@int(b.weight);
-	}
-	if( M!=None )
-	{
-		bDear = M.TooDear(b);
-		bHeavy = M.TooHeavy(b);
-	}
 	// (what cannot be bought is dimmed, and what stops it is in red)
 	if( bDear || bHeavy )
 	{
 		c.Style = 5;
 		c.SetDrawColor(0,0,0,110);
-		c.SetPos(X,Itop);
-		c.DrawTile(Texture'Engine.WhiteTexture',W,Iheight,0,0,1,1);
+		c.SetPos(L,Y + (HT - TH) * 0.5);
+		c.DrawTile(Texture'Engine.WhiteTexture',X + W - L,TH,0,0,1,1);
 		c.SetDrawColor(255,255,255,255);
 	}
-	SectionStyle.DrawText(c,MSAT_Blurry,Ileft,Itop,Iwidth,Iheight*0.55,TXTA_Center,b.ItemName,FNS_Medium);
-	if( Right=="" )
-		LineText(c,Ileft,Itop+Iheight*0.45,Iwidth,Iheight*0.45,TXTA_Center,Left,bDear);
-	else
-	{
-		Half = Iwidth*0.5;
-		Gap = Iwidth*0.03;
-		LineText(c,Ileft,Itop+Iheight*0.45,Half-Gap,Iheight*0.45,TXTA_Right,Left,bDear);
-		LineText(c,Ileft+Half+Gap,Itop+Iheight*0.45,Half-Gap,Iheight*0.45,TXTA_Left,Right,bHeavy);
-	}
+	SectionStyle.DrawText(c,MSAT_Blurry,L + W * 0.03,Y + HT * 0.1,X + W - L - W * 0.06,HT * 0.45,TXTA_Left,b.ItemName,FNS_Medium);
+	LineText(c,L + W * 0.03,Y + HT * 0.5,X + W - L - W * 0.06,HT * 0.4,TXTA_Left,Left,bDear);
+	if( Right!="" )
+		LineText(c,L + W * 0.03,Y + HT * 0.5,X + W - L - W * 0.06,HT * 0.4,TXTA_Right,Right,bHeavy);
 }
 
 // A row's second line, in red when it is why the row cannot be bought. (The style is shared with other lists: its
@@ -184,12 +221,15 @@ function float BuyItemHeight(Canvas c)
 
 defaultproperties
 {
-     RowShare=0.142857
+     RowShare=0.083000
      Unbuyable=(R=255,G=70,B=60,A=255)
      GetItemHeight=GUIBuyItemsList.BuyItemHeight
      StyleName="ItemBoxInfo"
      bMouseOverSound=True
      OnClickSound=CS_Click
+     OnDrawItem=GUIBuyItemsList.DrawBuyItem
+     OnPreDraw=GUIBuyItemsList.HitsPreDraw
+     OnClick=GUIBuyItemsList.BuyClick
      OnDblClick=GUIBuyItemsList.OnDblClick
      OnChange=GUIBuyItemsList.SelectNewItem
 }

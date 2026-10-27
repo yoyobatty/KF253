@@ -49,6 +49,10 @@ simulated function SetScale( float K )
 	Emitters[E_SPLASH].StartVelocityRange.Y.Max = default.Emitters[E_SPLASH].StartVelocityRange.Y.Max * K;
 	Emitters[E_SPLASH].StartVelocityRange.Z.Min = default.Emitters[E_SPLASH].StartVelocityRange.Z.Min * K;
 	Emitters[E_SPLASH].StartVelocityRange.Z.Max = default.Emitters[E_SPLASH].StartVelocityRange.Z.Max * K;
+	Emitters[E_SPRAY].StartSizeRange.X.Min = default.Emitters[E_SPRAY].StartSizeRange.X.Min * K;
+	Emitters[E_SPRAY].StartSizeRange.X.Max = default.Emitters[E_SPRAY].StartSizeRange.X.Max * K;
+	Emitters[E_SPRAY].StartSizeRange.Y.Min = default.Emitters[E_SPRAY].StartSizeRange.Y.Min * K;
+	Emitters[E_SPRAY].StartSizeRange.Y.Max = default.Emitters[E_SPRAY].StartSizeRange.Y.Max * K;
 	if ( Mode == 1 )
 		Rate(E_SPLASH, SplashRate * (0.4 + 0.6 * Scale));
 }
@@ -57,7 +61,9 @@ simulated function Show( vector Spot, vector Normal, rotator Aim, bool bHit, opt
 {
 	if ( bHit )
 	{
-		if ( bFromEyes )
+		if ( bFromEyes && !class'KFNearFade'.default.bOff )
+			SetScale(FClamp(Dist / 700.0, 0.22, 1.0));
+		else if ( bFromEyes )
 			SetScale(FClamp(Dist / 600.0, 0.3, 1.0));
 		else
 			SetScale(1.0);

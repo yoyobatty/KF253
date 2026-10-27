@@ -42,6 +42,15 @@ var float BaseMeleeIncrease;
 
 var float  CrouchEndTime;
 var float  GroundTime;                        // seconds on the ground since landing, counted from the moves themselves
+
+// A player's movement is Quake's and Half-Life's (QuakeWalk, QuakeAir; their names in brackets); a bot's keeps the stop
+// glide in ModifyVelocity
+var() float QuakeFriction;		// share of the ground speed lost a second (sv_friction)
+var() float QuakeStopSpeed;		// below it friction takes a fixed amount a second instead, so a stop ends at once (sv_stopspeed)
+var() float QuakeEdgeFriction;	// friction times this where the ground runs out just ahead (sv_edgefriction)
+var() float QuakeAccel;			// ground acceleration, in top speeds a second (sv_accelerate)
+var() float QuakeAirAccel;		// air acceleration, the same (sv_airaccelerate)
+var() float QuakeAirWish;		// the most the air acceleration adds along the way pressed: steering, not speed (30)
 var() float JumpCrouchBonus, JumpCrouchTime;
 var bool   bCrouchJumped;
 
@@ -276,7 +285,8 @@ simulated function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation,
 		HitDir = momentum;
 		if( HitDir==vect(0,0,0) && instigatedBy!=None && instigatedBy!=self && !ClassIsChildOf(damageType, class'Burned') )
 			HitDir = Location - instigatedBy.Location;
-		DoHitCamEffects(HitDir, Max(HealthWas-Health,0));
+		// (fire hurts in many small bites: its blur is light and does not build up, KFScreenFX.FireBlur)
+		DoHitCamEffects(HitDir, Max(HealthWas-Health,0), ClassIsChildOf(damageType, class'Burned') || ClassIsChildOf(damageType, class'DamTypeFlamethrower'));
 	}
 }
 
@@ -313,7 +323,7 @@ function TakeBileDamage()
 // Every hit jars the view away from it, as Killing Floor itself does: seen from the player's own view, a hit from in
 // front or behind nods the view and one from the side tilts it; harder hits jar further. HitDir is in world space
 // (the player's machine turns it into his view).
-simulated function DoHitCamEffects(vector HitDir, optional int Damage)
+simulated function DoHitCamEffects(vector HitDir, optional int Damage, optional bool bFire)
 {
 	local KFScreenFX FX;
 	local PlayerController PC;
@@ -325,7 +335,9 @@ simulated function DoHitCamEffects(vector HitDir, optional int Damage)
 
 	// the view goes out of focus by how hard the hit was (KFScreenFX clears it again by itself)
 	FX = class'KFFrameTap'.static.GetFX(PC);
-	if( FX!=None )
+	if( FX!=None && bFire )
+		FX.FireBlur(Damage);
+	else if( FX!=None )
 		FX.HitBlur(Damage);
 
 	HitDir.Z = 0;
@@ -584,11 +596,20 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 
 	UpdateSpeed();
 
+	// (by the moves, not by the clock: the server and a network player's own machine then agree on it)
 	if (Physics == PHYS_Walking)
-	{
-		// (by the moves, not by the clock: the server and a network player's own machine then agree on it)
 		GroundTime = FMin(GroundTime + DeltaTime, 10.0);
 
+	if (PlayerController(Controller) != None)
+	{
+		// (a player held where he stands, by a clot's grab, stays held: KFPawn.ModifyVelocity)
+		if (Physics == PHYS_Walking && !bMovementDisabled)
+			QuakeWalk(DeltaTime, OldVelocity);
+		else if (Physics == PHYS_Falling)
+			QuakeAir(DeltaTime, OldVelocity);
+	}
+	else if (Physics == PHYS_Walking)
+	{
 		if (Acceleration.X * Acceleration.X + Acceleration.Y * Acceleration.Y < 1.0)
 		{
 			Speed2D = Sqrt(Velocity.X * Velocity.X + Velocity.Y * Velocity.Y);
@@ -623,6 +644,86 @@ simulated event ModifyVelocity(float DeltaTime, vector OldVelocity)
 			ServerStopSprintKF();
 		bIsSprinting = False;
 	}
+}
+
+// On the ground (PM_Friction, PM_Accelerate), from the speed the engine had before its own braking and turning: friction
+// all the time, a fixed amount below QuakeStopSpeed and more at a ledge's edge; and the speed along the way pressed only
+// topped up to the top speed, so a turn keeps some of the old way for a moment. The engine then holds the whole to the
+// top speed.
+simulated function QuakeWalk(float DeltaTime, vector OldVelocity)
+{
+	local vector V, Wish;
+	local float Speed, Drop, Top, Along, Add;
+
+	V = OldVelocity;
+	V.Z = 0;
+	Speed = VSize(V);
+	if (Speed < 1.0)
+		V = vect(0,0,0);
+	else
+	{
+		Drop = FMax(Speed, QuakeStopSpeed) * QuakeFriction * DeltaTime;
+		if (QuakeEdgeFriction > 1.0 && AtLedge(V / Speed))
+			Drop *= QuakeEdgeFriction;
+		V *= FMax(Speed - Drop, 0.0) / Speed;
+	}
+	Wish = Acceleration;
+	Wish.Z = 0;
+	if (Wish.X * Wish.X + Wish.Y * Wish.Y >= 1.0)
+	{
+		Wish = Normal(Wish);
+		Top = GroundSpeed;
+		if (bIsCrouched)
+			Top *= CrouchedPct;
+		else if (bIsWalking)
+			Top *= WalkingPct;
+		Along = V dot Wish;
+		Add = Top - Along;
+		if (Add > 0.0)
+			V += Wish * FMin(QuakeAccel * Top * DeltaTime, Add);
+	}
+	Velocity.X = V.X;
+	Velocity.Y = V.Y;
+}
+
+// In the air (PM_AirAccelerate), from the speed before the engine's air control; its fall is left as it is. The way
+// pressed is only topped up to QuakeAirWish, so the keys steer and turning while strafing curves the jump, but the
+// speed across the ground never rises above what it was or a run, whichever is more: no hops that build speed.
+// (Nothing pressed, or the engine's own check finding a wall the air control would climb: the engine's own.)
+simulated function QuakeAir(float DeltaTime, vector OldVelocity)
+{
+	local vector V, Wish;
+	local float Top, Along, Add, Cap, Speed;
+
+	Wish = Acceleration;
+	Wish.Z = 0;
+	if (Wish.X * Wish.X + Wish.Y * Wish.Y < 1.0)
+		return;
+	Wish = Normal(Wish);
+	V = OldVelocity;
+	V.Z = 0;
+	Cap = FMax(VSize(V), GroundSpeed);
+	Top = GroundSpeed;
+	Along = V dot Wish;
+	Add = FMin(Top, QuakeAirWish) - Along;
+	if (Add > 0.0)
+		V += Wish * FMin(QuakeAirAccel * Top * DeltaTime, Add);
+	Speed = VSize(V);
+	if (Speed > Cap)
+		V *= Cap / Speed;
+	Velocity.X = V.X;
+	Velocity.Y = V.Y;
+}
+
+// Whether the ground runs out just ahead: nothing within 34 units below the feet 16 units on (Half-Life's test)
+simulated function bool AtLedge(vector Dir)
+{
+	local vector Start, End, HitLocation, HitNormal;
+
+	Start = Location + Dir * 16.0;
+	End = Start;
+	End.Z -= CollisionHeight + 34.0;
+	return Trace(HitLocation, HitNormal, End, Start, true, vect(4,4,4)) == None;
 }
 
 event Landed(vector HitNormal)
@@ -793,6 +894,12 @@ defaultproperties
 	JumpCrouchBonus=0.350000
 	JumpCrouchTime=0.300000
 	GroundTime=1.000000
+	QuakeFriction=4.000000
+	QuakeStopSpeed=100.000000
+	QuakeEdgeFriction=2.000000
+	QuakeAccel=10.000000
+	QuakeAirAccel=10.000000
+	QuakeAirWish=30.000000
 	HealthSpeedModifier=0.300000
 	ControllerClass=Class'KFMod.KFInvasionBot'
 	CrouchTurnRightAnim="CrouchR"

@@ -50,6 +50,7 @@ var() float					BlurShrink;			// how many of the screen's pixels, each way, one 
 var() float					BlurHold;			// seconds a hit's blur stays before it starts to clear
 var() float					BlurFadeTime;		// seconds for a full blur to clear
 var() float					BlurPeak;			// the most a hit, or hits in a row, can blur (1 is all of it)
+var() float					FireBlurPeak;		// the most fire can blur (FireBlur)
 var() float					VividPerRich;		// how many of VividMuch, over 100, add the whole of the view's own square
 var bool					bMenu;				// in a level with no game's HUD (the main menu's): more colour only, no glow
 var float					NightGlow;			// how far the night vision is on (KFNightVision sets it every frame): lights glow more
@@ -128,6 +129,21 @@ simulated function HitBlur(int Damage)
 	// (hits in a row add up slowly: the harder of the two, and a quarter of the other)
 	BlurLevel = FMin(BlurPeak, FMax(BlurLevel, Amount) + 0.25 * FMin(BlurLevel, Amount));
 	BlurHoldUntil = Level.TimeSeconds + BlurHold;
+}
+
+// A burn: the view goes lightly out of focus, never further than FireBlurPeak however many flames bite (standing in fire
+// would otherwise keep it blurred)
+simulated function FireBlur(int Damage)
+{
+	local float Amount;
+
+	if (!bHitBlur)
+		return;
+	Amount = FMin(FireBlurPeak, FMax(float(Damage) * BlurPerDamage, BlurMin * FMin(1.0, float(Damage) / BlurSmallHit)));
+	if (Amount <= 0.0 || BlurLevel >= Amount)
+		return;
+	BlurLevel = Amount;
+	BlurHoldUntil = FMax(BlurHoldUntil, Level.TimeSeconds + 0.1);
 }
 
 // Before each frame (from KFFrameTap): what is on the view, and the pictures to be made again when it is drawn
@@ -648,6 +664,7 @@ defaultproperties
      BlurHold=0.200000
      BlurFadeTime=1.400000
      BlurPeak=0.850000
+     FireBlurPeak=0.250000
      NightGlowGain=0.350000
      NightGlowCut=30
      DrawType=DT_None

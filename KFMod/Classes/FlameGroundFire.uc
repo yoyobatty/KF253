@@ -9,6 +9,9 @@
 //=============================================================================
 class FlameGroundFire extends FuelFlameHurting;
 
+var float	NearK, ShownNear, NextNear;	// (each machine) how close to the player's eyes it is (KFNearFade), and as last drawn
+
+
 var float	Fuel;
 var() float	StartFuel, FeedFuel, MaxFuel;	// a new floor fire's, each landing's, the most a floor fire holds
 var() float	WallFuel, WallMaxFuel;			// a wall or ceiling fire's
@@ -190,12 +193,17 @@ simulated function ApplySize()
 	local float S, G, F;
 
 	ShownSize = Size;
+	ShownNear = NearK;
 	S = Size;
 	if ( Face != 0 )
 		S = 0.75;
 	G = S ** 0.85;
 	// (a bigger fire is more flames over more ground, more than bigger flames: one big ball otherwise)
 	F = S ** 0.6;
+	// (and up close to the player's eyes smaller flames and fainter smoke: KFNearFade)
+	Emitters[1].Opacity = default.Emitters[1].Opacity * NearK * NearK;
+	G *= NearK;
+	F *= NearK;
 	Emitters[0].StartSizeRange.X.Min = default.Emitters[0].StartSizeRange.X.Min * F;
 	Emitters[0].StartSizeRange.X.Max = default.Emitters[0].StartSizeRange.X.Max * F;
 	Emitters[0].StartSizeRange.Y.Min = default.Emitters[0].StartSizeRange.Y.Min * F;
@@ -223,7 +231,12 @@ simulated function Tick( float DT )
 		return;
 	if ( Face == 0 )
 		Size = 1.0 + 1.5 * FClamp((Fuel - StartFuel) / (MaxFuel - StartFuel), 0.0, 1.0);
-	if ( Abs(Size - ShownSize) > 0.05 )
+	if ( Level.TimeSeconds >= NextNear && Level.NetMode != NM_DedicatedServer )
+	{
+		NextNear = Level.TimeSeconds + 0.1;
+		NearK = class'KFNearFade'.static.ViewK(self, Location, 120.0, 440.0, 0.28);
+	}
+	if ( Abs(Size - ShownSize) > 0.05 || Abs(NearK - ShownNear) > 0.04 )
 		ApplySize();
 	if ( Face != 0 && Level.TimeSeconds >= NextShed && Fuel > 0.4 && (Shed == None || Shed.bDeleteMe || Shed.bDone) )
 		ShedFuel();
@@ -340,6 +353,8 @@ simulated function ShowHot()
 
 defaultproperties
 {
+	NearK=1.000000
+	ShownNear=1.000000
 	StartFuel=2.100000
 	FeedFuel=0.300000
 	MaxFuel=6.000000

@@ -210,6 +210,7 @@ var byte		CardMod;				// (the special ammo last shown)
 var Material		CamoSpec;
 var float			CamoPulse;
 var bool		bUpgradeShown;			// (the upgrade's changes made on this machine)
+var float		UpgradePaid;			// what its upgrade cost at the trader: three quarters of it comes back when it is sold
 
 // === Aiming (alt fire held on a weapon whose alt fire is KFZoom) ===
 var() float AimZoom;			// how many times the view is magnified once aimed (1 = not at all)
@@ -231,7 +232,7 @@ replication
 		ClipLeft;
 
 	reliable if( bNetDirty && bNetOwner && (Role==ROLE_Authority) )
-		ClipCount, bUpgraded, bUpgradeBusy, AmmoMod;
+		ClipCount, bUpgraded, bUpgradeBusy, AmmoMod, UpgradePaid;
 
 	reliable if( bNetInitial && bNetOwner && (Role==ROLE_Authority) )
 		MuzzleLightClass;

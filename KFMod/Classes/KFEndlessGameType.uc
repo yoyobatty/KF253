@@ -1609,7 +1609,7 @@ defaultproperties
     RiverMinGap=0.150000
     HoldoutChance=0.250000
     HoldoutCapScale=2.000000
-    HoldoutLength=90.000000
+    HoldoutLength=60.000000
     HoldoutHealthScale=0.600000
     RiverSurge=0.500000
     RiverSurgePeriod=30.000000

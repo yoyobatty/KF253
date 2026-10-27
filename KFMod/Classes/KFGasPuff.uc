@@ -11,6 +11,8 @@ var byte	Thick;
 var byte	ShownThick;
 var bool	bFading;
 var bool	bShownFade;
+var float	ThickOpacity;	// (each machine) how solid it is for its thickness, before KFNearFade
+var float	NextNear;
 
 replication
 {
@@ -51,11 +53,18 @@ simulated function Tick( float DT )
 		}
 		return;
 	}
+	// (the player standing in it sees through it: KFNearFade)
+	if ( ThickOpacity > 0 && Level.TimeSeconds >= NextNear )
+	{
+		NextNear = Level.TimeSeconds + 0.1;
+		Emitters[0].Opacity = ThickOpacity * class'KFNearFade'.static.ViewK(self, Location, 40.0, 260.0, 0.12);
+	}
 	if ( Thick == ShownThick )
 		return;
 	ShownThick = Thick;
 	T = FMin(float(Thick) / 100.0, 2.0);
-	Emitters[0].Opacity = FClamp(0.20 + 0.30 * T, 0.20, 0.65);
+	ThickOpacity = FClamp(0.20 + 0.30 * T, 0.20, 0.65);
+	Emitters[0].Opacity = ThickOpacity * class'KFNearFade'.static.ViewK(self, Location, 40.0, 260.0, 0.12);
 	Emitters[0].ParticlesPerSecond = 1.2 + 2.0 * T;
 	Emitters[0].InitialParticlesPerSecond = Emitters[0].ParticlesPerSecond;
 	Emitters[0].AllParticlesDead = false;

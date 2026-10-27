@@ -46,7 +46,7 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
             if ( GibGroupClass.default.BloodGibClass != None )
                 Spawn( GibGroupClass.default.BloodGibClass,,, Location, Rotator(-HitNormal) );
             if ( (LifeSpan < 7.3)  && (Level.DetailMode != DM_Low) )
-                PlaySound(HitSounds[Rand(2)]);
+                PlaySound(HitSounds[Rand(2)], SLOT_Misc, class'KFBloodBlast'.static.GoreVol(TransientSoundVolume),, class'KFBloodBlast'.static.GoreRadius(TransientSoundVolume, TransientSoundRadius));
 
             if ( Speed > 100 )
             {
@@ -123,9 +123,9 @@ simulated function int Burst( vector Dir, float Speed, int Room )
 				B.Size = 0.6;
 			B.bHeavy = !bSmall;
 			if ( bSmall )
-				B.PlaySound(HitSounds[Rand(2)], SLOT_None, 1.5,, 400, 1.0 + 0.3 * FRand());
+				B.PlaySound(HitSounds[Rand(2)], SLOT_None, class'KFBloodBlast'.static.GoreVol(1.5),, class'KFBloodBlast'.static.GoreRadius(1.5, 400), 1.0 + 0.3 * FRand());
 			else
-				B.PlaySound(HitSounds[Rand(2)], SLOT_None, 2.5,, 600, 0.85 + 0.3 * FRand());
+				B.PlaySound(HitSounds[Rand(2)], SLOT_None, class'KFBloodBlast'.static.GoreVol(2.5),, class'KFBloodBlast'.static.GoreRadius(2.5, 600), 0.85 + 0.3 * FRand());
 		}
 		if ( !bSmall || FRand() < 0.35 )
 		{
@@ -198,7 +198,7 @@ simulated function Timer()
 			return;
 		}
 		Kick(Normal(Normal(D) + P.Velocity / Speed) * (0.8 * Speed + 60.0) + vect(0,0,1) * (100.0 + 0.25 * Speed));
-		PlaySound(HitSounds[Rand(2)], SLOT_None, 1.2,, 300);
+		PlaySound(HitSounds[Rand(2)], SLOT_None, class'KFBloodBlast'.static.GoreVol(1.2),, class'KFBloodBlast'.static.GoreRadius(1.2, 300));
 		return;
 	}
 }

@@ -6,6 +6,7 @@ var int RangeValue;
 
 var bool bHideSale,bInitalInit,bHasThisGun;
 var class<Ammunition> AmmoType;	// its ammo (the fill button on what the player owns)
+var bool bVariant;				// a variant of another gun (KFTraderUpgrades): bought as its upgrade, only sold here
 
 function bool CanBuyMe(PlayerController p)
 {
@@ -30,6 +31,8 @@ function bool ShowMe(Pawn p, eSaleCat index, GUIBuyMenu ParentMenu)
         hasThis = HasMe(p);
 	stuf = class<Weapon>(relatedInventory);
 	melee = stuf.Default.bMeleeWeapon;
+	if( bVariant )
+		return index==SALE_Personal && hasThis;
 
 	switch(index)
 	{

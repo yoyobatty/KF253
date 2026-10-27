@@ -125,6 +125,8 @@ exec function Arsenal()
     Pawn.GiveWeapon("KFmod.BFG");
     Pawn.GiveWeapon("KFmod.Railgun");
     Pawn.GiveWeapon("KFmod.CryoCannon");
+    Pawn.GiveWeapon("KFmod.AxeVoid");
+    Pawn.GiveWeapon("KFmod.GoreCannon");
 
     for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
     {
@@ -137,6 +139,24 @@ exec function Arsenal()
 }
 
 // The BFG 9000, loaded
+// The Gore Cannon
+exec function GoreCannon()
+{
+    if ( !areCheatsEnabled() || Pawn == None )
+        return;
+    Pawn.GiveWeapon("KFmod.GoreCannon");
+    ReportCheat("GoreCannon");
+}
+
+// The Void Executioner
+exec function VoidAxe()
+{
+    if ( !areCheatsEnabled() || Pawn == None )
+        return;
+    Pawn.GiveWeapon("KFmod.AxeVoid");
+    ReportCheat("VoidAxe");
+}
+
 exec function BFG()
 {
     local Inventory Inv;
@@ -1302,4 +1322,6 @@ defaultproperties
      HelpLines(49)="Endless|PowerUp Kind|a power-up in front of you: MaxAmmo, InstaKill, DoublePoints, Nuke (random when left out)"
      HelpLines(50)="Endless|LootZed|the specimen nearest your aim glows and carries a power-up"
      HelpLines(51)="Weapons|BFG|the BFG 9000 prototype, loaded"
+     HelpLines(53)="Weapons|GoreCannon|the Gore Cannon: hold alt to vacuum up bodies and gibs, fire to throw them back"
+     HelpLines(52)="Weapons|VoidAxe|the Void Executioner: its cuts blink you to where they land, in a shock wave"
 }

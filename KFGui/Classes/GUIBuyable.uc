@@ -63,13 +63,9 @@ function string GetBuyCaption(eSaleCat index)
 {
 	if(index == SALE_Personal)
 		return "Sell";
-	else
-		return "Buy";
-		
 	if(index == SALE_Upgrades)
-		return "UnTrain";
-	else
-		return "Train";
+		return "Upgrade";
+	return "Buy";
 }
 
 //Consider ourselves bought

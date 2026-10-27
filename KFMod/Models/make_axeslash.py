@@ -7,6 +7,7 @@
                         seen there came from: drawn in toward a band along the blade's curve, so the view behind
                         the blade is stretched across it, with a shimmer along it; nothing moves at the rim.
   ../Textures/KFAxeSlashGlow.tga   the blade's glow, added: a white-hot edge in a crimson halo, fading to the tips.
+  ../Textures/KFAxeVoidGlow.tga    the Void Executioner's (KFAxeVoidBlade): violet-white in a deep violet halo.
 
     python make_axeslash.py
 """
@@ -102,7 +103,7 @@ def warp():
     write_ase('KFAxeSlashWarp', verts, uvs, faces, 'KFMod254 Executioner cut warp, by make_axeslash.py')
 
 
-def glow(w=256, h=64):
+def glow(w=256, h=64, name='KFAxeSlashGlow', core_rgb=(0.95, 0.92, 0.88), halo_rgb=(0.75, 0.10, 0.08)):
     body = bytearray()
     for yy in range(h - 1, -1, -1):
         v = (yy + 0.5) / h
@@ -113,18 +114,20 @@ def glow(w=256, h=64):
             tip = math.sin(math.pi * u) ** 0.7
             c = core * tip
             g = halo * tip
-            r = min(255, int(255 * (0.95 * c + 0.75 * g)))
-            gg = min(255, int(255 * (0.92 * c + 0.10 * g)))
-            b = min(255, int(255 * (0.88 * c + 0.08 * g)))
+            r = min(255, int(255 * (core_rgb[0] * c + halo_rgb[0] * g)))
+            gg = min(255, int(255 * (core_rgb[1] * c + halo_rgb[1] * g)))
+            b = min(255, int(255 * (core_rgb[2] * c + halo_rgb[2] * g)))
             body += bytes((b, gg, r))
     head = struct.pack('<BBBHHBHHHHBB', 0, 0, 2, 0, 0, 0, 0, 0, w, h, 24, 0x00)
-    out = os.path.join(HERE, '..', 'Textures', 'KFAxeSlashGlow.tga')
+    out = os.path.join(HERE, '..', 'Textures', name + '.tga')
     with open(out, 'wb') as f:
         f.write(head + bytes(body))
-    print('KFAxeSlashGlow', w, 'x', h)
+    print(name, w, 'x', h)
 
 
 if __name__ == '__main__':
     blade()
     warp()
     glow()
+    # the Void Executioner's: violet-white in a deep violet halo
+    glow(name='KFAxeVoidGlow', core_rgb=(0.85, 0.80, 0.98), halo_rgb=(0.48, 0.10, 0.85))

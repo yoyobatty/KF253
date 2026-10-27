@@ -2874,7 +2874,7 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 				}
 			}
 		}
-		PlaySound(sound'PlayerSounds.NewGibs.NewGib2', SLOT_Misc, 255);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib2', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(255),, class'KFBloodBlast'.static.GoreRadius(255, TransientSoundRadius));
 	}
 	HideBone(HeadBone);
 	AddStump(4, HeadBone);
@@ -2986,9 +2986,9 @@ simulated function Sever( name Bone, rotator Dir, float Spread, optional class<D
 	if ( !bWhole || !BladeGoreType(DamageType) )
 		Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
 	if ( Slot == 5 )
-		PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc, 255);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(255),, class'KFBloodBlast'.static.GoreRadius(255, TransientSoundRadius));
 	else
-		PlaySound(sound'PlayerSounds.NewGibs.NewGib1', SLOT_Misc, 255);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib1', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(255),, class'KFBloodBlast'.static.GoreRadius(255, TransientSoundRadius));
 	// blown in half, or a part torn off by a blast: a burst of blood
 	if ( Slot == 5 )
 		class'KFBloodBlast'.static.Make(self, GetBoneCoords('Bip01 Spine2').Origin, 0.6 * BloodBlastSize(), 0.5 * vector(Dir));
@@ -3115,7 +3115,7 @@ simulated function GibBody( rotator Dir, float Spread )
 	{
 		Spawn(class'KFMod.FeedingSpray',,, Location, Rotation);
 		Spawn(class'KFMod.BodySplash',,, Location, Rotation);
-		PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, 255);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(255),, class'KFBloodBlast'.static.GoreRadius(255, TransientSoundRadius));
 		class'KFBloodBlast'.static.Make(self, Location, BloodBlastSize(), 0.5 * vector(Dir));
 	}
 
@@ -3168,7 +3168,7 @@ simulated function AshCrumble( vector Push )
 	bGibbed = true;
 	bPlayGoreSplash = true;
 	Spawn(class'KFAshBurst',,, Location, Rotation);
-	PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, 160,,, 0.6);
+	PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(160),, class'KFBloodBlast'.static.GoreRadius(160, TransientSoundRadius), 0.6);
 	if ( Push != vect(0,0,0) )
 		Dir = rotator(Normal(Normal(Push) + vect(0,0,1.5)));
 	else

@@ -3,6 +3,22 @@
 // sprites; warm colours, darker smoke, a few embers going up)
 class KFNadeFire extends FuelFlameHurting;
 
+var KFNearFade	Near;			// (each machine) kept from filling the view up close
+var float		NextNear;
+
+
+// Up close to the player's eyes the flames are smaller and the smoke fainter (KFNearFade)
+simulated function Tick( float DT )
+{
+	Super.Tick(DT);
+	if ( bDyingDown || bDeleteMe || Level.NetMode == NM_DedicatedServer || Level.TimeSeconds < NextNear )
+		return;
+	NextNear = Level.TimeSeconds + 0.1;
+	if ( Near == None )
+		Near = new class'KFNearFade';
+	Near.Apply(self, class'KFNearFade'.static.ViewK(self, Location, 100.0, 380.0, 0.35), 2);
+}
+
 defaultproperties
 {
      Begin Object Class=SpriteEmitter Name=NadeFireFlames

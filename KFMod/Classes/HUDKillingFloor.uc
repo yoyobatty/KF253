@@ -8,6 +8,9 @@
 class HUDKillingFloor extends HudBase
 	config(User);
 
+#exec TEXTURE IMPORT NAME=KFWarpLines FILE=..\KFMod254\KFMod\Textures\KFWarpLines.tga MIPS=ON ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
+#exec TEXTURE IMPORT NAME=KFWarpVignette FILE=..\KFMod254\KFMod\Textures\KFWarpVignette.tga MIPS=ON ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
+
 var int KFHUDAlpha;
 var int GrainAlpha;
 
@@ -157,6 +160,9 @@ struct ScreenBlot
 };
 var array<ScreenBlot> Blots;
 var() int MaxBlots;
+var() int ScreenBlotsAtOnce;	// no more splats are laid while this many are on the screen
+var float VoidWarpTime;			// the Void Executioner's blink (AddVoidWarp)
+var() float WarpLinesTime, WarpEdgeTime;
 var ColorModifier MyColorMod;
 
 // Player Info List(Used to draw Name, Health, Armor, and Veterancy over players)
@@ -600,6 +606,22 @@ simulated function WidgetBox(Canvas C, SpriteWidget W, out float X, out float Y,
 		Y -= YL;
 }
 
+// (the prompt to open the trader is not drawn while its menu is open: it showed through the menu's panels)
+simulated function DisplayLocalMessages( Canvas C )
+{
+	local int i;
+
+	if( TraderOpen() )
+	{
+		for( i=0; i<ArrayCount(LocalMessages); i++ )
+		{
+			if( LocalMessages[i].Message==class'KFMainMessages' && LocalMessages[i].Switch==3 )
+				LocalMessages[i].EndOfLife = Level.TimeSeconds;
+		}
+	}
+	Super.DisplayLocalMessages(C);
+}
+
 // Whether the trader's menu is open
 simulated function bool TraderOpen()
 {
@@ -710,6 +732,8 @@ simulated function DrawHud( Canvas C )
 	DrawModOverlay(C);
 	if ( Blots.Length > 0 )
 		DrawScreenBlood(C);
+	if ( VoidWarpTime > 0 )
+		DrawVoidWarp(C);
 
 	if (!KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
 	{
@@ -796,6 +820,12 @@ simulated function DrawUpgradeCard( Canvas C )
 	Left = W.CardUntil - Level.TimeSeconds;
 	if ( Left <= 0.0 )
 		return;
+	// (not over the trader's menu: an upgrade bought there is shown when it closes)
+	if ( TraderOpen() )
+	{
+		W.CardUntil = Level.TimeSeconds + 3.0;
+		return;
+	}
 	// (it comes up quickly and fades in its last second)
 	A = FMin(1.0, Left) * FMin(1.0, (3.0 - Left) * 5.0);
 	OldFont = C.Font;
@@ -2240,6 +2270,8 @@ simulated function AddScreenBlood( float Amount )
 	local ScreenBlot B;
 
 	n = Clamp(int(3.0 + Amount * 8.0 + FRand()), 3, 10);
+	// (many bodies bursting round the player at once still leave the screen mostly clear)
+	n = Min(n, ScreenBlotsAtOnce - Blots.Length);
 	for ( i = 0; i < n && Blots.Length < MaxBlots; i++ )
 	{
 		B.X = 0.05 + 0.9 * FRand();
@@ -2258,6 +2290,44 @@ simulated function AddScreenBlood( float Amount )
 		B.Alpha = 150 + Rand(90);
 		Blots[Blots.Length] = B;
 	}
+}
+
+// The Void Executioner's blink, on its wielder's view: violet streaks rushing out from the middle, and a violet edge
+simulated function AddVoidWarp()
+{
+	VoidWarpTime = Level.TimeSeconds;
+}
+
+simulated function DrawVoidWarp( Canvas C )
+{
+	local float T, A, S, W;
+
+	T = Level.TimeSeconds - VoidWarpTime;
+	if ( T < 0.0 || T > FMax(WarpLinesTime, WarpEdgeTime) )
+	{
+		VoidWarpTime = 0;
+		return;
+	}
+	if ( T < WarpLinesTime )
+	{
+		A = 1.0 - T / WarpLinesTime;
+		S = 0.9 + 1.1 * (T / WarpLinesTime);
+		W = FMax(C.SizeX, C.SizeY) * 1.15 * S;
+		C.Style = ERenderStyle.STY_Additive;
+		C.SetDrawColor(byte(210.0 * A), byte(120.0 * A), byte(255.0 * A), 255);
+		C.SetPos(0.5 * (C.SizeX - W), 0.5 * (C.SizeY - W));
+		C.DrawTile(Texture'KFWarpLines', W, W, 0, 0, 512, 512);
+	}
+	if ( T < WarpEdgeTime )
+	{
+		A = 1.0 - T / WarpEdgeTime;
+		C.Style = ERenderStyle.STY_Alpha;
+		C.SetDrawColor(255, 255, 255, byte(255.0 * A));
+		C.SetPos(0, 0);
+		C.DrawTile(Texture'KFWarpVignette', C.SizeX, C.SizeY, 0, 0, 256, 256);
+	}
+	C.Style = ERenderStyle.STY_Normal;
+	C.SetDrawColor(255, 255, 255, 255);
 }
 
 simulated function DrawScreenBlood( Canvas C )
@@ -2600,6 +2670,9 @@ simulated function DrawEndGameHUD( Canvas C, bool bVictory )
 defaultproperties
 {
      MaxBlots=14
+     ScreenBlotsAtOnce=8
+     WarpLinesTime=0.350000
+     WarpEdgeTime=0.650000
      ScorePopupDuration=2.5
      PopLife=0.900000
      ScorePopupRiseDistance=45.000000

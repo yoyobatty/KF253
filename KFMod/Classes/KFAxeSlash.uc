@@ -18,6 +18,7 @@ var vector		Start, LastSpot, Across, Up;
 var float		Age;
 var bool		bDone;
 var array<Pawn>	Struck;
+var() class<KFAxeSlashBlade>	BladeClass;
 var KFAxeSlashBlade		Blade;
 var KFAxeSlashTrail		Trails[3];
 var KFAxeSlashWarp		Warp;
@@ -42,7 +43,7 @@ simulated function Dress()
 {
 	local int i;
 
-	Blade = Spawn(class'KFAxeSlashBlade', self,, Location, Rotation);
+	Blade = Spawn(BladeClass, self,, Location, Rotation);
 	if ( Blade != None )
 		Blade.SetBase(self);
 	for ( i = 0; i < ArrayCount(Trails); i++ )
@@ -86,7 +87,7 @@ simulated function Tick( float DT )
 function Sweep( vector A, vector B, float W )
 {
 	local Pawn P;
-	local vector X, D;
+	local vector X, D, Spot;
 	local float L, T, S, H;
 	local int i;
 	local bool bHad;
@@ -118,10 +119,15 @@ function Sweep( vector A, vector B, float W )
 			continue;
 		Struck[Struck.Length] = P;
 		KFMonster(P).NoteSlash(A + X * FClamp(T, 0.0, L), Up, Across, 0.5 * W, X);
+		Spot = P.Location;
 		P.TakeDamage(SlashDamage, Instigator, P.Location - X * 0.8 * P.CollisionRadius - Up * H, X * SlashMomentum,
 			class'DamTypeAxeSlash');
+		Cut(P, Spot);
 	}
 }
+
+// (the server) P has just been struck where it stood at Spot (it may be gone now, blown apart)
+function Cut( Pawn P, vector Spot );
 
 // How far a pawn's cylinder reaches along V
 static function float Extent( Pawn P, vector V )
@@ -194,6 +200,7 @@ simulated function Destroyed()
 
 defaultproperties
 {
+     BladeClass=Class'KFMod.KFAxeSlashBlade'
      StartWidth=170.000000
      EndWidth=270.000000
      GrowTime=0.900000

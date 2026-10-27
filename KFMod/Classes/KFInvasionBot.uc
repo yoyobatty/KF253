@@ -3132,7 +3132,7 @@ function array<class<Pickup> > GetLegalPurchases()
 	for(i=0; i<KFLR.ItemForSale.Length; i++ )
 	{
 		//log("Looping through legal purchase:"@i);
-		if( KFLR.ItemForSale[i]!=none && KFLR.ItemForSale[i]!=class'BFGPickup' && KFLR.ItemForSale[i]!=class'RevolverPickup' && KFLR.ItemForSale[i]!=class'RailgunPickup' && KFLR.ItemForSale[i]!=class'CryoPickup' /*&& CanAfford(KFLR.ItemForSale[i] )*/ )
+		if( KFLR.ItemForSale[i]!=none && KFLR.ItemForSale[i]!=class'BFGPickup' && KFLR.ItemForSale[i]!=class'RevolverPickup' && KFLR.ItemForSale[i]!=class'RailgunPickup' && KFLR.ItemForSale[i]!=class'CryoPickup' && KFLR.ItemForSale[i]!=class'AxeVoidPickup' && KFLR.ItemForSale[i]!=class'GoreCannonPickup' /*&& CanAfford(KFLR.ItemForSale[i] )*/ )
 		{
 			//BuyWeapon = class<KFWeaponPickup>(KFLR.ItemForSale[i]);
 			RetList[RetList.Length] = KFLR.ItemForSale[i];

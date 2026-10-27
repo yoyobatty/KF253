@@ -2,6 +2,26 @@
 // (The one before drew tiles of a sheet whose flames overrun their tiles, so they had straight edges.)
 class KFMonsterFlame extends Emitter;
 
+var KFNearFade	Near;			// (each machine) kept from filling the view up close
+var float		NextNear;
+
+
+// Up close to the player's eyes the flames are smaller and the smoke fainter (KFNearFade)
+simulated function Tick( float DT )
+{
+	local vector At;
+
+	if ( Level.NetMode == NM_DedicatedServer || Level.TimeSeconds < NextNear )
+		return;
+	NextNear = Level.TimeSeconds + 0.1;
+	if ( Near == None )
+		Near = new class'KFNearFade';
+	At = Location;
+	if ( Base != None )
+		At = Base.Location;
+	Near.Apply(self, class'KFNearFade'.static.ViewK(self, At, 70.0, 280.0, 0.35), 4);
+}
+
 defaultproperties
 {
      Begin Object Class=SpriteEmitter Name=BodyFire

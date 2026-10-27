@@ -6,6 +6,11 @@
 //=============================================================================
 class KFGasSpray extends Emitter;
 
+var() float	EyesJetShare, EyesMistShare;	// how solid the jet and the mist are in the holder's own view
+var bool	bShownEyes, bViewSet;
+var float	NextView;
+
+
 #exec OBJ LOAD FILE=..\Textures\AW-2004Particles.utx
 
 var float	LastFeed;
@@ -48,8 +53,32 @@ simulated function Rates( float Jet, float Mist )
 	}
 }
 
+// Seen from its holder's own eyes, fainter (it leaves from just under them)
+simulated function SetView()
+{
+	local PlayerController PC;
+	local bool bEyes;
+
+	NextView = Level.TimeSeconds + 0.25;
+	PC = Level.GetLocalPlayerController();
+	bEyes = PC != None && PC.ViewTarget == Instigator && !PC.bBehindView && !class'KFNearFade'.default.bOff;
+	if ( bEyes == bShownEyes && bViewSet )
+		return;
+	bViewSet = true;
+	bShownEyes = bEyes;
+	Emitters[0].Opacity = default.Emitters[0].Opacity;
+	Emitters[1].Opacity = default.Emitters[1].Opacity;
+	if ( bEyes )
+	{
+		Emitters[0].Opacity *= EyesJetShare;
+		Emitters[1].Opacity *= EyesMistShare;
+	}
+}
+
 simulated function Tick( float DT )
 {
+	if ( Level.TimeSeconds >= NextView && Level.NetMode != NM_DedicatedServer )
+		SetView();
 	if ( bOn && (Instigator == None || Instigator.Health <= 0 || Level.TimeSeconds - LastFeed > 0.25) )
 		TurnOff();
 	if ( Instigator == None )
@@ -95,6 +124,8 @@ simulated function PlaceAtNozzle()
 
 defaultproperties
 {
+     EyesJetShare=0.600000
+     EyesMistShare=0.350000
      JetRate=55.000000
      MistRate=14.000000
      JetSpeed=820.000000

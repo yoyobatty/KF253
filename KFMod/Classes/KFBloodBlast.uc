@@ -22,7 +22,9 @@ var() int	Stains;					// ...how many splashes, at Size 1
 var() float	StainSpeed;				// ...how fast it gets there
 var() float	ScreenReach;			// a player's eye this near, and the blast in front of it, gets blood on the screen
 var() int	MaxBlasts;
-var() float	CloseRange;				// a burst nearer the player's eye than this has less of its cloud and haze				// at most this many at once: past it the small are not made and the large are less
+var() float	GoreShare;				// blood and gib sounds this loud against how they were made (players found a lot of gore drowned out the rest)
+var() float	CloseRange;
+var float	Born;				// a burst nearer the player's eye than this has less of its cloud and haze				// at most this many at once: past it the small are not made and the large are less
 var array<vector>	StainAt, StainNormal;
 var array<float>	StainTime;
 var array<byte>		StainBig;
@@ -84,7 +86,9 @@ simulated function Throw()
 	local vector V, HL, HN;
 	local PlayerController PC;
 	local vector Eye;
+	local KFBloodBlast Other;
 
+	Born = Level.TimeSeconds;
 	// (a burst on top of the player is not drawn as a wall of mist in their face: the blood on the screen does that)
 	PC = Level.GetLocalPlayerController();
 	Near = 100000.0;
@@ -96,6 +100,12 @@ simulated function Throw()
 		Near = VSize(Location - Eye);
 	}
 	CloseK = FClamp(Near / CloseRange, 0.3, 1.0);
+	// (several bursting round the player at once: the mist of each thinner still)
+	if ( Near < 2.0 * CloseRange && PC != None )
+		foreach DynamicActors(class'KFBloodBlast', Other)
+			if ( Other != self && Level.TimeSeconds - Other.Born < 0.3 && VSize(Other.Location - Eye) < 2.0 * CloseRange )
+				CloseK *= 0.6;
+	CloseK = FMax(CloseK, 0.05);
 
 	K = Sqrt(FMax(Size, 0.1));
 	S = Size ** 0.6;
@@ -149,10 +159,10 @@ simulated function Throw()
 		}
 	}
 
-	PlaySound(Sound'PlayerSounds.NewGibs.NewGib1', SLOT_None, FMin(1.2 + Size, 3.0),, 1800, 0.95 - 0.12 * FMin(Size, 2.0));
-	PlaySound(Sound'PlayerSounds.Final.Giblets3', SLOT_None, FMin(1.0 + Size, 2.5),, 1200, 0.8 + 0.2 * FRand());
+	PlaySound(Sound'PlayerSounds.NewGibs.NewGib1', SLOT_None, GoreVol(FMin(1.2 + Size, 3.0)),, GoreRadius(FMin(1.2 + Size, 3.0), 1800), 0.95 - 0.12 * FMin(Size, 2.0));
+	PlaySound(Sound'PlayerSounds.Final.Giblets3', SLOT_None, GoreVol(FMin(1.0 + Size, 2.5)),, GoreRadius(FMin(1.0 + Size, 2.5), 1200), 0.8 + 0.2 * FRand());
 	if ( Size >= 0.6 )
-		PlaySound(Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh', SLOT_None, FMin(1.5 * Size, 2.5),, 1400, 0.55);
+		PlaySound(Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh', SLOT_None, GoreVol(FMin(1.5 * Size, 2.5)),, GoreRadius(FMin(1.5 * Size, 2.5), 1400), 0.55);
 
 	// blood on the screen of the player close in front
 	if ( PC == None || PC.ViewTarget == None || HUDKillingFloor(PC.myHUD) == None )
@@ -162,8 +172,22 @@ simulated function Throw()
 		HUDKillingFloor(PC.myHUD).AddScreenBlood((1.0 - Near / R) * FMin(Size, 1.6));
 }
 
+// A blood or gib sound's volume and radius at GoreShare of the loudness it was made with. The engine holds a sound's gain
+// to 1, so a volume over 1 only kept it at full gain further out: that part becomes radius, and the sound is GoreShare
+// as loud near by and far off (a little less in between). The PlaySound stays where it was, so who hears it is as it was.
+static function float GoreVol( float Volume )
+{
+	return default.GoreShare * FMin(Volume, 1.0);
+}
+
+static function float GoreRadius( float Volume, float Radius )
+{
+	return Radius * FMax(Volume, 1.0);
+}
+
 defaultproperties
 {
+	GoreShare=0.550000
 	Counts(0)=9
 	Counts(1)=12
 	Counts(2)=70

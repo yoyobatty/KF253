@@ -730,10 +730,10 @@ defaultproperties
 	CoreRate=160.000000
 	BodyRate=160.000000
 	LickRate=75.000000
-	EyesLickShare=0.450000
-	EyesSootShare=0.400000
-	EyesLickGlow=0.600000
-	EyesBodyGlow=0.850000
+	EyesLickShare=0.350000
+	EyesSootShare=0.250000
+	EyesLickGlow=0.500000
+	EyesBodyGlow=0.720000
 	SootRate=10.000000
 	DripRate=14.000000
 	IgniteSound=Sound'PatchSounds.PilotLightToggle'

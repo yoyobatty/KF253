@@ -8,6 +8,7 @@
 class KFAxeSlashWarp extends KFBFGLens;
 
 #exec NEW StaticMesh File="..\KFMod254\KFMod\Models\KFAxeSlashWarp.ase" Name="KFAxeSlashWarp"
+#exec TEXTURE IMPORT NAME=KFWarpEdge FILE=..\KFMod254\KFMod\Textures\KFWarpEdge.tga MIPS=OFF ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 
 var KFAxeSlash	Slash;
 var vector		LastSpot, LastRight;
@@ -144,6 +145,9 @@ simulated event RenderTexture( ScriptedTexture Tex )
 
 defaultproperties
 {
+	EdgeMask=Texture'KFWarpEdge'
+	EdgeU=0.370370
+	EdgeV=0.833333
 	FadeTime=0.250000
 	NearFade=60.000000
 	NearFadeOver=140.000000

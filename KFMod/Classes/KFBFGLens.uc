@@ -23,6 +23,7 @@
 class KFBFGLens extends KFWave;
 
 #exec NEW StaticMesh File="..\KFMod254\KFMod\Models\KFBFGLens.ase" Name="KFBFGLens"
+#exec TEXTURE IMPORT NAME=KFLensEdge FILE=..\KFMod254\KFMod\Textures\KFLensEdge.tga MIPS=OFF ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 
 var BFGBall		Ball;
 var() float		Near;				// how far in front of the eye the disc is drawn
@@ -41,6 +42,10 @@ var vector		BurstSpot;
 
 var ConstantColor	Tint;
 var Combiner		Lit;
+var() Texture		EdgeMask;		// fades the picture out toward the disc's rim, where it meets the scene round it
+var() float			EdgeU, EdgeV;	// the model's texture coordinates to the mask's (about its middle)
+var TexMatrix		EdgeCoords;
+var Combiner		EdgeFade;			// the mask and the tint's fade together
 
 const RingUnit = 10.0;				// the model's units to an Einstein radius
 const FarX = 400.0;					// where the model's far point is
@@ -72,6 +77,8 @@ static function KFBFGLens Make( BFGBall B )
 
 simulated function PostBeginPlay()
 {
+	local Matrix M;
+
 	Super.PostBeginPlay();
 	// (looked up by the model's own texture coordinates, not by where each point is)
 	ViewCoords.TexCoordSource = TCS_Stream0;
@@ -91,6 +98,33 @@ simulated function PostBeginPlay()
 	Lit.Modulate4X = false;
 	Blend.Material = Lit;
 	Blend.ZTest = false;
+	// (the picture is never quite the scene round it, a touch lighter and softer: feathered in, no edge shows)
+	if ( EdgeMask != None )
+	{
+		EdgeCoords = TexMatrix(Level.ObjectPool.AllocateObject(class'TexMatrix'));
+		EdgeCoords.Material = EdgeMask;
+		EdgeCoords.TexCoordSource = TCS_Stream0;
+		EdgeCoords.TexCoordCount = TCN_2DCoords;
+		EdgeCoords.TexCoordProjected = false;
+		M.XPlane.X = EdgeU;
+		M.YPlane.Y = EdgeV;
+		M.ZPlane.X = 0.5;
+		M.ZPlane.Y = 0.5;
+		M.WPlane.X = 0.5;
+		M.WPlane.Y = 0.5;
+		M.WPlane.W = 1.0;
+		EdgeCoords.Matrix = M;
+		EdgeFade = Combiner(Level.ObjectPool.AllocateObject(class'Combiner'));
+		EdgeFade.Material1 = EdgeCoords;
+		EdgeFade.Material2 = Tint;
+		EdgeFade.Mask = None;
+		EdgeFade.CombineOperation = CO_Multiply;
+		EdgeFade.AlphaOperation = AO_Multiply;
+		EdgeFade.InvertMask = false;
+		EdgeFade.Modulate2X = false;
+		EdgeFade.Modulate4X = false;
+		Lit.Material2 = EdgeFade;
+	}
 }
 
 // The ball has burst at Spot: the pull surges and goes
@@ -109,6 +143,15 @@ simulated function Destroyed()
 		Blend.Material = None;
 		Lit.Material1 = None;
 		Lit.Material2 = None;
+		if ( EdgeFade != None )
+		{
+			EdgeFade.Material1 = None;
+			EdgeFade.Material2 = None;
+			EdgeCoords.Material = None;
+			Level.ObjectPool.FreeObject(EdgeFade);
+			Level.ObjectPool.FreeObject(EdgeCoords);
+			EdgeFade = None;
+		}
 		Level.ObjectPool.FreeObject(Lit);
 		Level.ObjectPool.FreeObject(Tint);
 		Lit = None;
@@ -286,6 +329,9 @@ simulated event RenderTexture( ScriptedTexture Tex )
 
 defaultproperties
 {
+	EdgeMask=Texture'KFLensEdge'
+	EdgeU=0.062500
+	EdgeV=0.062500
 	TextureSize=1024
 	Near=64.000000
 	Reach=3000.000000

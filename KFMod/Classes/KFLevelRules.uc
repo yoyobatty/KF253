@@ -14,10 +14,9 @@ var() float WaveSpawnPeriod;
 simulated function PostBeginPlay()
 {
 	Super.PostBeginPlay();
-	AddForSale(class'RevolverPickup');
-	AddForSale(class'BFGPickup');
-	AddForSale(class'RailgunPickup');
-	AddForSale(class'CryoPickup');
+	// (the magnum revolver is off the trader until it is reworked)
+	// (the BFG, Gore Cannon, Railgun, Cryo Cannon and Void Executioner are upgrades of the guns they are built on:
+	// KFTraderUpgrades)
 }
 
 simulated function AddForSale( class<Pickup> P )

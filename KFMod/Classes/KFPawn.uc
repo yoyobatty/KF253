@@ -79,7 +79,7 @@ replication
 		bBurnified, QuickHeal;
 
 	reliable if(Role < ROLE_Authority)
-		ServerBuyWeapon,ServerSellWeapon,ServerBuyKevlar,ServerBuyFirstAid,ServerBuyAmmo,ServerSellAmmo,SecondaryItem,TossCash;
+		ServerBuyWeapon,ServerSellWeapon,ServerUpgradeWeapon,ServerBuyKevlar,ServerBuyFirstAid,ServerBuyAmmo,ServerSellAmmo,SecondaryItem,TossCash;
 
     reliable if ( bNetDirty && (Role == Role_Authority) && bNetOwner )
         bMovementDisabled;
@@ -2077,6 +2077,54 @@ function bool PurchaseWeapon( Class<Weapon> WClass, float Price, optional bool b
 	Return True;
 }
 
+// A trader's upgrade of a gun the player owns (KFTraderUpgrades): its own (Variant None) for its price, or a variant
+// built on it, which takes its place with its own starting ammo, for the difference in price. Once a gun.
+function ServerUpgradeWeapon( Class<Weapon> WClass, Class<KFWeapon> Variant )
+{
+	local Inventory I;
+	local KFWeapon W, N;
+	local int Line;
+	local float Price;
+
+	if( PlayerReplicationInfo==None || !CanBuyNow() )
+		Return;
+	Line = Class'KFTraderUpgrades'.Static.Find(WClass, Variant);
+	if( Line<0 )
+		Return;
+	For( I=Inventory; I!=None; I=I.Inventory )
+	{
+		if( I.Class==WClass )
+		{
+			W = KFWeapon(I);
+			break;
+		}
+	}
+	if( W==None || W.bUpgraded || W.bUpgradeBusy )
+		Return;
+	Price = int(float(Class'KFTraderUpgrades'.Static.PriceOf(Line))*GetCostScaling(Level.Game.GameDifficulty));
+	if( PlayerReplicationInfo.Score<Price )
+		Return;
+	if( Variant==None )
+	{
+		W.Upgrade();
+		W.UpgradePaid = Price;
+		PlayerReplicationInfo.Score-=Price;
+		Return;
+	}
+	// (a variant no heavier than the gun it replaces is let through even with too much carried already)
+	if( Variant.Default.Weight>W.Weight && !CanCarry(Variant.Default.Weight-W.Weight) )
+		Return;
+	N = Spawn(Variant);
+	if( N==None )
+		Return;
+	W.Destroyed();
+	W.Destroy();
+	N.UpdateMagCapacity(PlayerReplicationInfo);
+	N.FillToInitialAmmo();
+	N.GiveTo(self);
+	PlayerReplicationInfo.Score-=Price;
+}
+
 simulated function float GetFireSpeedScale()
 {
 	Return 1;
@@ -2099,7 +2147,7 @@ function ServerSellWeapon( Class<Weapon> WClass )
 		{
 			if( KFWeapon(I)==None || KFWeapon(I).bKFNeverThrow )
 				Return;
-			PlayerReplicationInfo.Score+=(Class<KFWeaponPickup>(WClass.Default.PickupClass).Default.Cost*0.75);
+			PlayerReplicationInfo.Score+=(Class<KFWeaponPickup>(WClass.Default.PickupClass).Default.Cost*0.75 + KFWeapon(I).UpgradePaid*0.75);
 			if( Dualies(I)!=None )
 			{
 				J = Spawn(Class'Single');
@@ -2147,7 +2195,9 @@ function ServerBuyKevlar()
         PlayerReplicationInfo.Score -= Cost;
         ShieldStrength = 100;
     }
-    else if ( ShieldStrength > 0 )
+    // (with less cash than that, as much armour as it pays for, from none as well: from none it bought nothing, and the
+    // trader's button did nothing)
+    else
     {
         Cost = class'Vest'.default.ItemCost;
         if ( KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none)
@@ -2175,17 +2225,30 @@ simulated static function int FirstAidCost( float Missing, float MaxHealth, floa
 
 function ServerBuyFirstAid()
 {
-	local int Cost, Missing;
+	local int Cost, Missing, Points;
+	local float PerPoint;
 
 	// (health still on its way from a syringe is not sold again)
 	Missing = int(HealthMax - Health - HealthToGive);
 	if( !CanBuyNow() || Missing<=0 )
 		Return;
 	Cost = FirstAidCost(Missing, HealthMax, Level.Game.GameDifficulty);
+	// (with less cash than that, as much health as it pays for, as armour is sold)
 	if( PlayerReplicationInfo.Score<Cost )
-		Return;
+	{
+		PerPoint = float(FirstAidCost(HealthMax, HealthMax, Level.Game.GameDifficulty)) / HealthMax;
+		Points = int(PlayerReplicationInfo.Score / PerPoint);
+		if( Points<=0 )
+			Return;
+		Missing = Min(Missing, Points);
+		Cost = Min(int(PlayerReplicationInfo.Score), int(float(Missing) * PerPoint + 0.5));
+	}
 	PlayerReplicationInfo.Score-=Cost;
+	// (the kit's healing at once, not over the next seconds as a syringe's: the trader's button stayed lit while it came
+	// in, and did nothing when pressed again. GiveHealth is still called for what it does to burning.)
 	GiveHealth(Missing, HealthMax);
+	Health = Min(Health + Missing, int(HealthMax));
+	HealthToGive = FMax(HealthToGive - Missing, 0);
 }
 
 function ServerBuyAmmo( Class<Ammunition> AClass, bool bOnlyClip )
