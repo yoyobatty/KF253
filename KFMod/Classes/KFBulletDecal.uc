@@ -73,7 +73,7 @@ defaultproperties
     MaterialBlendingOp=PB_none
     MaxTraceDistance=60
 	bProjectBSP=true
-	bProjectTerrain=true
+	bProjectTerrain=false	// (on terrain a hole is drawn as a dark square cut along the triangles)
 	bProjectStaticMesh=true
     bNoDelete=false
 	//bHidden=false

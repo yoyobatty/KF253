@@ -10,11 +10,26 @@ const E_SPRAY	= 1;
 const E_BILLOW	= 2;
 const E_BSOOT	= 3;
 
+var bool	bHot;			// an upgraded flamethrower's (SetHot)
+
 var float	SplashRate, SprayRate, BillowRate, BillowSootRate;
 var byte	Mode;	// 0 nothing, 1 splash, 2 billow
 var float	Scale;	// the splash's size: smaller where the stream strikes close in front of the shooter's own eyes
 
 // (an emitter whose particles have all died with no rate is no longer ticked: woken here)
+// An upgraded flamethrower's: blue (KFFlameStream.SetHot), the soot as it is
+simulated function SetHot( bool bHotter )
+{
+	local int i;
+
+	if ( bHot == bHotter )
+		return;
+	bHot = bHotter;
+	for ( i = 0; i < Emitters.Length; i++ )
+		if ( i != E_BSOOT )
+			class'KFFlameStream'.static.BlueFlame(Emitters[i], default.Emitters[i], bHot);
+}
+
 simulated function Rate( int i, float PPS )
 {
 	Emitters[i].ParticlesPerSecond = PPS;

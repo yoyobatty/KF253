@@ -47,7 +47,8 @@ simulated function PostNetBeginPlay()
 {
 	local VoiceChatReplicationInfo VRI;
 
-	VoiceType = class<VoicePack>(DynamicLoadObject(VoiceTypeName,class'Class'));
+	if ( VoiceTypeName != "" )	// (a network client often gets here before the name does)
+		VoiceType = class<VoicePack>(DynamicLoadObject(VoiceTypeName,class'Class'));
 
 	if ( Level.GRI != None )
 		Level.GRI.AddPRI(self);

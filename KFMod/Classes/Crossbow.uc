@@ -177,6 +177,7 @@ simulated function DrawRangeFinder(Canvas Canvas)
 
 defaultproperties
 {
+     Element=6
      ZoomMat=FinalBlend'KillingFloorWeapons.Xbow.CommandoCrossFinalBlend'
      ScopeCrossX=260.000000
      ScopeCrossY=279.600000
@@ -223,4 +224,7 @@ defaultproperties
      LightRadius=0.000000
      Mesh=SkeletalMesh'KFWeaponModels.Xbow'
      DrawScale=0.900000
+     UpgradeName="Stinger"
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Xbow.XbowShineShader'
 }

@@ -10,6 +10,26 @@ var         array< class<Pickup> >      ItemForSale;
 
 var() float WaveSpawnPeriod;
 
+// (each machine: the list is not sent) The trader also sells what came after the maps' lists were made
+simulated function PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	AddForSale(class'RevolverPickup');
+	AddForSale(class'BFGPickup');
+	AddForSale(class'RailgunPickup');
+	AddForSale(class'CryoPickup');
+}
+
+simulated function AddForSale( class<Pickup> P )
+{
+	local int i;
+
+	for ( i = 0; i < ItemForSale.Length; i++ )
+		if ( ItemForSale[i] == P )
+			return;
+	ItemForSale[ItemForSale.Length] = P;
+}
+
 defaultproperties
 {
      ItemForSale(0)=Class'KFMod.ShotgunPickup'

@@ -9,6 +9,13 @@ var float FlightStart;		// when it left the nozzle
 var() float FlightTime;		// how long it flies before it burns out; the perk's ExtraRange adds a share of it
 var bool bAirborne;			// it ends in the air (burnt out, or struck a body): its fuel falls (KFFlameFuelDrop)
 var Actor LandBase;			// what it struck, when that can move
+var bool bHot;				// from an upgraded flamethrower: flies further, burns blue, its fires spread on any floor
+
+replication
+{
+	reliable if ( bNetInitial && Role == ROLE_Authority )
+		bHot;
+}
 
 simulated function PostBeginPlay()
 {
@@ -61,12 +68,17 @@ simulated function Landed( vector HitNormal )
 	Explode(Location,HitNormal);
 }
 
-// How long a tendril fired by P flies
-static function float FlightFor(Pawn P)
+// How long a tendril fired by P flies (bHotter: from an upgraded flamethrower)
+static function float FlightFor(Pawn P, optional bool bHotter)
 {
+	local float T;
+
+	T = default.FlightTime;
 	if ( KFPawn(P) != None )
-		return default.FlightTime * (1.0 + KFPawn(P).GetVeteran().Static.ExtraRange());
-	return default.FlightTime;
+		T *= 1.0 + KFPawn(P).GetVeteran().Static.ExtraRange();
+	if ( bHotter )
+		T *= 1.3;
+	return T;
 }
 
 // Its fuel burns where it struck (FlameGroundFire.Lay), or falls from the air
@@ -79,9 +91,9 @@ simulated function Explode(vector HitLocation,vector HitNormal)
     if ( !PhysicsVolume.bWaterVolume && (Level.NetMode != NM_Client || EffectIsRelevant(Location,false)) )
     {
         if ( bAirborne )
-            class'KFFlameFuelDrop'.static.Drop(self, Location, Velocity * 0.3, class'FlameGroundFire'.default.DropFuel);
+            class'KFFlameFuelDrop'.static.Drop(self, Location, Velocity * 0.3, class'FlameGroundFire'.default.DropFuel,,, bHot);
         else
-            class'FlameGroundFire'.static.Lay(self, HitLocation, HitNormal, LandBase);
+            class'FlameGroundFire'.static.Lay(self, HitLocation, HitNormal, LandBase,, bHot);
     }
     SetCollisionSize(0.0, 0.0);
     Destroy();
@@ -142,7 +154,7 @@ simulated function Timer()
 	Velocity =  Default.Speed * Normal(Velocity);
 
 	// Burnt out after its flight time (the last step shortened to land on it: whole 0.2 s steps made the Firebug's +50% a +33%)
-	Left = FlightFor(Instigator) - (Level.TimeSeconds - FlightStart);
+	Left = FlightFor(Instigator, bHot) - (Level.TimeSeconds - FlightStart);
 	if ( Left < 0.01 )
 	{
 		bAirborne = true;

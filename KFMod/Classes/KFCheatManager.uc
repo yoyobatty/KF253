@@ -112,6 +112,8 @@ exec function Arsenal()
     Pawn.GiveWeapon("KFmod.Deagle");
     Pawn.GiveWeapon("KFmod.Dualies");
     Pawn.GiveWeapon("KFmod.Single");
+    Pawn.GiveWeapon("KFmod.MachinePistol");
+    Pawn.GiveWeapon("KFmod.DualMachinePistols");
     Pawn.GiveWeapon("KFmod.Axe");
     Pawn.GiveWeapon("KFmod.Bat");
     Pawn.GiveWeapon("KFMod.Flamethrower");
@@ -119,6 +121,10 @@ exec function Arsenal()
     Pawn.GiveWeapon("KFmod.Frag");
     Pawn.GiveWeapon("KFmod.Shotgun");
     Pawn.GiveWeapon("KFmod.BoomStick");
+    Pawn.GiveWeapon("KFmod.Revolver");
+    Pawn.GiveWeapon("KFmod.BFG");
+    Pawn.GiveWeapon("KFmod.Railgun");
+    Pawn.GiveWeapon("KFmod.CryoCannon");
 
     for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
     {
@@ -128,6 +134,72 @@ exec function Arsenal()
 
     ReportCheat("Arsenal");
     ClientMessage("All KF Weapons.");
+}
+
+// The BFG 9000, loaded
+exec function BFG()
+{
+    local Inventory Inv;
+
+    if ( !areCheatsEnabled() || Pawn == None )
+        return;
+    Pawn.GiveWeapon("KFmod.BFG");
+    for ( Inv = Pawn.Inventory; Inv != None; Inv = Inv.Inventory )
+        if ( BFG(Inv) != None )
+            BFG(Inv).MaxOutAmmo();
+    ReportCheat("BFG");
+    ClientMessage("BFG 9000.");
+}
+
+// The weapon in hand upgraded as at a Zombies upgrade machine, free (KFWeapon.Upgrade)
+exec function Upgrade()
+{
+    local KFWeapon W;
+
+    if (!areCheatsEnabled()) return;
+    if( (Pawn == None) )
+        return;
+
+    W = KFWeapon(Pawn.Weapon);
+    if ( W == None || W.UpgradeName == "" )
+    {
+        ClientMessage("This weapon can't be upgraded.");
+        return;
+    }
+    if ( W.bUpgraded )
+    {
+        ClientMessage(W.UpgradeName @ "is upgraded already.");
+        return;
+    }
+    W.Upgrade();
+
+    ReportCheat("Upgrade");
+    ClientMessage("Upgraded to" @ W.UpgradeName $ "!");
+}
+
+// Every weapon carried that has an upgrade, upgraded
+exec function UpgradeAll()
+{
+    local Inventory Inv;
+    local KFWeapon W;
+    local int Count;
+
+    if (!areCheatsEnabled()) return;
+    if( (Pawn == None) )
+        return;
+
+    for( Inv=Pawn.Inventory; Inv!=None; Inv=Inv.Inventory )
+    {
+        W = KFWeapon(Inv);
+        if ( W != None && !W.bUpgraded && W.UpgradeName != "" )
+        {
+            W.Upgrade();
+            Count++;
+        }
+    }
+
+    ReportCheat("UpgradeAll");
+    ClientMessage("Upgraded" @ Count @ "weapons.");
 }
 
 exec function Backup()
@@ -969,6 +1041,49 @@ exec function Nuke(optional float Radius)
     ClientMessage("Nuked zeds in radius "$int(Radius)$"uu: "$Killed);
 }
 
+// A power-up floating in front of you: MaxAmmo, InstaKill, DoublePoints, Nuke, Carpenter (a random one when left out)
+exec function PowerUp(optional string Which)
+{
+	local class<KFZombiesPowerUp> U;
+
+	if (!AreCheatsEnabled() || Pawn == None) return;
+	if (Which != "")
+		U = class<KFZombiesPowerUp>(DynamicLoadObject("KFMod.KFPowerUp"$Which, class'Class'));
+	if (U == None && KFEndlessGameType(Level.Game) != None && KFEndlessGameType(Level.Game).PowerUpClasses.Length > 0)
+		U = KFEndlessGameType(Level.Game).PowerUpClasses[Rand(KFEndlessGameType(Level.Game).PowerUpClasses.Length)];
+	if (U == None)
+		U = class'KFPowerUpMaxAmmo';
+	Spawn(U,,, Pawn.Location + 200 * vector(Rotation) * vect(1,1,0));
+	ReportCheat("PowerUp");
+}
+
+// The specimen nearest your aim glows and carries a power-up (Endless)
+exec function LootZed()
+{
+	local KFMonster M, Best;
+	local float D, BestD;
+
+	if (!AreCheatsEnabled() || Pawn == None || KFEndlessGameType(Level.Game) == None) return;
+	foreach DynamicActors(class'KFMonster', M)
+	{
+		if (M.Health <= 0 || M.bBoss)
+			continue;
+		D = VSize(M.Location - Pawn.Location) * (2.0 - (Normal(M.Location - Pawn.Location) dot vector(Rotation)));
+		if (Best == None || D < BestD)
+		{
+			Best = M;
+			BestD = D;
+		}
+	}
+	if (Best == None) return;
+	if (KFEndlessGameType(Level.Game).LootZed != None)
+		KFEndlessGameType(Level.Game).LootZed.bLootCarrier = false;
+	KFEndlessGameType(Level.Game).LootZed = Best;
+	KFEndlessGameType(Level.Game).LootAt = 0;
+	Best.bLootCarrier = true;
+	ReportCheat("LootZed");
+}
+
 exec function AllAmmo()
 {
 	local Inventory Inv;
@@ -1143,43 +1258,48 @@ defaultproperties
      HelpLines(5)="You|AllAmmo|full ammunition for every weapon you carry"
      HelpLines(6)="You|NadeFull|full grenades"
      HelpLines(7)="You|Arsenal|every weapon, full"
-     HelpLines(8)="You|SuperMan|faster, higher jumps, invisible, more damage"
-     HelpLines(9)="Everyone|GodAll|every player cannot be hurt (again to stop)"
-     HelpLines(10)="Everyone|HealAll|every player at full health"
-     HelpLines(11)="Everyone|SetHealthAll N|every player's health set to N"
-     HelpLines(12)="Everyone|VestAll|every player in full armour"
-     HelpLines(13)="Everyone|CashAll N|N dosh for every player (500 when left out)"
-     HelpLines(14)="Everyone|AllAmmoAll|full ammunition for every player (AllAmmoAll 1: beyond full)"
-     HelpLines(15)="Everyone|NadeFullAll|full grenades for every player"
-     HelpLines(16)="Everyone|SuperManAll|SuperMan for every player"
-     HelpLines(17)="Specimens|Summon Class|one of that class in front of you (Summon KFChar.ZombieScrake)"
-     HelpLines(18)="Specimens|Summon2 Class N|N of that class round you"
-     HelpLines(19)="Specimens|Horde|one random specimen"
-     HelpLines(20)="Specimens|Horde2 N|N random specimens round you (16 when left out)"
-     HelpLines(21)="Specimens|MopUp|every specimen dies"
-     HelpLines(22)="Specimens|Nuke R|every specimen within R units dies (all of them when left out)"
-     HelpLines(23)="Specimens|Backup|a friendly soldier"
-     HelpLines(24)="Specimens|ViewZombie|watch the specimens one after another (again for the next; ViewSelf to stop)"
-     HelpLines(25)="Waves|StartWave|the next wave in 5 seconds"
-     HelpLines(26)="Waves|EndWave|the wave ends, every specimen dies"
-     HelpLines(27)="Waves|ExtraTime S|S more seconds of trader time (10 when left out)"
-     HelpLines(28)="Waves|SetWave N|the next wave is wave N (between waves)"
-     HelpLines(29)="Waves|ZedsLeft N|only N more specimens this wave"
-     HelpLines(30)="Waves|ZedCap N|at most N specimens at once for the rest of the wave"
-     HelpLines(31)="Waves|PauseSpawns|spawning stops (again to go on)"
-     HelpLines(32)="Waves|WaveInfo|the wave, specimens alive and to come, holdout settings"
-     HelpLines(33)="Endless|Holdout|the next wave is a holdout (in 5 seconds between waves)"
-     HelpLines(34)="Endless|NextWave Kind|the next wave's kind: normal, siren, shade, boss or holdout"
-     HelpLines(35)="Endless|HoldoutTime S|this holdout spawns for S more seconds; between waves, holdouts last S"
-     HelpLines(36)="Endless|HoldoutHealth Share|holdout specimens' health, as a share of a normal one's (0.5)"
-     HelpLines(37)="Endless|EndHoldout|the holdout stops spawning (kill the rest to end it)"
-     HelpLines(38)="Endless|HordeNow|a horde now, in a running holdout"
-     HelpLines(39)="Endless|RiotZed Kind|holdout rows of one kind (clot, crawler, ...) or of the wave's mix (mix)"
-     HelpLines(40)="Endless|RiotRows N|holdout rows N wide (1 to 8)"
-     HelpLines(41)="Endless|RiotSources N|holdouts come from N places (1 to 4)"
-     HelpLines(42)="Endless|Rush X|holdout rows rush in: on, off, a speed, or alone to switch"
-     HelpLines(43)="Endless|Crowd Kind|holdouts bring one dense crowd (clot when left out)"
-     HelpLines(44)="Endless|Pace Seen Hidden|holdout specimens' speed in sight and out of it"
-     HelpLines(45)="Endless|RiotReset|holdout settings back to normal"
-     HelpLines(46)="Other|ShowNav|the path network drawn (HideNav to clear)"
+     HelpLines(8)="You|Upgrade|the weapon in your hands upgraded as at the Zombies upgrade machine, free"
+     HelpLines(9)="You|UpgradeAll|every weapon you carry upgraded"
+     HelpLines(10)="You|SuperMan|faster, higher jumps, invisible, more damage"
+     HelpLines(11)="Everyone|GodAll|every player cannot be hurt (again to stop)"
+     HelpLines(12)="Everyone|HealAll|every player at full health"
+     HelpLines(13)="Everyone|SetHealthAll N|every player's health set to N"
+     HelpLines(14)="Everyone|VestAll|every player in full armour"
+     HelpLines(15)="Everyone|CashAll N|N dosh for every player (500 when left out)"
+     HelpLines(16)="Everyone|AllAmmoAll|full ammunition for every player (AllAmmoAll 1: beyond full)"
+     HelpLines(17)="Everyone|NadeFullAll|full grenades for every player"
+     HelpLines(18)="Everyone|SuperManAll|SuperMan for every player"
+     HelpLines(19)="Specimens|Summon Class|one of that class in front of you (Summon KFChar.ZombieScrake)"
+     HelpLines(20)="Specimens|Summon2 Class N|N of that class round you"
+     HelpLines(21)="Specimens|Horde|one random specimen"
+     HelpLines(22)="Specimens|Horde2 N|N random specimens round you (16 when left out)"
+     HelpLines(23)="Specimens|MopUp|every specimen dies"
+     HelpLines(24)="Specimens|Nuke R|every specimen within R units dies (all of them when left out)"
+     HelpLines(25)="Specimens|Backup|a friendly soldier"
+     HelpLines(26)="Specimens|ViewZombie|watch the specimens one after another (again for the next; ViewSelf to stop)"
+     HelpLines(27)="Waves|StartWave|the next wave in 5 seconds"
+     HelpLines(28)="Waves|EndWave|the wave ends, every specimen dies"
+     HelpLines(29)="Waves|ExtraTime S|S more seconds of trader time (10 when left out)"
+     HelpLines(30)="Waves|SetWave N|the next wave is wave N (between waves)"
+     HelpLines(31)="Waves|ZedsLeft N|only N more specimens this wave"
+     HelpLines(32)="Waves|ZedCap N|at most N specimens at once for the rest of the wave"
+     HelpLines(33)="Waves|PauseSpawns|spawning stops (again to go on)"
+     HelpLines(34)="Waves|WaveInfo|the wave, specimens alive and to come, holdout settings"
+     HelpLines(35)="Endless|Holdout|the next wave is a holdout (in 5 seconds between waves)"
+     HelpLines(36)="Endless|NextWave Kind|the next wave's kind: normal, siren, shade, boss or holdout"
+     HelpLines(37)="Endless|HoldoutTime S|this holdout spawns for S more seconds; between waves, holdouts last S"
+     HelpLines(38)="Endless|HoldoutHealth Share|holdout specimens' health, as a share of a normal one's (0.5)"
+     HelpLines(39)="Endless|EndHoldout|the holdout stops spawning (kill the rest to end it)"
+     HelpLines(40)="Endless|HordeNow|a horde now, in a running holdout"
+     HelpLines(41)="Endless|RiotZed Kind|holdout rows of one kind (clot, crawler, ...) or of the wave's mix (mix)"
+     HelpLines(42)="Endless|RiotRows N|holdout rows N wide (1 to 8)"
+     HelpLines(43)="Endless|RiotSources N|holdouts come from N places (1 to 4)"
+     HelpLines(44)="Endless|Rush X|holdout rows rush in: on, off, a speed, or alone to switch"
+     HelpLines(45)="Endless|Crowd Kind|holdouts bring one dense crowd (clot when left out)"
+     HelpLines(46)="Endless|Pace Seen Hidden|holdout specimens' speed in sight and out of it"
+     HelpLines(47)="Endless|RiotReset|holdout settings back to normal"
+     HelpLines(48)="Other|ShowNav|the path network drawn (HideNav to clear)"
+     HelpLines(49)="Endless|PowerUp Kind|a power-up in front of you: MaxAmmo, InstaKill, DoublePoints, Nuke (random when left out)"
+     HelpLines(50)="Endless|LootZed|the specimen nearest your aim glows and carries a power-up"
+     HelpLines(51)="Weapons|BFG|the BFG 9000 prototype, loaded"
 }

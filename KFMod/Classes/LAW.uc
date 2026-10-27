@@ -89,6 +89,13 @@ simulated function bool CanZoomNow()
 
 defaultproperties
 {
+	MeshMats(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	MeshMats(2)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(3)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	MeshMats(5)=Shader'KillingFloorWeapons.LAW.LAWScope'
+     Element=1
+	FarKind(0)=FAR_Launch
 	ClipCount=1
 	ReloadRate=3.000000
 	bLoadsWithFire=True
@@ -125,4 +132,9 @@ defaultproperties
 	DrawScale=0.900000
 	AmbientGlow=2
 	bModeZeroCanDryFire=False
+     UpgradeName="Hellfire"
+     SheenSlots(0)=4
+     SheenMats(0)=Shader'KillingFloorWeapons.LAW.LawShineShader'
+     SheenSlots(1)=6
+     SheenMats(1)=Texture'KillingFloorWeapons.LAW.RocketSkin'
 }

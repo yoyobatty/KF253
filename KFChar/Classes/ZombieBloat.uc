@@ -202,6 +202,9 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	if( (Health - Damage) <= 0 && BloatJet == None )
 	{
 		BileBomb();
+		// one alight goes up: its bile bursts out burning (the fire grid)
+		if ( bBurnified || class<DamTypeFlamethrower>(damageType) != None || class<Burned>(damageType) != None )
+			BurningBile(instigatedBy);
 	}
 
   Super.TakeDamage(Damage,instigatedBy,hitlocation,momentum,damageType);
@@ -209,6 +212,24 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 
 function TakeBileDamage()
 {
+}
+
+// A burning Bloat's bile bursts out burning: fuel thrown about it and a cloud of vapour, set off at once
+function BurningBile( Pawn Burner )
+{
+	local int i;
+	local vector Dir, P;
+
+	for ( i = 0; i < 7; i++ )
+	{
+		Dir = VRand();
+		Dir.Z = 0;
+		P = Location + Normal(Dir) * (40 + 140 * FRand());
+		if ( FastTrace(P, Location) )
+			class'KFFireGrid'.static.AddFuel(self, P, 0.6 + 0.5 * FRand(), Burner, CollisionHeight + 140);
+	}
+	class'KFFireGrid'.static.AddGas(self, Location, 2.4, Burner);
+	class'KFFireGrid'.static.Heat(self, Location, 260, 3.0);
 }
 
 defaultproperties

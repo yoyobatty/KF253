@@ -5,6 +5,9 @@ class KFBloodBurst extends KFBloodPuffHeavy;
 
 defaultproperties
 {
+	bFXDrip=False
+	bFXAlong=True
+	FXSize=1.300000
      ExtraSplats=4
      SplatRange=650.000000
      SplatSpread=0.350000
@@ -12,8 +15,8 @@ defaultproperties
      bBigExtra=True
      bAlongSelf=True
      BloodDecalClass=Class'KFMod.KFBloodSplatterBig'
-     mStartParticles=18
-     mMaxParticles=18
+     mStartParticles=6
+     mMaxParticles=6
      mLifeRange(0)=0.700000
      mLifeRange(1)=1.100000
      mDirDev=(X=0.300000,Y=0.300000,Z=0.300000)

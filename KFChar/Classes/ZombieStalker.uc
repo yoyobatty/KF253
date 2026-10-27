@@ -93,6 +93,7 @@ simulated function CloakStalker()
 			Return;
 		Skins[0] = Shader 'KFCharacters.StalkerHairShader';
 		Skins[1] = Shader'KFCharacters.CloakShader';
+		HideStumps(true);
 
 		// Invisible - no shadow
 		if(PlayerShadow != none)
@@ -120,6 +121,7 @@ simulated function UnCloakStalker()
 			Return;
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
 		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
+		HideStumps(false);
 
 		if (PlayerShadow != none)
 			PlayerShadow.bShadowActive = true;
@@ -150,6 +152,7 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 		bShownHeadless = true;
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
 		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
+		HideStumps(false);
 	}
 	Super.SeverHead(bThrow, Dir, Spread, DamageType);
 }
@@ -165,6 +168,7 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 		Skins[0] = Shader'KFCharacters.Zombie4Shader';
 		Skins[1] = FinalBlend'KFCharacters.StalkerHairFB';
 	}
+	HideStumps(false);
 }
 
 // Give her the ability to spring.

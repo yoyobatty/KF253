@@ -1,0 +1,1 @@
+class BullpupPickupSP extends BullpupPickup;

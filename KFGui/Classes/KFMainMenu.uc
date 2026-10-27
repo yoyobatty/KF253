@@ -45,7 +45,7 @@ var automated   GUIImage        i_UT2Logo,
 
 var automated   GUIButton   b_SinglePlayer, b_MultiPlayer, b_Host,
                             b_InstantAction, b_ModsAndDemo,  b_Settings, b_Quit,
-                            b_SoloPlay;
+                            b_SoloPlay, b_Campaign;
 
 
 
@@ -253,6 +253,10 @@ function MoveOn()
             Profile("SoloPlay");
             Controller.OpenMenu("KFGUI.KFGamePageSP");
             Profile("SoloPlay");
+            return;
+
+        case b_Campaign:
+            Controller.OpenMenu("KFGUI.KFCampaignPage");
             return;
 
         case b_InstantAction:
@@ -606,6 +610,26 @@ defaultproperties
          OnKeyEvent=SoloPlayButton.InternalOnKeyEvent
      End Object
      b_SoloPlay=GUIButton'KFGui.KFMainMenu.SoloPlayButton'
+
+     // (hidden until the campaign ships: put it back in the row, between Solo Play and Credits, when it does)
+     Begin Object Class=GUIButton Name=CampaignButton
+         CaptionEffectStyleName="TextButtonEffect"
+         Caption="Campaign"
+         bUseCaptionHeight=True
+         StyleName="ListSelection"
+         Hint="KFMod 1.0's single-player story"
+         WinTop=0.470000
+         WinLeft=0.464500
+         WinWidth=0.095000
+         WinHeight=0.075000
+         TabOrder=7
+         bVisible=False
+         bAcceptsInput=False
+         bFocusOnWatch=True
+         OnClick=KFMainMenu.ButtonClick
+         OnKeyEvent=CampaignButton.InternalOnKeyEvent
+     End Object
+     b_Campaign=GUIButton'KFGui.KFMainMenu.CampaignButton'
 
      Begin Object Class=GUIButton Name=ModsAndDemosButton
          CaptionEffectStyleName="TextButtonEffect"

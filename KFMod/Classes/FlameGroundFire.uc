@@ -25,6 +25,16 @@ var int		Generation;		// how many times fire spread to get here (wood, grass)
 var float	NextCreep;
 var() float	FlameLift;		// its flames rise from this far off the surface, at size 1 (lower, the floor cut them off)
 var() class<Projector>	ScorchClass;
+var bool	bHot;			// an upgraded flamethrower's fire: blue, and it spreads on any floor
+var() Texture	HotFlames;
+var() Texture	HotEmbers;
+
+replication
+{
+	// (only the fires the server spreads are sent: FlameCreepFire)
+	reliable if ( bNetInitial && Role == ROLE_Authority )
+		bHot;
+}
 
 static function byte FaceOf( vector Normal )
 {
@@ -37,7 +47,7 @@ static function byte FaceOf( vector Normal )
 
 // Burning fuel comes to rest at Spot on a surface facing Normal (on Base, when that can move): it feeds the fire there,
 // or starts one with Start fuel (0: the usual for that surface). Each machine does this for itself.
-static function Lay( Actor Spawner, vector Spot, vector Normal, Actor Base, optional float Start )
+static function Lay( Actor Spawner, vector Spot, vector Normal, Actor Base, optional float Start, optional bool bHotFuel )
 {
 	local FlameGroundFire F, Best;
 	local float D, BestD;
@@ -58,11 +68,15 @@ static function Lay( Actor Spawner, vector Spot, vector Normal, Actor Base, opti
 	if ( Best != None )
 	{
 		Best.AddFuel(default.FeedFuel);
+		if ( bHotFuel && !Best.bHot )
+			Best.MakeHot();
 		return;
 	}
 	F = Spawner.Spawn(class'FlameGroundFire', Spawner.Instigator,, Spot + Normal * 2, rotator(Normal));
 	if ( F != None && !F.bDeleteMe )
 	{
+		if ( bHotFuel )
+			F.MakeHot();
 		if ( Start > 0 )
 			F.Fuel = FMin(Start, F.MostFuel());
 		if ( Base != None )
@@ -237,7 +251,7 @@ simulated function Timer()
 		class'KFMonster'.static.IgniteBodiesNear(self, DamageRadius, Location);
 		return;
 	}
-	if ( Face == 0 && Generation < 2 && Fuel > 1.2 && (Surface == 4 || Surface == 5) && Level.TimeSeconds >= NextCreep )
+	if ( Face == 0 && Generation < 2 && Fuel > 1.2 && (Surface == 4 || Surface == 5 || bHot) && Level.TimeSeconds >= NextCreep )
 	{
 		NextCreep = Level.TimeSeconds + 0.8 + 0.6 * FRand();
 		if ( FRand() < 0.5 )
@@ -270,7 +284,7 @@ function Creep()
 		S = A.SurfaceType;
 	else if ( Mat != None )
 		S = Mat.SurfaceType;
-	if ( S != 4 && S != 5 )	// wood, grass
+	if ( S != 4 && S != 5 && !bHot )	// wood, grass
 		return;
 	foreach RadiusActors(class'FlameGroundFire', F, 150, HL)
 		if ( !F.bDyingDown )
@@ -282,7 +296,46 @@ function Creep()
 		}
 	F = Spawn(class'FlameCreepFire', Instigator,, HL + HN * 2, rotator(HN));
 	if ( F != None )
+	{
 		F.Generation = Generation + 1;
+		if ( bHot )
+			F.MakeHot();
+	}
+}
+
+simulated function PostNetBeginPlay()
+{
+	Super.PostNetBeginPlay();
+	if ( bHot && Role < ROLE_Authority )
+		ShowHot();
+}
+
+// Fed by an upgraded flamethrower's fuel
+simulated function MakeHot()
+{
+	bHot = true;
+	ShowHot();
+}
+
+// Blue flames: the grey flame sheet coloured, blue embers, a blue light
+simulated function ShowHot()
+{
+	if ( Level.NetMode == NM_DedicatedServer )
+		return;
+	Emitters[0].Texture = HotFlames;
+	Emitters[0].ColorScale[0].Color = class'Canvas'.static.MakeColor(70, 110, 200);
+	Emitters[0].ColorScale[1].Color = class'Canvas'.static.MakeColor(140, 185, 255);
+	Emitters[0].ColorScale[2].Color = class'Canvas'.static.MakeColor(65, 115, 240);
+	Emitters[0].ColorScale[3].Color = class'Canvas'.static.MakeColor(15, 30, 120);
+	Emitters[0].ColorMultiplierRange.X.Min = 0.85;
+	Emitters[0].ColorMultiplierRange.X.Max = 1.0;
+	Emitters[0].ColorMultiplierRange.Y.Min = 0.9;
+	Emitters[0].ColorMultiplierRange.Y.Max = 1.0;
+	Emitters[0].ColorMultiplierRange.Z.Min = 1.0;
+	Emitters[0].ColorMultiplierRange.Z.Max = 1.0;
+	Emitters[2].Texture = HotEmbers;
+	LightHue = 160;
+	LightSaturation = 90;
 }
 
 defaultproperties
@@ -405,4 +458,6 @@ defaultproperties
 		DetailMode=DM_High
 	End Object
 	Emitters(2)=SpriteEmitter'KFMod.FlameGroundFire.GroundFireEmbers'
+	HotFlames=Texture'EmitterTextures.MultiFrame.LargeFlames-grey'
+	HotEmbers=Texture'EmitterTextures.Flares.EFlareB'
 }

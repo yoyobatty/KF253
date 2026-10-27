@@ -141,6 +141,7 @@ var float LastStatsSaveTime;
 var() globalconfig array<string> VeterancySkills,AvailableChars;
 var array< Class<KFVeterancyTypes> > LoadedSkills;
 var string NextBotName;   // the lobby's pick for the bot about to be added
+var KFFireGrid FireGrid;                    // fire as SS13 has it: fuel, vapour and heat on the floor (KFFireGrid.Get)
 var KFSwarm Swarm;                         // how the specimens of a wave work as a crowd; None when switched off
 var() globalconfig float SwarmStrength;    // 0 off, 1 full
 var() globalconfig bool bPerksEnabled;
@@ -740,6 +741,7 @@ function ScoreKill(Controller Killer, Controller Other)
 	{
 		KillScore = (LastKilledMonsterClass.Default.ScoringValue * 5 + Rand(LastKilledMonsterClass.Default.ScoringValue * 2));
 		KillScore*=Clamp((GameDifficulty-1)/5.f+1,0.5,3);
+		KillScore*=KillCashScale();
 		KillScore = Max(1,int(KillScore));
 		Killer.PlayerReplicationInfo.Kills++;
 		Killer.PlayerReplicationInfo.Score += KillScore;
@@ -755,6 +757,12 @@ function ScoreKill(Controller Killer, Controller Other)
 }
 
 function SetupWaveBot(Inventory BotsInv);
+
+// What a kill's cash is multiplied by just now (Endless: Double Dosh)
+function float KillCashScale()
+{
+	return 1.0;
+}
 
 /* Spawn and initialize a bot
 */

@@ -5,6 +5,7 @@ class Axe extends KFMeleeGun;
 
 defaultproperties
 {
+     Element=1
      MeleeHitSounds(0)=Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh'
      ChopSlowRate=0.200000
      BloodyMaterial=Shader'KillingFloorWeapons.Axe.AxeShaderBloody'
@@ -12,7 +13,7 @@ defaultproperties
      bSpeedMeUp=True
      Weight=5.000000
      FireModeClass(0)=Class'KFMod.AxeFire'
-     FireModeClass(1)=Class'KFMod.NoFire'
+     FireModeClass(1)=Class'KFMod.AxeSlashFire'
      SelectAnimRate=1.000000
      BringUpTime=0.800000
      SelectSound=Sound'PatchSounds.pickupm2-3'
@@ -32,4 +33,7 @@ defaultproperties
      Skins(0)=Shader'KillingFloorWeapons.Axe.AxeShineShader'
      Skins(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
      Skins(2)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+     UpgradeName="Executioner"
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Axe.AxeShineShader'
 }

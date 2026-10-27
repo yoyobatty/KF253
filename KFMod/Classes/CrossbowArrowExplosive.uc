@@ -1,4 +1,5 @@
-class CrossbowArrowExplosive extends CrossbowArrow;
+class CrossbowArrowExplosive extends CrossbowArrow
+	DependsOn(KFFarSound);
 
 var() float DelayExplode;
 var() float DamageExplode;
@@ -27,7 +28,9 @@ var() float  OffsetTime;        // how much time to offset view
     local PlayerController  LocalPlayer;
 
 
-    PlaySound(sound'KFWeaponSound.Bang1',,100.5*TransientSoundVolume);
+    class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.Bang1', 100.5*TransientSoundVolume);
+    if ( Role == ROLE_Authority )
+        class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Grenade);
     if ( EffectIsRelevant(Location,false) )
     {
         Spawn(class'KFMiniExplosion',,,HitLocation + HitNormal*20,rotator(HitNormal)+rot(-16384,0,0));
@@ -36,7 +39,10 @@ var() float  OffsetTime;        // how much time to offset view
             Spawn(class'ExplosionCrap',,, HitLocation + HitNormal*20, rotator(HitNormal));
 //		if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer) )
 //			Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
+        class'KFBlast'.static.Go(self, HitLocation, HitNormal, 0.6);
     }
+    else
+        class'KFBlast'.static.Far(self, HitLocation, 0.6);
 
     BlowUp(HitLocation);
     Destroy();

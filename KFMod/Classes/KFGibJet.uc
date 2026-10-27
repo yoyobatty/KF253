@@ -5,13 +5,22 @@ class KFGibJet extends BloodJet;
 
 defaultproperties
 {
+	mGrowthRate=2.000000
+	mNumTileRows=4
+	mNumTileColumns=4
+	mMassRange(1)=2.500000
+	mMassRange(0)=1.500000
+	mSizeRange(1)=2.000000
+	mSizeRange(0)=1.100000
+	mRegenRange(1)=16.000000
+	mRegenRange(0)=16.000000
      SplatterClass=Class'KFMod.KFBloodSplat'
      mMaxParticles=20
-     mLifeRange(0)=2.500000
-     mLifeRange(1)=3.000000
-     mColorRange(0)=(B=120,G=120,R=120)
-     mColorRange(1)=(B=120,G=120,R=120)
-     Skins(0)=Texture'KFX.BloodySpray'
-     Style=STY_Modulated
+     mLifeRange(0)=0.800000
+     mLifeRange(1)=1.200000
+     mColorRange(0)=(B=38,G=38,R=92)
+     mColorRange(1)=(B=50,G=50,R=118)
+     Skins(0)=Texture'KFX.BloodSplash'
+     Style=STY_Alpha
      bUnlit=False
 }

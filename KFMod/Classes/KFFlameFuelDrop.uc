@@ -12,16 +12,22 @@ var vector	RunNormal;
 var float	RunSpeed;
 var float	NextWallCheck;
 var bool	bDone;
+var bool	bHot;			// from an upgraded flamethrower's fuel (FlameGroundFire.bHot)
 
 // Off it goes from Spot at V; a run sets off down the wall facing Normal
-static function KFFlameFuelDrop Drop( Actor Spawner, vector Spot, vector V, float Amount, optional bool bDownWall, optional vector Normal )
+static function KFFlameFuelDrop Drop( Actor Spawner, vector Spot, vector V, float Amount, optional bool bDownWall, optional vector Normal, optional bool bHotFuel )
 {
 	local KFFlameFuelDrop D;
+	local int i;
 
 	D = Spawner.Spawn(class'KFFlameFuelDrop', Spawner.Instigator,, Spot);
 	if ( D == None )
 		return None;
 	D.Fuel = Amount;
+	D.bHot = bHotFuel;
+	if ( bHotFuel )
+		for ( i = 0; i < D.Emitters.Length; i++ )
+			class'KFFlameStream'.static.BlueFlame(D.Emitters[i], D.default.Emitters[i], true);
 	if ( bDownWall )
 		D.StartRun(Normal);
 	else
@@ -88,7 +94,7 @@ simulated function Rest( vector HitNormal, Actor Wall )
 		return;
 	bDone = true;
 	if ( HitNormal.Z >= 0.6 && !PhysicsVolume.bWaterVolume )
-		class'FlameGroundFire'.static.Lay(self, Location, HitNormal, Wall, Fuel);
+		class'FlameGroundFire'.static.Lay(self, Location, HitNormal, Wall, Fuel, bHot);
 	SetPhysics(PHYS_None);
 	Velocity = vect(0,0,0);
 	Kill();

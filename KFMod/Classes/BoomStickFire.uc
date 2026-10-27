@@ -89,6 +89,7 @@ function PlayFiring()
 	if ( Weapon.Mesh != None )
 		Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
 	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,FireSoundPitch(),false);
+	UpgradeLayer();
 	ClientPlayForceFeedback(FireForce);
 	FireCount++;
 }
@@ -96,6 +97,7 @@ function PlayFiring()
 function ServerPlayFiring()
 {
 	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,FireSoundPitch(),false);
+	UpgradeLayer();
 }
 
 function float FireSoundPitch()
@@ -105,7 +107,7 @@ function float FireSoundPitch()
 	Pitch = 1.0 + RandomPitchAdjustAmt * (2.0 * FRand() - 1.0);
 	if ( !bFiringBoth )
 		Pitch *= SingleSoundPitch;
-	return Pitch;
+	return Pitch * UpgradePitch();
 }
 
 // The parent skips the shake once the gun is empty, which here is every both-barrel shot.
@@ -131,6 +133,15 @@ function DoFireEffect()
     local Actor Other;
     local int p;
     local int SpawnCount;
+
+    // (an upgraded double barrel's pellets throw specimens off their feet; slugs stay slugs)
+    if ( ProjectileClass == default.ProjectileClass || ProjectileClass == class'BoomStickBulletWidow' )
+    {
+        if ( Upgraded() )
+            ProjectileClass = class'BoomStickBulletWidow';
+        else
+            ProjectileClass = default.ProjectileClass;
+    }
 
     Instigator.MakeNoise(1.0);
     Weapon.GetViewAxes(X,Y,Z);
@@ -180,6 +191,7 @@ function DoFireEffect()
 
 defaultproperties
 {
+     FlashFXClass=Class'KFMod.KFFlashBoomStick'
     SlugClass=Class'KFMod.BoomStickSlug'
     BothAnim="Fire"
     RightAnim="FireRight"
@@ -199,7 +211,7 @@ defaultproperties
     AmmoPerFire=1
     ProjectileClass=Class'KFMod.BoomStickBullet'
     BotRefireRate=0.700000
-    FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'
+    FlashEmitterClass=None
     aimerror=2.000000
     Spread=2500.000000
 }

@@ -36,6 +36,7 @@ function PlayFiring()
 		else Weapon.PlayAnim(FireAnim, FireAnimRate, TweenTime);
 	}
 	Weapon.PlayOwnedSound(FireSounds[rand(10)],SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,Default.FireAnimRate/FireAnimRate,false);
+	UpgradeLayer();
 	ClientPlayForceFeedback(FireForce);  // jdf
 	FireCount++;
 }
@@ -44,11 +45,16 @@ function PlayFiring()
 function ServerPlayFiring()
 {
 	Weapon.PlayOwnedSound(FireSounds[rand(10)],SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,,false);
+	UpgradeLayer();
 	FireCount++;
 }
 
 defaultproperties
 {
+	MechSound=Sound'KFWeaponSound.L85Snap'
+	MechVolume=0.240000
+	MechPitch=1.600000
+     FlashFXClass=Class'KFMod.KFFlashRifle'
     FireSounds(0)=Sound'KFWeaponSound.L85Fire'
     FireSounds(1)=Sound'KFWeaponSound.L85Fire1'
     FireSounds(2)=Sound'KFWeaponSound.L85Fire2'
@@ -77,7 +83,7 @@ defaultproperties
     ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
     ShakeOffsetTime=1.000000
     BotRefireRate=0.960000 // 96% chance to fire again
-    FlashEmitterClass=Class'KFMod.MGMuzzFlash'
+    FlashEmitterClass=None
     aimerror=42.000000
     Spread=0.008500
     SpreadStyle=SS_Random

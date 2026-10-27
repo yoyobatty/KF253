@@ -117,6 +117,13 @@ simulated function bool PutDown()
 
 defaultproperties
 {
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	MeshMats(5)=Shader'KillingFloorWeapons.L85.l85XHairShader'
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+	BrassSize=1.150000
+     Element=3
+	FarKind(0)=FAR_Auto
 	ClipCount=40
 	ReloadRate=2.000000
 	ReloadBeginSound=Sound'KFWeaponSound.L85Clipchange'
@@ -167,4 +174,16 @@ defaultproperties
 	Skins(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
 	DrawScale=0.850000
 	TransientSoundVolume=1.250000
+     UpgradeName="Overdrive"
+     UpgradeMagScale=1.500000
+     UpgradeFireRateScale=0.800000
+     UpgradePenetrations=2
+     SheenSlots(0)=2
+     SheenMats(0)=Shader'KillingFloorWeapons.Deagle.DeagleShineShader'
+     SheenSlots(1)=3
+     SheenMats(1)=Shader'KillingFloorWeapons.L85.CarbineShader'
+     SheenSlots(2)=4
+     SheenMats(2)=Shader'KillingFloorWeapons.L85.CarbineShader'
+     SheenSlots(3)=6
+     SheenMats(3)=Shader'KillingFloorWeapons.L85.CarbineShader'
 }

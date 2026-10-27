@@ -16,8 +16,8 @@ defaultproperties
      mSizeRange(0)=1.500000
      mSizeRange(1)=2.000000
      mGrowthRate=-0.500000
-     mColorRange(0)=(B=150,G=240,R=255,A=150)
-     mColorRange(1)=(B=150,G=240,R=255,A=150)
+     mColorRange(0)=(B=90,G=180,R=255,A=130)
+     mColorRange(1)=(B=60,G=150,R=240,A=130)
      mNumTileColumns=1
      mNumTileRows=1
      Physics=PHYS_Trailer

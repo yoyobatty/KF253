@@ -6,6 +6,8 @@ Class KFMonster extends Skaarj
 #exec OBJ LOAD FILE=KFWeaponSound.uax
 #exec OBJ LOAD FILE=KFPlayerSound.uax
 #exec OBJ LOAD FILE=PlayerSounds.uax
+#exec OBJ LOAD FILE=PatchSounds.uax
+#exec OBJ LOAD FILE=..\Textures\AW-2004Particles.utx
 //#exec OBJ LOAD FILE=22CharTex.utx
 
 var name MeleeAnims[3];
@@ -110,6 +112,15 @@ var() bool bMeleeStunImmune; // if true, this monster cannot be stunned or stagg
 
 var int BurnDown ; // Number of times our zombie must suffer Fire Damage.
 var bool bAshen; // is our Zed crispy yet? (burnt through, as the server sees it)
+var byte DeathElement;		// killed by an upgraded weapon: its element (KFElementDeath); shown so here
+var float TurnedUntil;
+var() bool bClimbs;			// climbs onto a table, a crate or a low wall in its way, no higher than itself and ClimbMax,
+var() float ClimbMax;		// ...with no animation of its own: up the edge, then onto the top (StartClimb)
+var() float ClimbSpeed, ClimbOverSpeed;
+var byte ClimbStage;		// (1 rising, 2 stepping onto the top)
+var vector ClimbTo, ClimbDir;
+var float ClimbUntil;		// (the server: turned by a special ammo, it fights for the players until then: KFAmmoMod)
+var bool bElementShown;
 var class<Emitter> BurnEffect;  // The appearance of the flames we are attaching to our Zed.
 var int LastBurnDamage; // Record the last amount of Fire damage the pawn suffered.
 var bool bBurnTick;		// the harm being taken is its own burning (TakeFireDamage), not fresh fire
@@ -118,6 +129,8 @@ var() float BurnSpeedScale;				// a specimen on fire moves this much slower
 // A body chars for as long as it burns: each machine drawing it lets the burnt skin come in over CharTime
 // seconds of fire, and one the server calls burnt through (bAshen) always goes all the way.
 var float CharLevel;					// how far the burnt skin has come in, 0 to 1
+var() int AshCrumbleDamage;				// a blow this hard on a body burnt through crumbles it to ash (AshCrumble)
+var bool bAshCrumbling;					// (AshCrumble) its giblets are ash: no blood (KFGib.Ashen)
 var() float CharTime;
 var bool bCharDone;
 var Combiner CharSkins[4];				// the blend standing in for each skin on the way
@@ -139,6 +152,11 @@ var() class<Actor> HeavyBloodClass, BurstBloodClass, BladeBloodClass;
 var() int HeavyHitDamage, BurstHitDamage;
 var() float BurstBlastDamage;
 var float LastBurstTime;
+var float LastMistTime, LastFleshSound;
+var() class<BloodSpurt> MistBloodClass;		// a round's small mist out of the far side (ExitMist)
+var() int MistHitDamage;					// ...from a hit of this much on
+var() Sound FleshHitSounds[4];				// a round striking flesh
+var() float FleshHitVolume;
 
 // One that has lost its head pumps blood from the neck and leaves a trail until it drops
 var xEmitter NeckJet;
@@ -189,6 +207,12 @@ var() float GibScale;					// giblets and stumps against a Clot's
 // a limb at the shoulder or hip, TorsoBlast the upper body, and BodyBlast (explosions only) leaves
 // nothing but pieces.
 var() float LimbBlast, TorsoBlast, BodyBlast, BlastWindow;
+var() float ObliterateShare;	// the most often a blast that kills with plenty to spare blows the body away (else it tears it up)
+var() float OverkillShare;		// how often an arc flash, BFG or rail kill with plenty to spare blows the body away
+var() float CorpseBlastGib;		// how often a blast blows a body that is down away (else it may tear a limb off)
+var() float CorpseBlastLimb;	// ...how often it tears a limb off instead
+var() float AshCrumbleChance;	// how often a hard blow on a body burnt through crumbles it to ash
+var() float BlastThrowScale;	// a blast kill throws the body this much harder than its damage type says
 var float BlastDamage, BlastTime, BlastKillTime;
 var bool bDeathGoreDone;				// the killing blow has had its say
 var() int CorpseGibHealth;				// a body knocked down to this health can be blown to pieces
@@ -210,6 +234,26 @@ var bool bDiffAdjusted; // has this monster had it's stats adjusted for the serv
 var bool bCloaked;
 var bool bSpotted; // if true , use the "revealed" shader, instead of the cloak effect
 var Emitter FlamingFXs;
+var bool bLootCarrier;		// (Endless) this one carries a power-up: it glows, and drops it where it dies (KFEndlessGameType.LootCheck)
+var Emitter LootGlow;
+var bool bZapped;			// struck by lightning just now (the upgraded flamethrower): held shaking where it stands, arcs all over it (Electrocute)
+var float ZapUntil;
+var Emitter ZapFX;
+var float ZapSince, NextZapDrop;
+var() float ZapDropAfter;	// in the current this long, an ordinary one goes down and convulses on the floor (BlastStagger)
+var bool bZapDeath;			// electrocuted to death (by the lightning, or by anything while in the current): it seizes where it falls (KFZapDeath)
+var bool bZapDeathShown;
+var bool bBlueFire;			// set alight by the upgraded flamethrower: its fire burns blue, alive and dead (BlueBodyFire)
+var bool bFrozen;			// frozen solid by the cryo cannon (Freeze): still as a statue, glazed with ice; killed, it shatters
+var bool bFrozenShown;
+var float FrozenUntil;
+var() float FrozenDamageScale;	// frozen, it is brittle
+var Material IceGlaze;		// (each machine that draws it) the glaze, made once for all (IceLook)
+var float SoakFuel;			// fuel on it from the flamethrower's gas mode (Soak): it drips where it goes, and burns the harder
+var Pawn SoakStarter;
+var bool bSoaked;
+var Emitter SoakFX;
+var bool bBlueFireShown;
 
 var Pawn BurnInstigator;
 
@@ -249,6 +293,14 @@ var bool bUsingRunAnim;             // Currently showing the run animation.
 var bool bDestroyNextTick; // Destroy this pawn next tick because destroying it now will cause problems
 var float TimeSetDestroyNextTickTime; // The time we set the bDestroyNextTick flag
 
+var KFLimbGib LastLimb;					// (ThrowLimb) the part it threw last
+// (NoteSlash) the Executioner's flying cut about to strike: the plane its blade lies in, which way across it the blade
+// reaches and how far, which way it flies, and when
+var vector SlashSpot, SlashNormal, SlashAcross, SlashFly;
+var float SlashHalfSpan, SlashTime;
+var bool bSlashDebug;					// logs what the flying cut takes off
+var() float SplitBand;					// an upright cut this near the middle of the trunk cleaves it from the head down
+var float BFGHeld;						// (each machine that draws it) seconds a BFG ball has had this body in its grip
 var bool bSettledBody;					// a body at rest, out of Karma's world contacts and gravity until something hits it
 var int SettleChecks;					// body timer checks in a row it has been slower than SettleSpeed
 var float SettleSpeed;					// a body this slow at SettleChecksNeeded checks a second apart settles (0: never)
@@ -262,7 +314,7 @@ var float NextVisCheckTime;
 replication
 {
 	reliable if(Role == ROLE_Authority)
-		bDecapitated,Gored,bBurnified,bAshen,FeedThreshold,bCannibal,bDiffAdjusted,bCloaked;
+		bDecapitated,Gored,bBurnified,bAshen,FeedThreshold,bCannibal,bDiffAdjusted,bCloaked,DeathElement,bLootCarrier,bZapped,bZapDeath,bBlueFire,bSoaked,bFrozen;
 }
 
 function bool MakeGrandEntry()
@@ -630,6 +682,28 @@ simulated function Tick(float DeltaTime)
     {
         Destroy();
     }
+	// (climbing onto something in its way)
+	if ( ClimbStage > 0 && Role == ROLE_Authority )
+		ClimbTick();
+	// (the element of the kill may come after the death; so may the electrocution)
+	if ( bPlayedDeath && DeathElement != 0 && !bElementShown )
+		ElementDeath();
+	if ( bPlayedDeath && bZapDeath && !bZapDeathShown )
+		ZapDeath();
+	// (electrocuted, until the current runs out)
+	if ( bZapped && Role == ROLE_Authority )
+		ZapTick();
+	// (frozen, until it thaws; and on each machine the look of it)
+	if ( bFrozen && Role == ROLE_Authority )
+		FrozenTick();
+	if ( bFrozen != bFrozenShown && !bPlayedDeath )
+		FreezeLook(bFrozen);
+	// (a turned one's time is up)
+	if ( TurnedUntil > 0.0 && Role == ROLE_Authority && Level.TimeSeconds >= TurnedUntil && Health > 0 )
+	{
+		TurnedUntil = 0.0;
+		TakeDamage(Health + 1000, None, Location, vect(0,0,0), class'DamTypeMelee');
+	}
 
 	if( Role==ROLE_Authority && bCrowdRadiusShrunk && Level.TimeSeconds>=CrowdShrinkEndTime )
 	{
@@ -709,6 +783,58 @@ simulated function Tick(float DeltaTime)
 		if( !bCharDone && (CharLevel > 0.0 || bBurnified || bAshen || CorpseBurnEnd > 0.0) )
 			TickChar(DeltaTime);
 
+		// (Endless) the glow of one carrying a power-up, while it lives
+		if( bLootCarrier && !bPlayedDeath && !bDeleteMe )
+		{
+			if( LootGlow == None )
+			{
+				LootGlow = Spawn(class'KFLootGlow');
+				if( LootGlow != None )
+					LootGlow.SetBase(Self);
+			}
+			if( LootGlow != None && Level.TimeSeconds - LastRenderTime < 1.0 )
+				OverBody(LootGlow);
+		}
+		else if( LootGlow != None )
+			StopLootGlow();
+
+		// (electrocuted) arcs and sparks over it, and it shakes, while the current lasts
+		if( bZapped && !bPlayedDeath && !bDeleteMe )
+		{
+			if( ZapFX == None )
+			{
+				ZapFX = Spawn(class'KFZapBody');
+				if( ZapFX != None )
+					ZapFX.SetBase(Self);
+			}
+			if( Level.TimeSeconds - LastRenderTime < 1.0 )
+			{
+				if( ZapFX != None )
+					OverBody(ZapFX);
+				ZapShake(true);
+			}
+		}
+		else if( ZapFX != None )
+			StopZapFX();
+
+		// (soaked in fuel) drops running off it
+		if( bSoaked && !bPlayedDeath && !bDeleteMe )
+		{
+			if( SoakFX == None )
+			{
+				SoakFX = Spawn(class'KFFuelDrips');
+				if( SoakFX != None )
+					SoakFX.SetBase(Self);
+			}
+			if( SoakFX != None && Level.TimeSeconds - LastRenderTime < 1.0 )
+				OverBody(SoakFX);
+		}
+		else if( SoakFX != None )
+		{
+			SoakFX.Kill();
+			SoakFX = None;
+		}
+
 		// Skip all client visual updates for monsters not rendered recently
 		if( Level.TimeSeconds - LastRenderTime < 1.0 )
 		{
@@ -735,7 +861,11 @@ simulated function Tick(float DeltaTime)
 			}
 
 			if( bBurnApplied && FlamingFXs != None )
+			{
 				OverBody(FlamingFXs);
+				if( bBlueFire && !bBlueFireShown )
+					BlueBodyFire();
+			}
 			if( CorpseSmoke != None )
 				OverBody(CorpseSmoke);
 
@@ -828,13 +958,268 @@ simulated function StartBurnFX()
     }
 
 	if( FlamingFXs==None )
+	{
 		FlamingFXs = Spawn(BurnEffect);
+		bBlueFireShown = false;
+	}
 	if( FlamingFXs!=None )
 	{
 		FlamingFXs.SetBase(Self);
 		OverBody(FlamingFXs);
+		if( bBlueFire )
+			BlueBodyFire();
 	}
 	bBurnApplied = True;
+}
+
+// Sprayed with the flamethrower's unlit fuel (FlameAltFire): soaked, it drips where it goes and burns the harder
+function Soak( float Amount, Pawn Starter )
+{
+	if ( Health <= 0 )
+		return;
+	SoakFuel = FMin(SoakFuel + Amount, 6.0);
+	SoakStarter = Starter;
+	if ( !bSoaked )
+	{
+		bSoaked = true;
+		NetUpdateTime = Level.TimeSeconds - 1;
+	}
+	// burning already: it flares up
+	if ( bBurnified && BurnDown > 0 && BurnDown < 10 )
+		BurnDown += 2;
+}
+
+// (KFFireGrid) Its fuel drips off, a little at a time; burning, it burns off the faster
+function DripSoak( float Amount )
+{
+	SoakFuel -= Amount;
+	if ( bBurnified )
+		SoakFuel -= Amount * 2;
+	if ( SoakFuel <= 0 )
+	{
+		SoakFuel = 0;
+		bSoaked = false;
+		NetUpdateTime = Level.TimeSeconds - 1;
+	}
+}
+
+// Struck by the upgraded flamethrower's lightning (FlameBurstFire.Zap): hurt, and held for a moment, shaking where it stands
+function Electrocute( Pawn ZapInstigator, int Damage )
+{
+	if ( Health <= 0 )
+		return;
+	TakeDamage(Damage, ZapInstigator, Location, vect(0,0,0), class'DamTypeZap');
+	if ( Health <= 0 || bDeleteMe )
+		return;
+	ZapUntil = Level.TimeSeconds + 0.35;
+	if ( !bZapped )
+	{
+		bZapped = true;
+		ZapSince = Level.TimeSeconds;
+		NetUpdateTime = Level.TimeSeconds - 1;
+	}
+	// held in the current long enough, an ordinary one goes down and convulses there (it gets up when its fall is over;
+	// still in the current then, it goes down again)
+	if ( default.Health < 1000 && Level.TimeSeconds - ZapSince >= ZapDropAfter && Level.TimeSeconds >= NextZapDrop
+		&& ZapInstigator != None && BlastStagger(ZapInstigator.Location) )
+		NextZapDrop = Level.TimeSeconds + 1.0;
+}
+
+// While it lasts it hardly moves (the big ones are only slowed)
+function ZapTick()
+{
+	local float Cap, V;
+
+	if ( Level.TimeSeconds >= ZapUntil || Health <= 0 )
+	{
+		bZapped = false;
+		NetUpdateTime = Level.TimeSeconds - 1;
+		return;
+	}
+	if ( Physics != PHYS_Walking )
+		return;
+	if ( default.Health >= 1000 )
+		Cap = 0.7 * GroundSpeed;
+	else
+		Cap = 0.25 * GroundSpeed;
+	V = Sqrt(Square(Velocity.X) + Square(Velocity.Y));
+	if ( V > Cap && V > 0.0 )
+	{
+		Velocity.X *= Cap / V;
+		Velocity.Y *= Cap / V;
+	}
+}
+
+// (CryoBolt) Frozen solid for Duration (the big ones for half as long): its mind held as a stagger holds it, its body
+// still, its pose kept
+function Freeze( Pawn By, float Duration )
+{
+	// (not the Patriarch: his own states are not to be broken into)
+	if ( Health <= 0 || bDeleteMe || bBoss )
+		return;
+	if ( default.Health >= 1000 )
+		Duration *= 0.5;
+	FrozenUntil = FMax(FrozenUntil, Level.TimeSeconds + Duration);
+	if ( bFrozen )
+		return;
+	bFrozen = true;
+	NetUpdateTime = Level.TimeSeconds - 1;
+	HoldFrozen();
+}
+
+function HoldFrozen()
+{
+	bShotAnim = true;
+	Acceleration = vect(0,0,0);
+	Velocity.X = 0;
+	Velocity.Y = 0;
+	if ( KFMonsterController(Controller) != None && !Controller.IsInState('WaitForAnim') )
+	{
+		Controller.GoToState('WaitForAnim');
+		KFMonsterController(Controller).bUseFreezeHack = true;
+	}
+}
+
+function FrozenTick()
+{
+	if ( Health <= 0 )
+		return;
+	if ( Level.TimeSeconds >= FrozenUntil )
+	{
+		bFrozen = false;
+		bShotAnim = false;
+		NetUpdateTime = Level.TimeSeconds - 1;
+		return;
+	}
+	HoldFrozen();
+}
+
+// Its pose kept and its body glazed with ice (bOn), or let go
+simulated function FreezeLook( bool bOn )
+{
+	bFrozenShown = bOn;
+	if ( bOn )
+	{
+		bPhysicsAnimUpdate = false;
+		StopAnimating();
+		if ( Level.NetMode != NM_DedicatedServer )
+		{
+			SetOverlayMaterial(IceLook(), 999.0, true);
+			PlaySound(Sound'PatchSounds.GlassImpact2', SLOT_None, 1.2,, 600, 1.3 + 0.2 * FRand());
+		}
+	}
+	else
+	{
+		bPhysicsAnimUpdate = default.bPhysicsAnimUpdate;
+		if ( Level.NetMode != NM_DedicatedServer )
+		{
+			SetOverlayMaterial(None, 0.0, true);
+			PlaySound(Sound'PatchSounds.GlassImpact3', SLOT_None, 0.8,, 500, 1.5);
+		}
+	}
+}
+
+// The ice glaze: a pale blue sheen, mottled like frost
+simulated function Material IceLook()
+{
+	local Shader S;
+	local Combiner C;
+	local ConstantColor CC;
+
+	if ( class'KFMonster'.default.IceGlaze != None )
+		return class'KFMonster'.default.IceGlaze;
+	CC = new class'ConstantColor';
+	CC.Color.R = 95;
+	CC.Color.G = 150;
+	CC.Color.B = 215;
+	CC.Color.A = 255;
+	C = new class'Combiner';
+	C.CombineOperation = CO_Multiply;
+	C.Material1 = Texture'AW-2004Particles.Weapons.DustSmoke';
+	C.Material2 = CC;
+	S = new class'Shader';
+	S.Specular = C;
+	class'KFMonster'.default.IceGlaze = S;
+	return S;
+}
+
+// The jolts of the current through its back, neck, head and arms
+simulated function ZapShake( bool bOn )
+{
+	if ( bOn )
+	{
+		SetBoneRotation('Bip01 Spine1', ZapJolt(3600),, 1.0);
+		SetBoneRotation('Bip01 Neck', ZapJolt(4000),, 1.0);
+		SetBoneRotation(HeadBone, ZapJolt(5000),, 1.0);
+		SetBoneRotation('Bip01 L UpperArm', ZapJolt(9000),, 1.0);
+		SetBoneRotation('Bip01 R UpperArm', ZapJolt(9000),, 1.0);
+		SetBoneRotation('Bip01 L Forearm', ZapJolt(8000),, 1.0);
+		SetBoneRotation('Bip01 R Forearm', ZapJolt(8000),, 1.0);
+	}
+	else
+	{
+		SetBoneRotation('Bip01 Spine1', rot(0,0,0),, 0.0);
+		SetBoneRotation('Bip01 Neck', rot(0,0,0),, 0.0);
+		SetBoneRotation(HeadBone, rot(0,0,0),, 0.0);
+		SetBoneRotation('Bip01 L UpperArm', rot(0,0,0),, 0.0);
+		SetBoneRotation('Bip01 R UpperArm', rot(0,0,0),, 0.0);
+		SetBoneRotation('Bip01 L Forearm', rot(0,0,0),, 0.0);
+		SetBoneRotation('Bip01 R Forearm', rot(0,0,0),, 0.0);
+	}
+}
+
+simulated function rotator ZapJolt( int Range )
+{
+	local rotator R;
+
+	R.Pitch = Rand(Range) - Range / 2;
+	R.Yaw = Rand(Range) - Range / 2;
+	R.Roll = Rand(Range) - Range / 2;
+	return R;
+}
+
+// Electrocuted to death: it seizes where it falls (on each machine that draws it)
+simulated function ZapDeath()
+{
+	bZapDeathShown = true;
+	StopZapFX();
+	if ( Level.NetMode != NM_DedicatedServer )
+		Spawn(class'KFZapDeath', self,, Location);
+}
+
+// (Blue Inferno) Its fire burns blue, as the upgraded flamethrower's own does (KFFlameStream.BlueFlame)
+simulated function BlueBodyFire()
+{
+	local int i;
+
+	bBlueFireShown = true;
+	if ( FlamingFXs == None )
+		return;
+	for ( i=0; i<FlamingFXs.Emitters.Length && i<BurnEffect.default.Emitters.Length; i++ )
+		class'KFFlameStream'.static.BlueFlame(FlamingFXs.Emitters[i], BurnEffect.default.Emitters[i], true);
+	FlamingFXs.LightHue = 160;
+	FlamingFXs.LightSaturation = 60;
+}
+
+simulated function StopZapFX()
+{
+	if( ZapFX != None )
+	{
+		ZapFX.AmbientSound = None;
+		ZapFX.Kill();
+		ZapFX = None;
+	}
+	ZapShake(false);
+}
+
+simulated function StopLootGlow()
+{
+	if( LootGlow != None )
+	{
+		LootGlow.Kill();
+		LootGlow.LifeSpan = 2;
+		LootGlow = None;
+	}
 }
 
 simulated function StopBurnFX()
@@ -1308,9 +1693,34 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 	local bool bBlast;
 	local int i;
 
+	// frozen, it shatters whatever killed it
+	if ( bFrozen && !DamageType.default.bNeverSevers )
+	{
+		DoDamageFX('obliterate', 1000, DamageType, r);
+		return;
+	}
+	// (the Executioner's flying cut) in two at the waist, the top half thrown on along the cut
+	if ( DamageType == class'DamTypeAxeSlash' )
+	{
+		if ( SlashTime == Level.TimeSeconds )
+			SlashGore(DamageType);
+		else
+			DoDamageFX('Bip01 Spine1', 1000, DamageType, SlashFlight(SlashFly));
+		return;
+	}
 	if ( BladeFresh(DamageType) )
 	{
 		BladeGore(Damage, DamageType);
+		return;
+	}
+	// (Blue Inferno) an arc flash that kills outright with plenty to spare blows it apart
+	if ( (DamageType == class'DamTypeArcFlash' && Damage >= default.Health / 2) || (DamageType == class'DamTypeBFG' && Damage >= default.Health / 4)
+		|| (DamageType == class'DamTypeRailgun' && Damage >= default.Health / 2) )
+	{
+		if ( FRand() < OverkillShare )
+			DoDamageFX('obliterate', 1000, DamageType, r);
+		else
+			TearUp(DamageType, r);
 		return;
 	}
 	if ( IsPowerHit(DamageType) && Level.TimeSeconds - BlastTime <= BlastWindow )
@@ -1322,14 +1732,22 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 	bBlast = !DamageType.default.bLocationalHit;
 	i = JointIndex(HitBone);
 
+	// blown away only now and then, the more likely the more there is to spare; else torn up, and thrown (PlayDyingAnimation)
 	if ( bBlast && Force >= BodyBlast )
-		DoDamageFX('obliterate', 1000, DamageType, r);
+	{
+		if ( FRand() < ObliterateShare * FMin((Force - BodyBlast) / (2.0 * BodyBlast), 1.0) )
+			DoDamageFX('obliterate', 1000, DamageType, r);
+		else
+			TearUp(DamageType, r);
+	}
 	else if ( Force >= TorsoBlast && (bBlast || i < 4) )
 	{
-		// blown in half; an explosion may take a leg as well
+		// blown in half; an explosion may take a leg or an arm as well
 		DoDamageFX('Bip01 Spine1', 1000, DamageType, r);
-		if ( bBlast && FRand() < 0.4 )
+		if ( bBlast && FRand() < 0.6 )
 			DoDamageFX(LimbJoints[4 + 2 * Rand(2)], 1000, DamageType, r);
+		if ( bBlast && FRand() < 0.3 )
+			DoDamageFX(LimbJoints[2 * Rand(2)], 1000, DamageType, r);
 	}
 	else if ( Force >= TorsoBlast )
 	{
@@ -1348,13 +1766,181 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 				i = 2 * Rand(2);
 		}
 		DoDamageFX(LimbJoints[i & 6], 1000, DamageType, r);
-		if ( bBlast && FRand() < 0.35 )
+		if ( bBlast && FRand() < 0.55 )
 			DoDamageFX(LimbJoints[2 * Rand(4)], 1000, DamageType, r);
-		if ( bBlast && !bDecapitated && FRand() < 0.2 )
+		if ( bBlast && !bDecapitated && FRand() < 0.35 )
 			DoDamageFX(HeadBone, 1000, DamageType, r);
 	}
 	else
 		DoDamageFX(HitBone, Damage, DamageType, r);
+}
+
+// Which way the top half of a body the flying cut kills goes: on, away from the one who threw it, and up
+function rotator SlashFlight( vector Fly )
+{
+	local rotator R;
+
+	Fly.Z = 0;
+	if ( VSize(Fly) < 0.01 )
+		Fly = vect(1,0,0);
+	R = rotator(Normal(Normal(Fly) + vect(0,0,0.45)));
+	// (a part flies along the up axis of the rotation it is given)
+	R.Pitch -= 16384;
+	return R;
+}
+
+// The Executioner's flying cut is about to strike (KFAxeSlash.Sweep): the plane its blade lies in, which way across it
+// the blade reaches and how far, which way it flies. A kill it makes is cut where the blade goes (SlashGore).
+function NoteSlash( vector Spot, vector Normal, vector Across, float HalfSpan, vector Fly )
+{
+	SlashSpot = Spot;
+	SlashNormal = Normal;
+	SlashAcross = Across;
+	SlashHalfSpan = HalfSpan;
+	SlashFly = Fly;
+	SlashTime = Level.TimeSeconds;
+}
+
+// A kill by the flying cut comes apart where its blade went through: every limb the blade's plane crosses within its
+// span comes off at the joint above the crossing, the head if it crosses the neck or head, and the body in two if it
+// crosses the trunk (the limbs first, so they fly as parts of their own). One it only grazed is cut in two.
+function SlashGore( class<DamageType> DamageType )
+{
+	local rotator Fly;
+	local vector Pelvis, Neck, Head, Top;
+	local bool bAny, bUpright;
+	local name Graze;
+
+	Fly = SlashFlight(SlashFly);
+	Pelvis = GetBoneCoords('Bip01 Pelvis').Origin;
+	Neck = GetBoneCoords('Bip01 Neck').Origin;
+	Head = GetBoneCoords(HeadBone).Origin;
+	Top = Head + (Head - Neck) * 1.5;
+	bUpright = Abs(SlashNormal.Z) < 0.5;
+	// upright through the middle of the trunk: cleaved from the head down
+	if ( bUpright && Abs((Pelvis - SlashSpot) dot SlashNormal) < SplitBand && Abs((Neck - SlashSpot) dot SlashNormal) < SplitBand )
+	{
+		if ( bSlashDebug )
+			log("SLASHCUT" @ Name @ "cleaved");
+		SplitCut(DamageType);
+		return;
+	}
+	if ( LimbCut('Bip01 L UpperArm', 'Bip01 L Forearm', 'Bip01 L Hand', Fly, DamageType) )
+		bAny = true;
+	if ( LimbCut('Bip01 R UpperArm', 'Bip01 R Forearm', 'Bip01 R Hand', Fly, DamageType) )
+		bAny = true;
+	if ( LimbCut('Bip01 L Thigh', 'Bip01 L Calf', 'Bip01 L Foot', Fly, DamageType) )
+		bAny = true;
+	if ( LimbCut('Bip01 R Thigh', 'Bip01 R Calf', 'Bip01 R Foot', Fly, DamageType) )
+		bAny = true;
+	if ( !bDecapitated && SlashCrosses(Neck, Top) )
+	{
+		if ( bSlashDebug )
+			log("SLASHCUT" @ Name @ "head");
+		DoDamageFX(HeadBone, 1000, DamageType, Fly);
+		bAny = true;
+	}
+	// the trunk: an upright cut through it cleaves it from the head down, a flat one cuts it in two
+	if ( SlashCrosses(Pelvis, Neck) )
+	{
+		if ( bSlashDebug )
+			log("SLASHCUT" @ Name @ "trunk, upright" @ bUpright);
+		if ( bUpright )
+			SplitCut(DamageType);
+		else
+			DoDamageFX('Bip01 Spine1', 1000, DamageType, Fly);
+		return;
+	}
+	if ( bAny )
+		return;
+	// only grazed: the part the blade went nearest
+	if ( bUpright )
+		Graze = 'split';
+	else if ( SlashSpot.Z > Neck.Z && !bDecapitated )
+		Graze = HeadBone;
+	else if ( SlashSpot.Z < Pelvis.Z )
+		Graze = 'legs';
+	else
+		Graze = 'Bip01 Spine1';
+	if ( bSlashDebug )
+		log("SLASHCUT" @ Name @ "grazed:" @ Graze);
+	if ( Graze == 'split' )
+		SplitCut(DamageType);
+	else if ( Graze == 'legs' )
+	{
+		DoDamageFX('Bip01 L Thigh', 1000, DamageType, Fly);
+		DoDamageFX('Bip01 R Thigh', 1000, DamageType, Fly);
+	}
+	else
+		DoDamageFX(Graze, 1000, DamageType, Fly);
+}
+
+// Cleaved from the head down by an upright cut through the middle: the head off, and the body in two
+function SplitCut( class<DamageType> DamageType )
+{
+	local rotator Fly;
+
+	Fly = SlashFlight(SlashFly);
+	if ( !bDecapitated )
+		DoDamageFX(HeadBone, 1000, DamageType, Fly);
+	DoDamageFX('Bip01 Spine1', 1000, DamageType, Fly);
+}
+
+// The part from Joint through Mid to End: off at Joint if the cut crosses the first stretch, at Mid if the second
+function bool LimbCut( name Joint, name Mid, name End, rotator Fly, class<DamageType> DamageType )
+{
+	local vector J, M, E;
+
+	J = GetBoneCoords(Joint).Origin;
+	M = GetBoneCoords(Mid).Origin;
+	E = GetBoneCoords(End).Origin;
+	if ( SlashCrosses(J, M) )
+	{
+		if ( bSlashDebug )
+			log("SLASHCUT" @ Name @ Joint);
+		DoDamageFX(Joint, 1000, DamageType, Fly);
+		return true;
+	}
+	if ( SlashCrosses(M, E) )
+	{
+		if ( bSlashDebug )
+			log("SLASHCUT" @ Name @ Mid);
+		DoDamageFX(Mid, 1000, DamageType, Fly);
+		return true;
+	}
+	return false;
+}
+
+// Whether the flying cut's blade passes between A and B: its plane between them, where it crosses within the blade
+function bool SlashCrosses( vector A, vector B )
+{
+	local float SA, SB;
+	local vector X;
+
+	SA = (A - SlashSpot) dot SlashNormal;
+	SB = (B - SlashSpot) dot SlashNormal;
+	if ( SA * SB > 0.0 )
+		return false;
+	X = A;
+	if ( SA != SB )
+		X = A + (B - A) * (SA / (SA - SB));
+	return Abs((X - SlashSpot) dot SlashAcross) <= SlashHalfSpan + 8.0;
+}
+
+// Torn up by a kill with plenty to spare, instead of blown away: in half more often than not, a limb or two off and
+// often the head
+function TearUp( class<DamageType> DamageType, rotator r )
+{
+	local int i, n;
+
+	// (the limbs and head first, so they fly as whole parts before the trunk goes)
+	n = 1 + Rand(2);
+	for ( i = 0; i < n; i++ )
+		DoDamageFX(LimbJoints[2 * Rand(4)], 1000, DamageType, r);
+	if ( !bDecapitated && FRand() < 0.45 )
+		DoDamageFX(HeadBone, 1000, DamageType, r);
+	if ( FRand() < 0.55 )
+		DoDamageFX('Bip01 Spine1', 1000, DamageType, r);
 }
 
 // A blade's blow is about to land (KFMeleeFire.Strike, CorpseHit). What it does to the body is worked out from it.
@@ -1636,6 +2222,121 @@ function CalcHitLoc( Vector hitLoc, Vector hitRay, out Name boneName, out float 
 }
 
 //Stops the green shit when a player dies.
+// (the server: an upgraded weapon's kill is in its element, on every machine: ElementDeath)
+function Died( Controller Killer, class<DamageType> DamageType, vector HitLocation )
+{
+	if ( DeathElement == 0 )
+		DeathElement = class'KFElementDeath'.static.ElementOf(Killer);
+	if ( DamageType == class'DamTypeZap' || bZapped )
+		bZapDeath = true;
+	Super.Died(Killer, DamageType, HitLocation);
+}
+
+// Something in its way it may climb onto (the server; KFMonsterController.NotifyHitWall): the lowest height, over a
+// step and within reach, at which it can move on over the top with room to stand there and nothing overhead. The
+// heights are from where it stands: the walk's step-up has it raised a step when it meets the edge
+function bool StartClimb( vector Dir )
+{
+	local vector Ext, Feet, Above, Over, HitLoc, HitNorm;
+	local float Rise, Reach;
+
+	if ( !bClimbs || ClimbStage > 0 || Health <= 0 || Physics != PHYS_Walking )
+		return false;
+	Dir.Z = 0;
+	if ( VSize(Dir) < 0.1 )
+		return false;
+	Dir = Normal(Dir);
+	Ext.X = CollisionRadius;
+	Ext.Y = CollisionRadius;
+	Ext.Z = CollisionHeight;
+	Feet = Location;
+	if ( Trace(HitLoc, HitNorm, Location - vect(0,0,48), Location, false, Ext) != None )
+		Feet = HitLoc;
+	Reach = FMin(ClimbMax, 2.0 * CollisionHeight);
+	// (from a little back off the edge: a trace that starts touching something passes through it)
+	for ( Rise = 40.0; Rise <= Reach; Rise += 8.0 )
+	{
+		Above = Feet + vect(0,0,1) * Rise;
+		if ( Above.Z > Location.Z && Trace(HitLoc, HitNorm, Above, Location - Dir * 6.0, false, Ext) != None )
+			return false;
+		Over = Above + Dir * (CollisionRadius + 20.0);
+		if ( Trace(HitLoc, HitNorm, Over, Above - Dir * 6.0, false, Ext) != None )
+			continue;
+		// the top it would stand on (a lip lower down, a step it could walk, is looked past: higher up)
+		if ( Trace(HitLoc, HitNorm, Over - vect(0,0,1) * (Rise + 4.0), Over, false, Ext) == None || HitNorm.Z < 0.7
+			|| HitLoc.Z - Feet.Z < 36.0 )
+			continue;
+		ClimbTo = HitLoc + vect(0,0,2);
+		ClimbDir = Dir;
+		ClimbStage = 1;
+		ClimbUntil = Level.TimeSeconds + 1.5;
+		SetPhysics(PHYS_Flying);
+		Velocity = vect(0,0,1) * ClimbSpeed;
+		Acceleration = vect(0,0,0);
+		return true;
+	}
+	return false;
+}
+
+// Up the edge at ClimbSpeed, pressed to it, then onto the top (velocity set each frame: pawn Tick runs before physics,
+// and the movement reaches the other machines as flying, smoothly)
+function ClimbTick()
+{
+	local vector Left;
+
+	if ( Health <= 0 || Physics != PHYS_Flying || Level.TimeSeconds > ClimbUntil )
+	{
+		EndClimb();
+		return;
+	}
+	if ( ClimbStage == 1 && Location.Z >= ClimbTo.Z )
+		ClimbStage = 2;
+	if ( ClimbStage == 1 )
+	{
+		Velocity = vect(0,0,1) * ClimbSpeed + ClimbDir * 20.0;
+		return;
+	}
+	Left = ClimbTo - Location;
+	Left.Z = 0;
+	if ( (Left Dot ClimbDir) <= 0.0 )
+	{
+		EndClimb();
+		return;
+	}
+	Velocity = ClimbDir * ClimbOverSpeed;
+	Velocity.Z = FClamp((ClimbTo.Z - Location.Z) * 6.0, 0.0, 80.0);
+}
+
+function EndClimb()
+{
+	ClimbStage = 0;
+	if ( Health > 0 && Physics == PHYS_Flying )
+	{
+		SetPhysics(PHYS_Falling);
+		Velocity = ClimbDir * ClimbOverSpeed * 0.5;
+	}
+}
+
+// Turned by a special ammo: on the players' side a while (KFAmmoMod.Turn)
+function bool IsTurned()
+{
+	return TurnedUntil > 0.0 && Health > 0;
+}
+
+// Killed by an upgraded weapon: it dies in that weapon's element; fire's burns on where it falls
+simulated function ElementDeath()
+{
+	bElementShown = true;
+	if ( Level.NetMode == NM_DedicatedServer )
+		return;
+	class'KFElementDeath'.static.Make(self, DeathElement);
+	if ( (DeathElement == 1 || DeathElement == 2) && CorpseBurnEnd <= 0.0 )
+	{
+		CorpseBurnEnd = Level.TimeSeconds + CorpseBurnTime * (0.75 + 0.5 * FRand());
+		StartBurnFX();
+	}
+}
+
 simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 {
 	local float frame, rate;
@@ -1656,6 +2357,10 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 
 	if (CurrentCombo != None)
 		CurrentCombo.Destroy();
+	if ( DeathElement != 0 && !bElementShown )
+		ElementDeath();
+	if ( bZapDeath && !bZapDeathShown )
+		ZapDeath();
 
 	HitDamageType = DamageType; // these are replicated to other clients
 	TakeHitLocation = HitLoc;
@@ -1675,6 +2380,9 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 			 
 	if (DamageType == class 'Burned' ||  DamageType == class 'DamTypeFlamethrower')
 		ZombieCrispUp();
+	// blood pools under the body when it comes to rest (not under a burnt one: KFBloodPool looks again then)
+	if ( Level.NetMode != NM_DedicatedServer && !class'GameInfo'.static.UseLowGore() && CharLevel < 0.5 )
+		Spawn(class'KFBloodPool', self,, Location);
 
 	ProcessHitFX();
 	// a head lost while alive stays lost
@@ -1869,6 +2577,15 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 					PlaySound(DecapSound, SLOT_Misc);
 				}
 
+				// a body burnt through crumbles under a hard blow (no blood left in it)
+				if ( !bPlayGoreSplash && CharLevel >= 1.0 && Damage >= AshCrumbleDamage && !class'GameInfo'.static.UseLowGore()
+					&& class<DamTypeFlamethrower>(DamageType) == None && class<Burned>(DamageType) == None && FRand() < AshCrumbleChance )
+				{
+					AshCrumble(Momentum);
+					RemoveGibbedBody();
+					return;
+				}
+
 				PlayHit(Damage,InstigatedBy,HitLocation,DamageType,Momentum);
 
 				if ( !bPlayGoreSplash && Health <= CorpseGibHealth && CorpseGibs(InstigatedBy, DamageType) )
@@ -1881,6 +2598,9 @@ ignores AnimEnd, Trigger, Bump, HitWall, HeadVolumeChange, PhysicsVolumeChange, 
 					RemoveGibbedBody();
 					return;
 				}
+				// a blast that does not blow it away tears a limb off it, now and then the head
+				if ( !bPlayGoreSplash && IsPowerHit(DamageType) && !DamageType.default.bLocationalHit && FRand() < CorpseBlastLimb )
+					DoDamageFX(RandomJoint(), 1000, DamageType, Rotator(Momentum));
 			}
 
 			// Throw the body if its a rocket explosion or shock combo
@@ -2090,6 +2810,26 @@ simulated function AddStump( int Slot, name Bone )
 	Stumps[Slot].SetDrawScale(Stumps[Slot].DrawScale * StumpSize[Slot] * GibScale * DrawScale);
 	AttachToBone(Stumps[Slot], Bone);
 	Stumps[Slot].CharTo(CharLevel * GibCharShare);
+	Stumps[Slot].bHidden = bCloaked && Health > 0;
+}
+
+// What a limb that comes off wears for skin i: the body's, but never a cloak (a cloaked Stalker's limb was invisible but
+// for its stump, which lay about as a giant lone chunk; KFLimbGib.TakeLimb)
+simulated function Material LimbSkin( int i )
+{
+	if ( bCloaked && i < default.Skins.Length && default.Skins[i] != None )
+		return default.Skins[i];
+	return Skins[i];
+}
+
+// Its stumps drawn with the body or hidden with it (a cloaked specimen's)
+simulated function HideStumps( bool bHide )
+{
+	local int i;
+
+	for ( i = 0; i < ArrayCount(Stumps); i++ )
+		if ( Stumps[i] != None )
+			Stumps[i].bHidden = bHide;
 }
 
 simulated function DropStump( int Slot )
@@ -2112,8 +2852,10 @@ simulated function SeverHead( bool bThrow, optional rotator Dir, optional float 
 	if ( bThrow )
 	{
 		C = GetBoneCoords(HeadBone);
+		if ( BlastCut(DamageType) )
+			class'KFBloodBlast'.static.Make(self, C.Origin, 0.3 * BloodBlastSize(), 0.5 * vector(Dir));
 		// a blade takes the head off whole and a pipe bursts it; anything else throws a piece of it
-		bCut = BladeGoreType(DamageType) && class<DamTypeMelee>(DamageType).default.CutChance > 0;
+		bCut = (BladeGoreType(DamageType) && class<DamTypeMelee>(DamageType).default.CutChance > 0) || class<DamTypeAxeSlash>(DamageType) != None;
 		bBurst = BladeGoreType(DamageType) && !bCut;
 		// (a clean cut bleeds from the neck and the head, not as a mist)
 		if ( !bCut || !ThrowLimb(HeadBone, Dir, Spread) )
@@ -2163,9 +2905,12 @@ simulated function Sever( name Bone, rotator Dir, float Spread, optional class<D
 	}
 	C = GetBoneCoords(Bone);
 
+	// (the Executioner's flying cut) the top half off whole
+	if ( Slot == 5 && class<DamTypeAxeSlash>(DamageType) != None && CutInTwo(Dir) )
+		bWhole = true;
 	// the limb itself when it can be shown, and what still hangs from it goes with it;
 	// otherwise a clot's giblets stand in for it
-	if ( Slot != 5 && ThrowLimb(Bone, Dir, Spread) )
+	else if ( Slot != 5 && ThrowLimb(Bone, Dir, Spread) )
 	{
 		bWhole = true;
 		Below = SeverSlot(LimbBelow(Bone));
@@ -2244,6 +2989,11 @@ simulated function Sever( name Bone, rotator Dir, float Spread, optional class<D
 		PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc, 255);
 	else
 		PlaySound(sound'PlayerSounds.NewGibs.NewGib1', SLOT_Misc, 255);
+	// blown in half, or a part torn off by a blast: a burst of blood
+	if ( Slot == 5 )
+		class'KFBloodBlast'.static.Make(self, GetBoneCoords('Bip01 Spine2').Origin, 0.6 * BloodBlastSize(), 0.5 * vector(Dir));
+	else if ( BlastCut(DamageType) )
+		class'KFBloodBlast'.static.Make(self, C.Origin, 0.28 * BloodBlastSize(), 0.5 * vector(Dir));
 	Severed[Slot] = 1;
 	HideBone(Bone);
 	AddStump(Slot, Bone);
@@ -2278,6 +3028,40 @@ simulated function bool ThrowLimb( name Joint, rotator Dir, float Spread )
 	Dir.Roll += (FRand() * 2.0 - 1.0) * Spread;
 	GetAxes(Dir, X, Y, Z);
 	L.Velocity = Velocity + Z * (350.0 + 200.0 * FRand());
+	LastLimb = L;
+	return true;
+}
+
+// The top half thrown off whole (the Executioner's flying cut): this body's own trunk, arms and head, less what is gone
+// already; the arms and head go from the body with it
+simulated function bool CutInTwo( rotator Dir )
+{
+	local vector X, Y, Z;
+
+	if ( !ThrowLimb('Bip01 Spine1', Dir, 0.1) || LastLimb == None || LastLimb.Piece == None )
+		return false;
+	if ( Severed[4] != 0 )
+		LastLimb.Piece.SetBoneScale(3, 0.0, HeadBone);
+	if ( Severed[2] != 0 )
+		LastLimb.Piece.SetBoneScale(4, 0.0, 'Bip01 R Forearm');
+	if ( Severed[3] != 0 )
+		LastLimb.Piece.SetBoneScale(5, 0.0, 'Bip01 L Forearm');
+	if ( Severed[8] != 0 )
+		LastLimb.Piece.SetBoneScale(6, 0.0, 'Bip01 L UpperArm');
+	if ( Severed[9] != 0 )
+		LastLimb.Piece.SetBoneScale(7, 0.0, 'Bip01 R UpperArm');
+	Severed[2] = 1;
+	Severed[3] = 1;
+	Severed[4] = 1;
+	Severed[8] = 1;
+	Severed[9] = 1;
+	DropStump(2);
+	DropStump(3);
+	DropStump(4);
+	DropStump(8);
+	DropStump(9);
+	GetAxes(Dir, X, Y, Z);
+	LastLimb.Velocity += Z * 120.0;
 	return true;
 }
 
@@ -2294,6 +3078,7 @@ simulated function name LimbTip( name Joint )
 		case 'Bip01 L Calf':		return 'Bip01 L Foot';
 		case 'Bip01 R Thigh':
 		case 'Bip01 R Calf':		return 'Bip01 R Foot';
+		case 'Bip01 Spine1':		return 'Bip01 Neck';
 	}
 	return 'None';
 }
@@ -2323,9 +3108,16 @@ simulated function GibBody( rotator Dir, float Spread )
 	bPlayGoreSplash = true;
 	Spread = FMax(Spread, 0.5);
 
-	Spawn(class'KFMod.FeedingSpray',,, Location, Rotation);
-	Spawn(class'KFMod.BodySplash',,, Location, Rotation);
-	PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, 255);
+	// frozen solid, it breaks like glass: ice and frozen chunks, no blood
+	if ( bFrozen )
+		Spawn(class'KFIceShatter',,, Location, Rotation);
+	else
+	{
+		Spawn(class'KFMod.FeedingSpray',,, Location, Rotation);
+		Spawn(class'KFMod.BodySplash',,, Location, Rotation);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, 255);
+		class'KFBloodBlast'.static.Make(self, Location, BloodBlastSize(), 0.5 * vector(Dir));
+	}
 
 	if ( Severed[5] == 0 )
 	{
@@ -2364,6 +3156,53 @@ simulated function GibBody( rotator Dir, float Spread )
 		DropStump(i);
 }
 
+// A body burnt through crumbling: ash and embers, and a few charred lumps (no blood left in it)
+simulated function AshCrumble( vector Push )
+{
+	local rotator Dir;
+	local float KeepShare;
+	local int i;
+
+	if ( bGibbed || Level.NetMode == NM_DedicatedServer || class'GameInfo'.static.UseLowGore() )
+		return;
+	bGibbed = true;
+	bPlayGoreSplash = true;
+	Spawn(class'KFAshBurst',,, Location, Rotation);
+	PlaySound(sound'PlayerSounds.NewGibs.NewGib4', SLOT_Misc, 160,,, 0.6);
+	if ( Push != vect(0,0,0) )
+		Dir = rotator(Normal(Normal(Push) + vect(0,0,1.5)));
+	else
+		Dir = rotator(vect(0,0,1));
+	KeepShare = GibCharShare;
+	GibCharShare = 1.0 / FMax(CharLevel, 0.01);
+	bAshCrumbling = true;
+	if ( Severed[5] == 0 )
+		GibAt(MonsterTorsoGiblet, 'Bip01 Spine2', Dir, 0.5);
+	GibAt(MonsterLowerTorsoGiblet, 'Bip01 Pelvis', Dir, 0.5);
+	if ( Severed[4] == 0 && FRand() < 0.6 )
+		GibAt(MonsterHeadGiblet, HeadBone, Dir, 0.5);
+	if ( Severed[0] == 0 && FRand() < 0.5 )
+		GibAt(MonsterThighGiblet, 'Bip01 L Thigh', Dir, 0.5);
+	for ( i=0; i<ArrayCount(Stumps); i++ )
+		DropStump(i);
+	GibCharShare = KeepShare;
+	bAshCrumbling = false;
+}
+
+// How big a burst of blood this body makes blown apart (KFBloodBlast): a clot's is 1
+simulated function float BloodBlastSize()
+{
+	return FClamp(CollisionRadius * CollisionHeight / (24.0 * 44.0), 0.8, 2.2);
+}
+
+// A part taken off by a blast or a great overkill, which bursts in blood (not a bullet's or a blade's)
+simulated function bool BlastCut( class<DamageType> DamageType )
+{
+	return DamageType != None && ((IsPowerHit(DamageType) && !DamageType.default.bLocationalHit)
+		|| DamageType == class'DamTypeArcFlash' || DamageType == class'DamTypeBFG' || DamageType == class'DamTypeRailgun'
+		|| DamageType == class'DamTypeAxeSlash');
+}
+
 // Takes a body that has been blown to pieces out of the world on the next tick
 simulated function RemoveGibbedBody()
 {
@@ -2377,7 +3216,7 @@ simulated function RemoveGibbedBody()
 simulated function bool CorpseGibs( Pawn InstigatedBy, class<DamageType> DamageType )
 {
 	if ( IsPowerHit(DamageType) && !DamageType.default.bLocationalHit )
-		return FRand() < 0.7;
+		return FRand() < CorpseBlastGib;
 	return (DamageType == class'DamTypeShotgun' || DamageType == class'DamTypeDBShotgun') && InstigatedBy != None
 		&& VSize(InstigatedBy.Location - Location) < 200.0 && FRand() < 0.05;
 }
@@ -2399,6 +3238,10 @@ simulated function SpawnGiblet( class<Gib> GibClass, Vector Location, Rotator Ro
 	Giblet.SpawnTrail();
 	if ( KFGib(Giblet) != None )
 		KFGib(Giblet).CharTo(CharLevel * GibCharShare);
+	if ( bAshCrumbling && KFGib(Giblet) != None )
+		KFGib(Giblet).Ashen();
+	if ( bFrozen && KFGib(Giblet) != None )
+		KFGib(Giblet).Iced();
 
 	Giblet.SetDrawScale(Giblet.DrawScale * GibScale * DrawScale);
 	if( GibClass == MonsterHeadGiblet )
@@ -2820,6 +3663,12 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	local float DamageScore;
 	local KFPlayerReplicationInfo KFPRI;
 
+	// (a re-packed weapon's hit may set off its special ammo, a moment after: KFAmmoMod)
+	if ( Role == ROLE_Authority && instigatedBy != None && Health > 0 && damageType != class'Burned' )
+		class'KFAmmoMod'.static.Hit(self, instigatedBy, hitlocation, damageType);
+	// (frozen, it is brittle)
+	if ( bFrozen && Health > 0 && damageType != class'DamTypeCryo' )
+		Damage = int(float(Damage) * FrozenDamageScale);
 	LastDamagedBy = instigatedBy;
 	LastDamagedByType = damageType;
 	HitMomentum = VSize(momentum);
@@ -2829,6 +3678,12 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// Zeds and fire dont mix.
 	if( class<Burned>(damageType)!=none || class<DamTypeFlamethrower>(damageType)!=none)
 	{
+		// (soaked in fuel it burns the harder; and fire spreads from it as SS13's does: KFFireGrid)
+		if ( bSoaked )
+			Damage *= 1.6;
+		class'KFFireGrid'.static.Get(self, true);
+		if ( !bBlueFire && instigatedBy != None && FlameThrower(instigatedBy.Weapon) != None && FlameThrower(instigatedBy.Weapon).bUpgraded )
+			bBlueFire = true;
         if( BurnDown<=0 || Damage > LastBurnDamage )
         {
 			LastBurnDamage = Damage;
@@ -2839,7 +3694,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			if( HeatAmount>4 || Damage >= 15 )
 			{
 				bBurnified = true;
-				BurnDown = 10;
+				BurnDown = BurnTime(instigatedBy);
 				SetGroundSpeed(GroundSpeed);	// (it is slowed in there, now that it burns)
 				BurnInstigator = instigatedBy;
 				SetTimer(1.0,true);
@@ -2847,7 +3702,7 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 			else HeatAmount++;
 		}
 		// fresh fire on one already burning keeps it burning longer
-		else if ( !bBurnTick && BurnDown < 10 )
+		else if ( !bBurnTick && BurnDown < BurnTime(instigatedBy) )
 			BurnDown++;
 	}
 
@@ -3091,8 +3946,22 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 
 	//log("HitLocation "$Hitlocation) ;
 
-	if ( DamageType.Default.bCausesBlood && DamageType != class 'Burned' && DamageType != class 'DamTypeFlamethrower')
+	// frozen solid, it chips like ice (and its killing blow shatters it: DeathGore)
+	if ( bFrozen )
 	{
+		Spawn(class'KFIceHit',,, HitLocation, Rotator(HitNormal));
+		if ( Health > 0 )
+			return;
+	}
+	else if ( DamageType.Default.bCausesBlood && DamageType != class 'Burned' && DamageType != class 'DamTypeFlamethrower')
+	{
+		// a round striking flesh (not a blade's blow, nor a blast)
+		if ( DamageType.default.bLocationalHit && !BladeGoreType(DamageType) && !IsPowerHit(DamageType)
+			&& Level.TimeSeconds - LastFleshSound > 0.06 && FleshHitSounds[0] != None )
+		{
+			LastFleshSound = Level.TimeSeconds;
+			PlaySound(FleshHitSounds[Rand(4)], SLOT_None, FleshHitVolume, false, 700.0, 0.9 + 0.2 * FRand());
+		}
 		if ( class'GameInfo'.static.UseLowGore() )
 		{
 			if ( class'GameInfo'.static.NoBlood() )
@@ -3103,7 +3972,8 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 		else
 		{
 			BloodHit = BloodSpurt(Spawn(BloodClassFor(Damage, DamageType),InstigatedBy,, HitLocation, Rotator(HitNormal)));
-			ExitBurst(Damage, InstigatedBy, HitLocation, DamageType, Momentum, HitRay);
+			if ( !ExitBurst(Damage, InstigatedBy, HitLocation, DamageType, Momentum, HitRay) )
+				ExitMist(Damage, InstigatedBy, HitLocation, DamageType, HitRay);
 		}
 		if ( BloodHit != None )
 		{
@@ -3153,29 +4023,43 @@ function class<Actor> BloodClassFor( float Damage, class<DamageType> DamageType 
 
 // A power weapon, or any one great blow, bursts out of the far side of the body as well: once for a
 // blast, however many pellets it came as.
-function ExitBurst( float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> DamageType, vector Momentum, vector HitRay )
+function bool ExitBurst( float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> DamageType, vector Momentum, vector HitRay )
 {
-	local vector Dir, Flat, Spot;
+	local vector Dir;
 	local BloodSpurt Burst;
 
 	// (a blade's blow sprays along the swing instead, KFMeleeFire.BladeSpray)
 	if ( BurstBloodClass == None || Level.TimeSeconds - LastBurstTime < 0.3 || BladeGoreType(DamageType) )
-		return;
+		return false;
 	if ( IsPowerHit(DamageType) )
 	{
 		if ( Health > 0 && BlastDamage < BurstBlastDamage )
-			return;
+			return false;
 	}
 	else if ( Damage < BurstHitDamage )
-		return;
+		return false;
 
 	Dir = Momentum;
 	if ( Dir == vect(0,0,0) )
 		Dir = HitRay;
 	if ( Dir == vect(0,0,0) )
-		return;
+		return false;
 	Dir = Normal(Dir);
-	// out of the far side, at the height it went in
+	Burst = BloodSpurt(Spawn(BurstBloodClass, InstigatedBy,, ExitSpot(HitLocation, Dir), rotator(Dir)));
+	if ( Burst != None )
+	{
+		Burst.bMustShow = true;
+		Burst.HitDir = Dir;
+	}
+	LastBurstTime = Level.TimeSeconds;
+	return true;
+}
+
+// Out of the far side of the body, at the height the round went in
+function vector ExitSpot( vector HitLocation, vector Dir )
+{
+	local vector Flat, Spot;
+
 	Flat = Dir * vect(1,1,0);
 	if ( VSize(Flat) > 0.3 )
 	{
@@ -3183,14 +4067,21 @@ function ExitBurst( float Damage, Pawn InstigatedBy, vector HitLocation, class<D
 		Spot.Z = FClamp(HitLocation.Z, Location.Z - 0.5 * CollisionHeight, Location.Z + 0.8 * CollisionHeight);
 	}
 	else Spot = HitLocation + CollisionRadius * Dir;
+	return Spot;
+}
 
-	Burst = BloodSpurt(Spawn(BurstBloodClass, InstigatedBy,, Spot, rotator(Dir)));
-	if ( Burst != None )
-	{
-		Burst.bMustShow = true;
-		Burst.HitDir = Dir;
-	}
-	LastBurstTime = Level.TimeSeconds;
+// A round less than a burst leaves a small dark mist out of the far side (KFExitMist), not over and over in a burst
+function ExitMist( float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> DamageType, vector HitRay )
+{
+	local BloodSpurt Mist;
+
+	if ( MistBloodClass == None || HitRay == vect(0,0,0) || Damage < MistHitDamage || Level.TimeSeconds - LastMistTime < 0.12
+		|| !DamageType.default.bLocationalHit || BladeGoreType(DamageType) || IsPowerHit(DamageType) )
+		return;
+	Mist = Spawn(MistBloodClass, InstigatedBy,, ExitSpot(HitLocation, HitRay), rotator(HitRay));
+	if ( Mist != None )
+		Mist.HitDir = HitRay;
+	LastMistTime = Level.TimeSeconds;
 }
 
 // A stun lasts until StunTime. (It used to borrow the timer the burn damage runs on: each blow that stunned
@@ -3385,6 +4276,12 @@ simulated function PlayFakeDyingAnimation(class<DamageType> DamageType, vector H
 				{
 					RagDeathVel = DamageType.default.KDeathVel * BlastFling(DamageType);
 					RagDeathUpKick = DamageType.default.KDeathUpKick * BlastFling(DamageType);
+					// (bodies a blast kills fly further)
+					if ( IsPowerHit(DamageType) && !DamageType.default.bLocationalHit )
+					{
+						RagDeathVel *= BlastThrowScale;
+						RagDeathUpKick *= BlastThrowScale;
+					}
 				}
 			}
 
@@ -3560,6 +4457,12 @@ simulated function PlayDyingAnimation(class<DamageType> DamageType, vector HitLo
 				{
 					RagDeathVel = DamageType.default.KDeathVel * BlastFling(DamageType);
 					RagDeathUpKick = DamageType.default.KDeathUpKick * BlastFling(DamageType);
+					// (bodies a blast kills fly further)
+					if ( IsPowerHit(DamageType) && !DamageType.default.bLocationalHit )
+					{
+						RagDeathVel *= BlastThrowScale;
+						RagDeathUpKick *= BlastThrowScale;
+					}
 				}
 			}
 
@@ -3700,6 +4603,10 @@ simulated function Destroyed()
 {
 	local int i;
 
+	StopLootGlow();
+	StopZapFX();
+	if ( SoakFX != None )
+		SoakFX.Destroy();
 	if( MyExtCollision!=None )
 		MyExtCollision.Destroy();
 	if( MyHeadCollision!=None )
@@ -3914,8 +4821,70 @@ event EncroachedBy( actor Other )
 	}
 }
 
+// How many seconds a specimen set alight by From burns: longer in an upgraded flamethrower's fire
+function int BurnTime( Pawn From )
+{
+	if ( From != None && FlameThrower(From.Weapon) != None && FlameThrower(From.Weapon).bUpgraded )
+		return 15;
+	return 10;
+}
+
+// Heat from an upgraded gun's incendiary round: enough of it and the specimen burns, as from a flame (one burning
+// already burns longer). No harm of its own.
+function TakeIncendiary( int Heat, Pawn From )
+{
+	if ( Health <= 0 || bDeleteMe )
+		return;
+	if ( BurnDown > 0 )
+	{
+		if ( !bBurnTick && BurnDown < 10 )
+			BurnDown++;
+		return;
+	}
+	HeatAmount += Heat;
+	if ( HeatAmount <= 4 )
+		return;
+	LastBurnDamage = Max(LastBurnDamage, 5);
+	bBurnified = true;
+	BurnDown = 10;
+	SetGroundSpeed(GroundSpeed);
+	BurnInstigator = From;
+	SetTimer(1.0, true);
+}
+
+// The blow of an upgraded double barrel: a light specimen is thrown off its feet and back (Push), a heavy one stumbles
+function KnockBack( vector From, vector Push )
+{
+	local name Seq;
+	local float Frame, Rate;
+
+	if ( Health <= 0 || KFMonsterController(Controller) == None )
+		return;
+	GetAnimParams(0, Seq, Frame, Rate);
+	if ( bShotAnim && IsAnimating(0) && Seq == 'StunState' )
+		return;
+	if ( default.Health < 400 && FlipOver() )
+	{
+		AddVelocity(Push);
+		return;
+	}
+	BlastStagger(From);
+}
+
 defaultproperties
 {
+	bClimbs=True
+	ClimbMax=90.000000
+	ClimbSpeed=240.000000
+	ClimbOverSpeed=160.000000
+	MistBloodClass=Class'KFMod.KFExitMist'
+	MistHitDamage=15
+	FleshHitSounds(0)=Sound'KFWeaponSound.bullethitflesh2'
+	FleshHitSounds(1)=Sound'KFWeaponSound.bullethitflesh3'
+	FleshHitSounds(2)=Sound'KFWeaponSound.bullethitflesh4'
+	FleshHitSounds(3)=Sound'KFWeaponSound.bullethitflesh5'
+	FleshHitVolume=1.200000
+     SoundOcclusion=OCCLUSION_StaticMeshes
      CrowdShrinkFactor=0.700000
      CrowdShrinkMinRadius=12.000000
      CrowdShrinkRestoreDelay=1.000000
@@ -3933,9 +4902,16 @@ defaultproperties
      KFHitRight="HitReactionR"
      HeadStubClass=Class'KFMod.GibHeadStump'
      GibScale=1.000000
-     LimbBlast=0.600000
-     TorsoBlast=1.500000
+     LimbBlast=0.500000
+     TorsoBlast=1.300000
      BodyBlast=2.500000
+     ObliterateShare=0.300000
+     SplitBand=14.000000
+     OverkillShare=0.250000
+     CorpseBlastGib=0.250000
+     CorpseBlastLimb=0.600000
+     AshCrumbleChance=0.500000
+     BlastThrowScale=1.350000
      BlastWindow=0.250000
      CorpseGibHealth=-400
      DownCutReach=12.000000
@@ -3946,6 +4922,9 @@ defaultproperties
      SmackSounds(2)=Sound'PlayerSounds.ImpactSounds.BodyHit5'
      SmackSounds(3)=Sound'PlayerSounds.ImpactSounds.BodyHit6'
      bOwnLimbs=True
+     ZapDropAfter=0.600000
+     AshCrumbleDamage=30
+     FrozenDamageScale=1.500000
      LimbJoints(0)="Bip01 L UpperArm"
      LimbJoints(1)="Bip01 L Forearm"
      LimbJoints(2)="Bip01 R UpperArm"

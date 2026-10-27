@@ -205,6 +205,15 @@ simulated function UpdateMagCapacity(PlayerReplicationInfo PRI)
 
 defaultproperties
 {
+	MeshMats(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	MeshMats(2)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(3)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	BrassClass=Class'KFMod.KFBrassShell'
+	BrassBone=CasingBone
+	BrassDelay=0.660000
+     Element=1
+	FarKind(0)=FAR_Shotgun
     ExplosiveClipCount=4
     ClipCount=8
     ReloadRate=0.750000
@@ -240,4 +249,8 @@ defaultproperties
     TransientSoundVolume=1.000000
     WallPivotRot=(Pitch=0,Yaw=0,Roll=0)
 	WallPivotOffset=(x=-50,y=0,z=-10)
+     UpgradeName="Dragon's Breath"
+     UpgradeMagScale=2.000000
+     SheenSlots(0)=4
+     SheenMats(0)=Shader'KillingFloorWeapons.Shotgun.ShotgunShineShader'
 }

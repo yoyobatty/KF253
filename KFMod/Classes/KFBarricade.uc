@@ -101,8 +101,11 @@ function AwardRepair( optional Pawn ForRepairer )
 	if( R==None )
 		R = Repairer;
 
-	if( RepairReward>0 && R!=None && PlayerController(R.Controller)!=None )
-		PlayerController(R.Controller).PlayerReplicationInfo.Score += RepairReward;
+	if( RepairReward<=0 || R==None || R.Controller==None || R.Controller.PlayerReplicationInfo==None )
+		Return;
+	if( KFZombiesGameType(Level.Game)!=None )
+		KFZombiesGameType(Level.Game).AwardPoints(R.Controller, RepairReward);
+	else R.Controller.PlayerReplicationInfo.Score += RepairReward;
 }
 
 function KFBarricadePlank FindWorstPlank()

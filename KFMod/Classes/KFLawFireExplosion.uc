@@ -129,8 +129,8 @@ defaultproperties
 		StartSpinRange=(X=(Min=-1.000000,Max=1.000000))
 		SizeScale(0)=(RelativeSize=0.500000)
 		SizeScale(1)=(RelativeSize=1.000000)
-		SizeScale(2)=(RelativeTime=0.340000,RelativeSize=8.520000)
-		SizeScale(3)=(RelativeTime=1.000000,RelativeSize=14.400000)
+		SizeScale(2)=(RelativeTime=0.340000,RelativeSize=5.000000)
+		SizeScale(3)=(RelativeTime=1.000000,RelativeSize=8.000000)
 		StartSizeRange=(X=(Min=20.000000,Max=40.000000))
 		InitialParticlesPerSecond=50.000000
 		DrawStyle=PTDS_AlphaBlend

@@ -7,6 +7,10 @@ class DeagleFire extends KFFire;
 
 defaultproperties
 {
+	MechSound=Sound'KFWeaponSound.DeagleCock'
+	MechVolume=0.280000
+	MechPitch=1.500000
+     FlashFXClass=Class'KFMod.KFFlashDeagle'
     MaxPenetrations=4
     PenDamageScale=0.500000
     DamageType=Class'KFMod.DamTypeDeagle'
@@ -31,7 +35,7 @@ defaultproperties
     ShakeOffsetTime=2.000000
     BotRefireRate=0.800000
     FireRate=0.400000
-    FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
+    FlashEmitterClass=None
     aimerror=0.000000
     SpreadStyle=SS_Random
 }

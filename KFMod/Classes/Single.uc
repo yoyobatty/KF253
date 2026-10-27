@@ -44,6 +44,12 @@ simulated function bool PutDown()
 
 defaultproperties
 {
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(2)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+     Element=3
+	FarKind(0)=FAR_Pistol
      ClipCount=15
      ReloadRate=2.000000
      ReloadAnim="Reload"
@@ -77,4 +83,13 @@ defaultproperties
      IconCoords=(X1=434,Y1=253,X2=506,Y2=292)
      ItemName="9mm Tactical"
      Mesh=SkeletalMesh'KFWeaponModels.9MM'
+     UpgradeName="Wasp"
+     UpgradeMagScale=2.000000
+     UpgradeBurst=3
+     UpgradePenetrations=1
+     UpgradeFireRateScale=0.800000
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
+     SheenSlots(1)=3
+     SheenMats(1)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
 }

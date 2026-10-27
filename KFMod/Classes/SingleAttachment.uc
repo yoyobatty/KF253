@@ -65,8 +65,8 @@ simulated function TacBeamGone()
 
 defaultproperties
 {
-     mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
-     mTracerClass=Class'KFMod.KFNewTracer'
+     mMuzFlashClass=Class'KFMod.KFFlashPistol'
+     mTracerClass=Class'KFMod.KFRoundPistol'
      mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
      TPAnims(0)="DeagleBlast"
      WeaponIdleMovementAnim="DeagleHold"
@@ -77,4 +77,5 @@ defaultproperties
      LightRadius=0.000000
      CullDistance=5000.000000
      Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+     SmokeHeat=0.070000
 }

@@ -1,7 +1,8 @@
 //=============================================================================
 // Stun Nade
 //=============================================================================
-class StunProj extends Grenade;
+class StunProj extends Grenade
+	DependsOn(KFFarSound);
 
 var() vector RotMag;            // how far to rot view
 var() vector RotRate;           // how fast to rot view
@@ -18,7 +19,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
     local PlayerController  LocalPlayer;
 
     BlowUp(HitLocation);
-    PlaySound(sound'PatchSounds.StunNadeBoomSound',,100.5*TransientSoundVolume);
+    class'KFBlastSound'.static.Play(self, sound'PatchSounds.StunNadeBoomSound', 100.5*TransientSoundVolume);
+    if ( Role == ROLE_Authority )
+        class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Grenade);
     if ( EffectIsRelevant(Location,false) )
     {
         Spawn(class'KFmod.KFMiniExplosion',,, HitLocation, rotator(vect(0,0,1)));

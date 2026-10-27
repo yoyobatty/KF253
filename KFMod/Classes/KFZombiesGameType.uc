@@ -23,8 +23,6 @@ var() int LateRoundStart;
 var() int HitPoints, KillPoints, HeadshotKillPoints, MeleeKillPoints;
 var() int RevivePoints, NukePoints, CarpenterPoints;
 
-var() float PowerUpDropChance, PowerUpDuration;
-var() int MaxPowerUpsPerRound;
 var() float UpgradedDamageScale;
 var() int RoundGrenades;
 
@@ -35,14 +33,11 @@ struct StuckInfo
     var KFMonster M;
     var vector Loc;
 };
+var() bool bBotZombiePawns;  // bots on the mode's pawn (SpawnBot)
 var array<StuckInfo> StuckList;
 var float NextStuckCheckTime;
 
 var array<KFMonster> ScaledZeds;
-var array<class<KFZombiesPowerUp> > PowerUpClasses;
-var int PowerUpsThisRound;
-var float InstaKillEndTime, DoublePointsEndTime;
-var bool bNuking;
 
 var KFMonster LastKilledMonster;
 var class<DamageType> LastKillDamageType;
@@ -135,6 +130,18 @@ static function FillPlayInfo(PlayInfo PlayInfo)
     }
     else
         log("GameInfo::FillPlayInfo class'Engine.GameInfo'.default.VotingHandlerClass = None");
+}
+
+// Bots get the mode's pawn as players do: the perk machines serve them, and they carry what players carry (no syringe
+// or welder). Only players go down (PreventDeath), so a bot still dies as before.
+function Bot SpawnBot(optional string botName)
+{
+    local Bot B;
+
+    B = Super.SpawnBot(botName);
+    if (B != None && bBotZombiePawns)
+        B.PawnClass = class'KFHumanPawnZombies';
+    return B;
 }
 
 function bool IsSoloGame()
@@ -390,10 +397,8 @@ function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<Dam
     LastKilledMonster = KFMonster(KilledPawn);
     LastKillDamageType = damageType;
 
+    // (the power-up a kill may leave comes from KFEndlessGameType.Killed)
     Super.Killed(Killer, Killed, KilledPawn, damageType);
-
-    if (LastKilledMonster != None && !bNuking && Killer != None && Killer.bIsPlayer)
-        TryDropPowerUp(KilledPawn.Location);
 
     LastKilledMonster = None;
 }
@@ -665,6 +670,7 @@ defaultproperties
     NukePoints=400
     CarpenterPoints=200
     PowerUpDropChance=0.030000
+    LootWaveChance=0.000000
     PowerUpDuration=30.000000
     MaxPowerUpsPerRound=4
     UpgradedDamageScale=2.000000
@@ -679,4 +685,5 @@ defaultproperties
     PlayerControllerClass=Class'KFMod.KFPlayerControllerZombies'
     PlayerControllerClassName="KFmod.KFPlayerControllerZombies"
     bPerksEnabled=False
+    bBotZombiePawns=True
 }

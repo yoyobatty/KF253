@@ -15,7 +15,7 @@ function bool FindNewEnemy()
     {
         // Only consider pawns that are monsters, not self, and not dead
         M = Monster(PC.Pawn);
-        if (M == None || M == Pawn || M.Health <= 0)
+        if (M == None || M == Pawn || M.Health <= 0 || PC.IsA('FriendlyMonsterAI'))
             continue;
 
         // Optionally: Don't attack monsters of the same class (if you want)
@@ -61,6 +61,9 @@ function bool SetEnemy( Pawn NewEnemy, optional bool bHateMonster )
 
 	if ( (NewEnemy == None) || (NewEnemy.Health <= 0) || (NewEnemy.Controller == None) || (NewEnemy == Enemy) )
 		return false;
+	// (only ever the specimens, not the players nor another on their side)
+	if ( Monster(NewEnemy) == None || NewEnemy.Controller.IsA('FriendlyMonsterAI') )
+		return false;
 
 	if ( (Enemy == None) || !EnemyVisible() )
 	{
@@ -89,8 +92,9 @@ function bool SetEnemy( Pawn NewEnemy, optional bool bHateMonster )
 function bool SameTeamAs( Controller C )
 {
     // Friendly monsters are not on the same team as any other monster
-    if (KFPlayerController(C) != None)
+    if (KFPlayerController(C) != None || (C != None && C.bIsPlayer) || FriendlyMonsterAI(C) != None)
         return true;
+    return false;
 }
 
 defaultproperties

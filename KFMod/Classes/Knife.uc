@@ -5,6 +5,7 @@ class Knife extends KFMeleeGun;
 
 defaultproperties
 {
+     Element=7
      MeleeHitSounds(0)=Sound'KFWeaponSound.knife_hit2'
      MeleeHitSounds(1)=Sound'KFWeaponSound.knife_hit3'
      MeleeHitSounds(2)=Sound'KFWeaponSound.knife_hit4'
@@ -36,4 +37,8 @@ defaultproperties
      Skins(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
      Skins(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
      Skins(2)=Shader'KillingFloorWeapons.Knife.KnifeShineShader'
+     UpgradeName="Bloodletter"
+     UpgradeKillHeal=10
+     SheenSlots(0)=2
+     SheenMats(0)=Shader'KillingFloorWeapons.Knife.KnifeShineShader'
 }

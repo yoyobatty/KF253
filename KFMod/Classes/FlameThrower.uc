@@ -6,7 +6,8 @@ class FlameThrower extends KFWeapon;
 // The nozzle glows while it fires, and with its heat: hot after about six seconds of fire, cooling from four seconds after
 var float Heat, ColdFor, LastFlame;
 var float GlowR, GlowG, GlowB;		// the glow shown, eased towards what it should be
-var Shader GlowShader;				// FTFireShader's look with its glow coloured by GlowColor
+var Shader GlowShader;
+var bool bGlowSheened;		// (GlowShader made over the upgrade's sheen)				// FTFireShader's look with its glow coloured by GlowColor
 var ConstantColor GlowColor;
 
 // Where the nozzle is drawn in first person, on the scene's view (KFFlameStream starts there)
@@ -16,7 +17,14 @@ var float DrawnNozzleTime;
 simulated function IncrementFlashCount(int Mode)
 {
 	Super.IncrementFlashCount(Mode);
-	LastFlame = Level.TimeSeconds;
+	if ( Mode == 0 )
+		LastFlame = Level.TimeSeconds;
+}
+
+// (its alternate fire is its gas mode, or the upgraded one's charge: FlameAltFire, not an aim)
+simulated function bool CanZoomNow()
+{
+	return false;
 }
 
 simulated event RenderOverlays( Canvas Canvas )
@@ -102,6 +110,14 @@ simulated function WeaponTick(float dt)
 	ShowGlow();
 }
 
+// Its tank as it is when not glowing: upgraded, with the upgrade's sheen (KFWeapon.SheenSkins)
+simulated function Material CoolLook()
+{
+	if ( bUpgraded && SheenMade.Length > 0 && SheenMade[0] != None )
+		return SheenMade[0];
+	return default.Skins[4];
+}
+
 simulated function ShowGlow()
 {
 	local Combiner Mix;
@@ -109,13 +125,14 @@ simulated function ShowGlow()
 
 	if ( GlowR + GlowG + GlowB < 3.0 )
 	{
-		if ( Skins[4] != default.Skins[4] )
-			Skins[4] = default.Skins[4];
+		if ( Skins[4] != CoolLook() )
+			Skins[4] = CoolLook();
 		return;
 	}
-	if ( GlowShader == None )
+	if ( GlowShader == None || bGlowSheened != (bUpgraded && SheenMade.Length > 0) )
 	{
-		Look = Shader(default.Skins[4]);
+		bGlowSheened = bUpgraded && SheenMade.Length > 0;
+		Look = Shader(CoolLook());
 		GlowColor = new(None) class'ConstantColor';
 		Mix = new(None) class'Combiner';
 		Mix.CombineOperation = CO_Multiply;
@@ -147,6 +164,7 @@ function float SuggestAttackStyle()
 
 defaultproperties
 {
+     Element=2
 	ClipCount=100
 	ReloadRate=4.140000
 	ReloadAnim="Reload"
@@ -155,7 +173,7 @@ defaultproperties
 	bSteadyAim=True
 	UpKick=250
 	FireModeClass(0)=Class'KFMod.FlameBurstFire'
-	FireModeClass(1)=Class'KFMod.NoFire'
+	FireModeClass(1)=Class'KFMod.FlameAltFire'
 	PutDownAnim="PutDown"
 	PutDownAnimRate=1.000000
 	PutDownTime=1.000000
@@ -191,4 +209,8 @@ defaultproperties
 	Skins(3)=Shader'KillingFloorWeapons.FlameThrower.PilotBloomShader'
 	Skins(4)=Shader'KillingFloorWeapons.FlameThrower.FlameThrowerShader'
 	TransientSoundVolume=1.250000
+     UpgradeName="Blue Inferno"
+     UpgradeMagScale=1.500000
+     SheenSlots(0)=4
+     SheenMats(0)=Shader'KillingFloorWeapons.FlameThrower.FlameThrowerShader'
 }

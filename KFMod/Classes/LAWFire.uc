@@ -111,8 +111,20 @@ function PlayFiring()
 	Weapon.GetFireMode(1).bIsFiring = False; // Stop zooming :)
 }
 
+// An upgraded LAW's rocket leaves its fuel burning where it bursts
+function projectile SpawnProjectile(Vector Start, Rotator Dir)
+{
+	local Projectile P;
+
+	P = Super.SpawnProjectile(Start, Dir);
+	if ( LAWProj(P) != None && Upgraded() )
+		LAWProj(P).bNapalm = true;
+	return P;
+}
+
 defaultproperties
 {
+     FlashFXClass=Class'KFMod.KFFlashLAW'
      FrontBlastRange=220.000000
      FrontBlastDamage=500.000000
      FrontBlastMomentum=200000.000000
@@ -142,7 +154,7 @@ defaultproperties
      ShakeOffsetMag=(X=20.000000,Y=20.000000,Z=20.000000)
      ProjectileClass=Class'KFMod.LAWProj'
      BotRefireRate=0.500000
-     FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'
+     FlashEmitterClass=None
      Spread=0.050000
      WarnTargetPct=0.900000
      AimError=1.000000

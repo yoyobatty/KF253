@@ -68,6 +68,21 @@ function FlashMuzzleFlash()
 
 }
 
+// The pistol that fires: the left one's muzzle is tip01
+simulated function name FlashFXBone()
+{
+	if ( FireAnim == 'FireLeft' )
+		return 'tip01';
+	return 'tip';
+}
+
+simulated function name BrassFXBone()
+{
+	if ( FireAnim == 'FireLeft' )
+		return 'CasingBone01';
+	return 'CasingBone';
+}
+
 event ModeDoFire()
 {
 	local name bn;
@@ -108,6 +123,10 @@ function DoFireEffect()
 
 defaultproperties
 {
+	MechSound=Sound'KFWeaponSound.Berettaslideback'
+	MechVolume=0.200000
+	MechPitch=1.800000
+     FlashFXClass=Class'KFMod.KFFlashMP'
     FireAnim2="FireLeft"
     DamageType=Class'KFMod.DamTypeDualies'
     DamageMin=30
@@ -133,7 +152,7 @@ defaultproperties
     ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
     ShakeOffsetTime=2.000000
     BotRefireRate=0.850000
-    FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
+    FlashEmitterClass=None
     aimerror=25.000000
     Spread=0.007500
     SpreadStyle=SS_Random

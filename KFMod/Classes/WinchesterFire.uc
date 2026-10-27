@@ -41,6 +41,7 @@ function NormalSpeed()
 
 defaultproperties
 {
+     FlashFXClass=Class'KFMod.KFFlashWinchester'
      FireAimingAnim="AimFire"
      DamageType=Class'KFMod.DamTypeWinchester'
      DamageMin=350
@@ -67,6 +68,6 @@ defaultproperties
      ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
      ShakeOffsetTime=2.000000
      BotRefireRate=0.650000
-     FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'
+     FlashEmitterClass=None
      aimerror=0.000000
 }

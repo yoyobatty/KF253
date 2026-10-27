@@ -46,6 +46,14 @@ var name HumanOrders;			// the last order a player gave this bot
 // Grenades, as players spend them
 var() bool bFragFP;				// a frag for a Fleshpound (FPToFrag), one at a time a Fleshpound, some kept for them in their waves
 var() int FragReserve;			// in a Fleshpound wave, frags kept for Fleshpounds (not thrown at other bunches)
+var() int EndlessFragReserve;	// the same in Endless, which counts every wave past the last as a Fleshpound wave (a bot has 3 to 5)
+var() bool bNadeLob;			// a grenade lobbed over the specimens in front onto the bunch behind them, when they stand in the way of a throw or are inside their kite distance (none within NadeLobClose) (NadeArc, ShouldNadeEnemy)
+var() float NadeLobClose;
+var bool bLobThrow;				// the grenade about to be thrown goes over bodies (ShouldNadeEnemy chose a lob)
+var() bool bPowerUpRun;			// a power-up (Endless, Zombies) lying within PowerUpRunDist on about our floor, with nothing near us: go and take it, it works for the whole team and is gone in 30 s (PowerUpRunAssignment)
+var() float PowerUpRunDist;
+var KFZombiesPowerUp PowerUpRunTarget;
+var float NextPowerUpRunTime;
 var KFMonster FragTarget;		// the Fleshpound our last frag was meant for, and when we went to throw it
 var float FragTime;
 
@@ -68,6 +76,11 @@ var() bool bBarrelSense;		// both barrels of the double barrel only when one wou
 var() bool bPumpFirst;			// the double barrel not before another gun for the ordinary specimens: a lone Support met wave 1 with it and was reloading three quarters of the time a specimen was within 300 (GetShoppingWishes)
 var() bool bVestEarly;			// armour as soon as there is a gun for the ordinary specimens, before more guns: lone bots met wave 1 without any, every one of them (DoTrading)
 var() bool bShotgunLine;		// a shot of pellets goes down the line through the most specimens: each pellet goes on through two bodies (eight for Support), and the bot aimed at the one it was fighting only (AdjustAim, PelletLineSpot)
+var() bool bWeaponStick;		// the gun in hand kept unless another is clearly better (WeaponStickScale): rated afresh with a fresh FRand on every decision, and a crossbow rated up whenever the bot stood still, a Sharpshooter in a crowd swapped Deagle and crossbow back and forth, a second without a shot each time (RateWeapon)
+var() float WeaponStickScale;
+var() bool bSafeSelfHeal;		// the syringe out for ourselves only with nothing close: with its enemy just killed in a crowd a bot had none for a moment and healed where it stood; given up when a specimen gets close or the gun will not go down (SelfHealSafe, GoHealSelf)
+var float HealSelfStart;
+var() bool bNadeTimer;			// the grenade timer left to run out: each look at throwing while it ran set it 1 to 5 s on again, and in a fight a bot looks more often than that, so it hardly ever ran out (TryNade)
 var KFAmmoPickup AmmoRunTarget;
 var float NextAmmoRunTime, AmmoRunBestDist;
 var int AmmoRunStalls;
@@ -155,6 +168,18 @@ var KFHumanPawn InjuredAlly;
 var KFHumanPawnZombies ReviveTarget;
 var float NextReviveTime;
 var() float ReviveSearchDist;
+
+// Zombies mode (KFZombiesGameType): with no specimen close, mend a barricade near by or spend points at the walls and
+// machines as a player would (ZombiesErrand)
+var() bool bZombiesErrands;
+var() float ErrandSafeDist, ErrandBuyDist, ErrandMendDist, ErrandTimeLimit;
+var() int ErrandKeepPoints;		// points kept for the team's doors (TryPurchaseDoor takes from the bots), except for a first gun
+var Actor ErrandTarget;			// a KFZombiesUsable or a KFBarricade
+var byte ErrandKind;			// 1 mend, 2 wall gun, 3 ammo, 4 perk, 5 upgrade, 6 box
+var bool bErrandDone, bBoxPaid;
+var float NextErrandTime, ErrandStart, ErrandCheckTime, ErrandCheckDist;
+var array<Actor> ErrandFails;		// targets given up on, until ErrandFailUntil (a door in the way, stuck, timed out)
+var array<float> ErrandFailUntil;
 var KFInvasionBot BeggingTarget,AnswerBegger;
 var PlayerController DonatePlayer, BeggingPlayer;
 
@@ -561,6 +586,7 @@ final function int FillAllAmmo( Class<Ammunition> AClass, float PriceScale, opti
     AM.MaxAmmo = AM.default.MaxAmmo;
     if ( KFPlayerReplicationInfo(PlayerReplicationInfo) != none && KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill != none )
 		AM.MaxAmmo = int(float(AM.MaxAmmo) * KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.AddExtraAmmoFor(AClass));
+	AM.MaxAmmo = int(float(AM.MaxAmmo) * KW.UpgradeAmmo());
 
 	mxam = AM.MaxAmmo;
 	if( KW==MyGrenades )
@@ -1887,7 +1913,7 @@ final function vector GetNadeTossDir(vector Start, vector Spot)
 }
 
 // Is the arc to where the grenade should come down free of walls, ceilings and furniture for most of the way?
-final function bool NadePathClear(Actor Tgt)
+final function bool NadePathClear(Actor Tgt, optional bool bLob)
 {
 	local vector Start, Spot, Vel, Flat, P0, P1;
 	local float G, T, TEnd, HSpeed;
@@ -1895,6 +1921,8 @@ final function bool NadePathClear(Actor Tgt)
 
 	Start = Pawn.Location + Pawn.EyePosition();
 	Spot = GetNadeTossSpot(Tgt);
+	if ( bLob )
+		return NadeArc(Start, Spot, true, Vel, HSpeed);
 	Vel = GetNadeTossDir(Start, Spot) * GetNadeTossSpeed(Spot);
 	G = -Pawn.PhysicsVolume.Gravity.Z;
 	Flat = Spot - Start;
@@ -1914,6 +1942,68 @@ final function bool NadePathClear(Actor Tgt)
 		P0 = P1;
 	}
 	return true;
+}
+
+// (bNadeLob) How to lob a grenade from Start to come down at Spot: the flattest launch of 20 to 60 degrees whose arc, at the
+// grenade's own fall (half the zone's gravity, a bouncing projectile), stays clear of the world most of the way and, with
+// bOverBodies, passes over every specimen on the way that is not by Spot. False if none does. (The ordinary throw keeps
+// GetNadeTossDir: worked out this way for every throw, grenades came down no nearer what they were thrown at.)
+final function bool NadeArc( vector Start, vector Spot, bool bOverBodies, out vector Dir, out float Speed )
+{
+	local vector Flat, P0, P1, Off;
+	local float D, DZ, G, A, C, S, T, TEnd, X;
+	local int i, k;
+	local Controller Ctl;
+	local bool bClear;
+
+	Flat = Spot - Start;
+	DZ = Flat.Z;
+	Flat.Z = 0;
+	D = VSize(Flat);
+	G = 0.5f * -Pawn.PhysicsVolume.Gravity.Z;
+	if ( D < 60.f || G < 1.f )
+		return false;
+	Flat /= D;
+	for ( k=0; k<5; k++ )
+	{
+		A = (20.f + 10.f * k) * PI / 180.f;
+		C = Cos(A);
+		S = Sin(A);
+		if ( D * S / C <= DZ + 10.f )
+			continue;
+		Speed = Sqrt(G * D * D / (2.f * C * C * (D * S / C - DZ)));
+		if ( Speed > class'FragFire'.default.mHoldSpeedMax )
+			continue;
+		Dir = Flat * C;
+		Dir.Z = S;
+		bClear = true;
+		TEnd = 0.9f * D / (Speed * C);
+		P0 = Start;
+		for ( i=1; i<=8 && bClear; i++ )
+		{
+			T = TEnd * i / 8.f;
+			P1 = Start + Dir * Speed * T;
+			P1.Z -= 0.5f * G * T * T;
+			bClear = FastTrace(P1, P0);
+			P0 = P1;
+		}
+		if ( bClear && bOverBodies )
+			for ( Ctl=Level.ControllerList; Ctl!=None && bClear; Ctl=Ctl.nextController )
+			{
+				if ( KFMonster(Ctl.Pawn) == None || Ctl.Pawn.Health <= 0 )
+					continue;
+				Off = Ctl.Pawn.Location - Start;
+				Off.Z = 0;
+				X = Off dot Flat;
+				if ( X <= 0.f || X > D - 150.f || VSize(Off - Flat * X) > Ctl.Pawn.CollisionRadius + 25.f )
+					continue;
+				T = X / (Speed * C);
+				bClear = ( Start.Z + Speed * S * T - 0.5f * G * T * T > Ctl.Pawn.Location.Z + Ctl.Pawn.CollisionHeight + 20.f );
+			}
+		if ( bClear )
+			return true;
+	}
+	return false;
 }
 
 // While the grenade we threw is live: note where it really is (it can stop short of where it was thrown) and,
@@ -2361,7 +2451,7 @@ function ExecuteWhatToDoNext()
 			Destroy();
 			return;
 		}
-		if( Pawn.Health<=80 && TryToHealSelf() )
+		if( Pawn.Health<=80 && (!bSafeSelfHeal || SelfHealSafe()) && TryToHealSelf() )
 			return;
 		ReloadIfLow();
 
@@ -2419,6 +2509,16 @@ function ExecuteWhatToDoNext()
 	{
 		GoalString = "REVIVING";
 		GotoState('Reviving');
+		return;
+	}
+
+	if ( PowerUpRunAssignment() )
+		return;
+
+	if( (Enemy==None || (!LineOfSightTo(Enemy) && VSize(Enemy.Location-Pawn.Location)>ErrandSafeDist)) && FindZombiesErrand() )
+	{
+		GoalString = "ERRAND "$ErrandKind$" "$ErrandTarget;
+		GotoState('ZombiesErrand');
 		return;
 	}
 
@@ -3032,7 +3132,7 @@ function array<class<Pickup> > GetLegalPurchases()
 	for(i=0; i<KFLR.ItemForSale.Length; i++ )
 	{
 		//log("Looping through legal purchase:"@i);
-		if( KFLR.ItemForSale[i]!=none /*&& CanAfford(KFLR.ItemForSale[i] )*/ )
+		if( KFLR.ItemForSale[i]!=none && KFLR.ItemForSale[i]!=class'BFGPickup' && KFLR.ItemForSale[i]!=class'RevolverPickup' && KFLR.ItemForSale[i]!=class'RailgunPickup' && KFLR.ItemForSale[i]!=class'CryoPickup' /*&& CanAfford(KFLR.ItemForSale[i] )*/ )
 		{
 			//BuyWeapon = class<KFWeaponPickup>(KFLR.ItemForSale[i]);
 			RetList[RetList.Length] = KFLR.ItemForSale[i];
@@ -3918,6 +4018,8 @@ function float RateWeapon(Weapon W)
 			return 0.05;
 	}
 	// (No more "save the last 9mm magazine": it made a bot with a few rounds left draw the knife instead.)
+	if ( bWeaponStick && W == Pawn.Weapon && W.HasAmmo() )
+		R *= WeaponStickScale;
 	return R;
 }
 
@@ -4087,6 +4189,401 @@ Begin:
 	WhatToDoNext(163);
 	if ( bSoaking )
 		SoakStop("STUCK IN HEALING!");
+}
+
+// ---- Zombies mode errands -----------------------------------------------------------------------------------------
+
+final function bool SpecimenNear( vector Loc, float Dist )
+{
+	local Controller C;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( KFMonsterController(C)!=None && C.Pawn!=None && C.Pawn.Health>0 && VSize(C.Pawn.Location-Loc)<Dist )
+			return true;
+	return false;
+}
+
+final function bool IsPrimaryGun( Inventory I )
+{
+	local KFWeapon W;
+
+	W = KFWeapon(I);
+	return W!=None && Single(W)==None && Dualies(W)==None && !W.bIsGrenadeWeapon && KFMeleeGun(W)==None
+		&& Syringe(W)==None && Welder(W)==None;
+}
+
+// (worst: the lowest rated primary; best: the highest)
+final function KFWeapon PrimaryGun( bool bBest, out int Count )
+{
+	local Inventory I;
+	local KFWeapon Pick;
+
+	Count = 0;
+	for( I=Pawn.Inventory; I!=None; I=I.Inventory )
+		if( IsPrimaryGun(I) )
+		{
+			Count++;
+			if( Pick==None || (bBest && KFWeapon(I).default.AIRating>Pick.default.AIRating) || (!bBest && KFWeapon(I).default.AIRating<Pick.default.AIRating) )
+				Pick = KFWeapon(I);
+		}
+	return Pick;
+}
+
+final function int MaxPrimaries()
+{
+	if( KFHumanPawnZombies(Pawn)!=None )
+		return KFHumanPawnZombies(Pawn).MaxPrimaryWeapons;
+	return 2;
+}
+
+// What a gun of this class is worth to us over what we carry: its rating over the worst primary's when the slots are
+// full, over the pistol's when not; 0 when not worth having.
+final function float GunGain( class<Weapon> WC )
+{
+	local KFWeapon Worst;
+	local int Count;
+	local Inventory I;
+
+	if( WC==None || class<KFWeapon>(WC)==None || class<KFWeapon>(WC).default.bIsGrenadeWeapon || ClassIsChildOf(WC, class'KFMeleeGun')
+		|| ClassIsChildOf(WC, class'Single') || ClassIsChildOf(WC, class'Dualies') )
+		return 0;
+	for( I=Pawn.Inventory; I!=None; I=I.Inventory )
+		if( I.Class==WC )
+			return 0;
+	Worst = PrimaryGun(false, Count);
+	if( Count<MaxPrimaries() )
+		return FMax(0, WC.default.AIRating - 0.3);
+	return FMax(0, WC.default.AIRating - Worst.default.AIRating - 0.05);
+}
+
+final function DropWorstPrimary()
+{
+	local KFWeapon Worst;
+	local int Count;
+
+	Worst = PrimaryGun(false, Count);
+	if( Worst!=None && Count>=MaxPrimaries() )
+	{
+		Worst.Destroyed();
+		Worst.Destroy();
+	}
+}
+
+final function bool FindZombiesErrand()
+{
+	local KFBarricade Bar;
+	local KFZombiesUsable U;
+	local KFWallWeaponBuy WB;
+	local KFPerkMachine PM;
+	local KFMysteryBox Box;
+	local KFPackAPunchMachine PaP;
+	local KFPlayerReplicationInfo KFPRI;
+	local KFWeapon W, Best;
+	local float D, Score, BestScore, Points, Gain;
+	local int Count;
+	local bool bFirstGun;
+	local byte Kind;
+
+	if( !bZombiesErrands || KFZombiesGameType(Level.Game)==None || Level.TimeSeconds<NextErrandTime || Pawn==None
+		|| Pawn.Health<=0 || PlayerReplicationInfo==None )
+		return false;
+	NextErrandTime = Level.TimeSeconds + 1.0;
+	if( SpecimenNear(Pawn.Location, ErrandSafeDist) )
+		return false;
+
+	KFPRI = KFPlayerReplicationInfo(PlayerReplicationInfo);
+	Best = PrimaryGun(true, Count);
+	bFirstGun = (Count==0);
+	Points = PlayerReplicationInfo.Score - ErrandKeepPoints;
+	ErrandTarget = None;
+	BestScore = 0;
+
+	foreach DynamicActors(class'KFBarricade', Bar)
+	{
+		D = VSize(Bar.Location-Pawn.Location);
+		if( D>ErrandMendDist || Bar.AllPlanksFull() || SpecimenNear(Bar.Location, 600) || ErrandFailed(Bar)
+			|| (Bar.bBeingRepaired && Bar.Repairer!=None && Bar.Repairer!=Pawn && Level.TimeSeconds-Bar.LastAccumulateUseTime<0.5) )
+			continue;
+		Score = 3.0 - D/ErrandMendDist;
+		if( Score>BestScore )
+		{
+			BestScore = Score;
+			ErrandTarget = Bar;
+			ErrandKind = 1;
+		}
+	}
+
+	foreach DynamicActors(class'KFZombiesUsable', U)
+	{
+		D = VSize(U.Location-Pawn.Location);
+		if( D>ErrandBuyDist || ErrandFailed(U) )
+			continue;
+		Score = 0;
+		Kind = 0;
+		WB = KFWallWeaponBuy(U);
+		PM = KFPerkMachine(U);
+		Box = KFMysteryBox(U);
+		PaP = KFPackAPunchMachine(U);
+		if( WB!=None && WB.WeaponPickupClass!=None )
+		{
+			W = WB.FindOwnedWeapon(Pawn);
+			if( W!=None )
+			{
+				if( Points>=300 && W.MaxAmmo(0)>0 && float(W.AmmoAmount(0))/float(W.MaxAmmo(0))<0.35 )
+				{
+					Score = 4.5;
+					Kind = 3;
+				}
+			}
+			else
+			{
+				Gain = GunGain(class<Weapon>(WB.WeaponPickupClass.default.InventoryType));
+				if( Gain>0 && (WB.GetDisplayPrice()<=Points || (bFirstGun && WB.GetDisplayPrice()<=PlayerReplicationInfo.Score)) )
+				{
+					Score = 3.6 + Gain + float(bFirstGun)*2.5;
+					Kind = 2;
+				}
+			}
+		}
+		else if( PM!=None && KFPRI!=None && KFHumanPawnZombies(Pawn)!=None && KFQuickReviveMachine(PM)==None && !PM.HasPerk(KFPRI) && PM.GetCost()<=Points )
+		{
+			if( KFJuggernogMachine(PM)!=None )
+				Score = 5.0;
+			else Score = 2.5;
+			Kind = 4;
+		}
+		else if( PaP!=None && Best!=None && !Best.bUpgraded && Best.UpgradeName!="" && PaP.Cost<=Points )
+		{
+			Score = 2.2 + Best.default.AIRating;
+			Kind = 5;
+		}
+		else if( Box!=None && !Box.bSpinning && !Box.IsInState('Won') && Box.Cost<=Points
+			&& (Count<MaxPrimaries() || Best==None || Best.default.AIRating<0.7) )
+		{
+			Score = 1.5;
+			Kind = 6;
+		}
+		if( Kind==0 )
+			continue;
+		Score -= D/(ErrandBuyDist*2);
+		if( Score>BestScore )
+		{
+			BestScore = Score;
+			ErrandTarget = U;
+			ErrandKind = Kind;
+		}
+	}
+	bErrandDone = false;
+	bBoxPaid = false;
+	return ErrandTarget!=None;
+}
+
+final function bool ErrandInReach()
+{
+	local vector D;
+
+	if( ErrandTarget==None || Pawn==None )
+		return false;
+	D = ErrandTarget.Location - Pawn.Location;
+	// (a barricade from inside the window: the path nodes stop short of it, and planks are mended from where they are seen)
+	if( KFBarricade(ErrandTarget)!=None )
+		return Abs(D.Z)<120 && VSize(D)<450 && FastTrace(ErrandTarget.Location, Pawn.Location+Pawn.EyePosition());
+	if( Abs(D.Z)>ErrandTarget.CollisionHeight+Pawn.CollisionHeight+80 )
+		return false;
+	D.Z = 0;
+	return VSize(D)<ErrandTarget.CollisionRadius+Pawn.CollisionRadius+30;
+}
+
+final function bool ErrandStillWanted()
+{
+	if( ErrandTarget==None || ErrandTarget.bDeleteMe || Pawn==None || Pawn.Health<=0 )
+		return false;
+	if( ErrandKind==1 )
+		return !KFBarricade(ErrandTarget).AllPlanksFull();
+	return !bErrandDone;
+}
+
+final function FailErrand( optional float Secs )
+{
+	local int i;
+
+	if( Secs<=0 )
+		Secs = 30;
+	for( i=0; i<ErrandFails.Length; i++ )
+		if( ErrandFails[i]==ErrandTarget || ErrandFails[i]==None )
+			break;
+	ErrandFails[i] = ErrandTarget;
+	ErrandFailUntil[i] = Level.TimeSeconds + Secs;
+}
+
+final function bool ErrandFailed( Actor A )
+{
+	local int i;
+
+	for( i=0; i<ErrandFails.Length; i++ )
+		if( ErrandFails[i]==A )
+			return Level.TimeSeconds<ErrandFailUntil[i];
+	return false;
+}
+
+// The way there runs through a door the team has not bought yet (Zombies mode): a player has to open it first.
+final function bool RouteThroughShutDoor()
+{
+	local KFDoorMover D;
+	local int i;
+
+	foreach DynamicActors(class'KFDoorMover', D)
+		if( D.DoorPathNode!=None && D.MyTrigger!=None && D.MyTrigger.bBuyableDoor && !D.MyTrigger.bDoorPurchased )
+			for( i=0; i<16 && RouteCache[i]!=None; i++ )
+				if( RouteCache[i]==D.DoorPathNode )
+					return true;
+	return false;
+}
+
+// (no nearer in four seconds: stuck on the way)
+final function bool ErrandStalled()
+{
+	local float D;
+
+	if( ErrandTarget==None || Pawn==None )
+		return true;
+	D = VSize(ErrandTarget.Location-Pawn.Location);
+	if( Level.TimeSeconds<ErrandCheckTime )
+		return false;
+	if( D>ErrandCheckDist-60 && ErrandCheckTime>0 )
+		return true;
+	ErrandCheckTime = Level.TimeSeconds + 4;
+	ErrandCheckDist = D;
+	return false;
+}
+
+// At the wall or machine: buy, as UsedBy does for a player (the box: pay, wait for the gun, take it if it is worth it).
+final function DoErrand()
+{
+	local KFZombiesUsable U;
+	local KFMysteryBox Box;
+	local KFWeapon Best;
+	local int Count;
+
+	// (walking into a wall or machine uses it already, as KFZombiesUsable.Touch does for a bot: done if so; and its
+	// refire delay, shared by everyone, is waited out rather than spent on a use that does nothing)
+	U = KFZombiesUsable(ErrandTarget);
+	if( U!=None && ErrandKind!=6 && Level.TimeSeconds-U.LastAttempt<U.RefireDelay )
+		return;
+	switch( ErrandKind )
+	{
+	case 2:
+		if( KFWallWeaponBuy(U).FindOwnedWeapon(Pawn)==None )
+		{
+			DropWorstPrimary();
+			U.UsedBy(Pawn);
+		}
+		bErrandDone = true;
+		break;
+	case 3:
+		U.UsedBy(Pawn);
+		bErrandDone = true;
+		break;
+	case 4:
+		if( KFPlayerReplicationInfo(PlayerReplicationInfo)!=None && !KFPerkMachine(U).HasPerk(KFPlayerReplicationInfo(PlayerReplicationInfo)) )
+			U.UsedBy(Pawn);
+		bErrandDone = true;
+		break;
+	case 5:
+		Best = PrimaryGun(true, Count);
+		if( Best!=None && !Best.bUpgraded )
+			KFPackAPunchMachine(ErrandTarget).Upgrade(Pawn, Best);
+		bErrandDone = true;
+		break;
+	case 6:
+		Box = KFMysteryBox(ErrandTarget);
+		if( !bBoxPaid )
+		{
+			if( Box.bSpinning || Box.IsInState('Won') )
+			{
+				bErrandDone = true;
+				break;
+			}
+			Box.UsedBy(Pawn);
+			bBoxPaid = Box.SpinningUser==Pawn;
+			bErrandDone = !bBoxPaid;
+		}
+		else if( Box.SpinningUser!=Pawn )
+			bErrandDone = true;
+		else if( Box.IsInState('Won') )
+		{
+			if( Box.WonWeaponClass!=None && GunGain(class<Weapon>(Box.WonWeaponClass.default.InventoryType))>0 )
+			{
+				DropWorstPrimary();
+				Box.UsedBy(Pawn);
+			}
+			bErrandDone = true;
+		}
+		break;
+	}
+	if( bErrandDone )
+		SwitchToBestWeapon();
+}
+
+state ZombiesErrand
+{
+ignores WaitForMover;
+
+	function BeginState()
+	{
+		ErrandStart = Level.TimeSeconds;
+		ErrandCheckTime = 0;
+		SetBotSprinting(false);
+	}
+	function EndState()
+	{
+		if( KFBarricade(ErrandTarget)!=None && KFBarricade(ErrandTarget).Repairer==Pawn )
+			KFBarricade(ErrandTarget).StopRepairing();
+		ErrandTarget = None;
+	}
+	function Timer()
+	{
+		if( Pawn==None || SpecimenNear(Pawn.Location, ErrandSafeDist*0.6) || Level.TimeSeconds-ErrandStart>ErrandTimeLimit )
+		{
+			if( Level.TimeSeconds-ErrandStart>ErrandTimeLimit )
+				FailErrand();
+			NextErrandTime = Level.TimeSeconds + 3;
+			WhatToDoNext(168);
+			return;
+		}
+		if( ErrandKind==1 && ErrandInReach() )
+			KFBarricade(ErrandTarget).AccumulateUse(Pawn, 0.1);
+	}
+Begin:
+	WaitForLanding();
+	SetTimer(0.1, True);
+	while( ErrandStillWanted() )
+	{
+		if( ErrandInReach() )
+		{
+			Focus = ErrandTarget;
+			Pawn.Acceleration = vect(0,0,0);
+			if( ErrandKind!=1 )
+				DoErrand();
+			Sleep(0.2);
+		}
+		else if( FindBestPathToward(ErrandTarget,false,false) )
+		{
+			if( RouteThroughShutDoor() || ErrandStalled() )
+			{
+				FailErrand(120);
+				break;
+			}
+			MoveToward(MoveTarget,ErrandTarget,,false);
+		}
+		else
+		{
+			FailErrand(120);
+			break;
+		}
+	}
+	NextErrandTime = Level.TimeSeconds + 1.5;
+	WhatToDoNext(169);
 }
 
 state Reviving
@@ -4769,6 +5266,15 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 	// specimen walking at the bot put the aim point at the bot's own feet, or behind it.
 	if ( class<Nade>(FiredAmmunition.ProjectileClass) != None )
 	{
+		// (bNadeLob) a lob goes at the speed its arc needs, the fire mode's least (850) let down for it
+		if ( bLobThrow && FragFire(Pawn.Weapon.GetFireMode(0)) != None && NadeArc(projStart, GetNadeTossSpot(Target), true, FireDir, ProjSpeed) )
+		{
+			FragFire(Pawn.Weapon.GetFireMode(0)).mHoldSpeedMax = ProjSpeed;
+			FragFire(Pawn.Weapon.GetFireMode(0)).mHoldSpeedMin = FMin(class'FragFire'.default.mHoldSpeedMin, ProjSpeed);
+			FireRotation = rotator(FireDir);
+			SetRotation(FireRotation);
+			return FireRotation;
+		}
 		FireRotation = rotator(GetNadeTossDir(projStart, GetNadeTossSpot(Target)));
 		SetRotation(FireRotation);
 		return FireRotation;
@@ -5100,6 +5606,19 @@ final function bool TryToHealSelf()
 	return true;
 }
 
+// (bSafeSelfHeal) Nothing can reach us while the syringe is out: the nearest specimen in sight 150 past its kite distance, as
+// FightEnemy asks, and none at all within 400 on our floor, seen or not
+final function bool SelfHealSafe()
+{
+	local float D, M;
+
+	if ( StartleActor != None )
+		return false;
+	if ( FindNearestThreat(D, M) != None && M <= 150.f )
+		return false;
+	return CountThreatsWithin(400.f) == 0;
+}
+
 final function int GetMinHealingValue()
 {
 	if(GetPerkName() == "Berserker") // Berserkers heal less often
@@ -5329,7 +5848,8 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 		return;
 	}
 	// Heal when nothing can reach us while we do it (was: only with fewer than two specimens in sight within 800).
-	if (Pawn.Health < GetMinHealingValue() && (Threat == None || ThreatMargin > 150.f) && StartleActor == None && TryToHealSelf() )
+	if (Pawn.Health < GetMinHealingValue() && (Threat == None || ThreatMargin > 150.f) && StartleActor == None
+		&& (!bSafeSelfHeal || SelfHealSafe()) && TryToHealSelf() )
 		return;
 	if ( TryNade(Threat, ThreatMargin) )
 		return;
@@ -5555,6 +6075,7 @@ state NadeTarget
 		if (MyGrenades != None)
 		{
 			FragFire(MyGrenades.GetFireMode(0)).mHoldSpeedMax = GetNadeTossSpeed(GetNadeTossSpot(Target));
+			FragFire(MyGrenades.GetFireMode(0)).mHoldSpeedMin = class'FragFire'.default.mHoldSpeedMin;
 			MyGrenades.ServerThrow();
 			if ( KFHumanPawn(Target) != None )
 				NextHealNadeTime = Level.TimeSeconds + 7.f;
@@ -5869,6 +6390,97 @@ KeepMoving:
 	}
 	else
 		WhatToDoNext(196);
+}
+
+// (bPowerUpRun) The nearest power-up within PowerUpRunDist on about our floor, while no specimen is within 150 of its kite
+// distance from us
+final function bool PowerUpRunAssignment()
+{
+	local KFZombiesPowerUp U, Best;
+	local float D, BestD, TD, TM;
+
+	if ( !bPowerUpRun || Pawn == None || Level.TimeSeconds < NextPowerUpRunTime )
+		return false;
+	NextPowerUpRunTime = Level.TimeSeconds + 1.f;
+	if ( FindNearestThreat(TD, TM) != None && TM < 150.f )
+		return false;
+	foreach DynamicActors(class'KFZombiesPowerUp', U)
+	{
+		if ( U.bTaken || U.bDeleteMe )
+			continue;
+		D = VSize(U.Location - Pawn.Location);
+		if ( D > PowerUpRunDist || Abs(U.Location.Z - Pawn.Location.Z) > 200.f || (Best != None && D >= BestD) )
+			continue;
+		Best = U;
+		BestD = D;
+	}
+	if ( Best == None )
+		return false;
+	PowerUpRunTarget = Best;
+	GoalString = "Power-up "$Best.Class.Name;
+	GotoState('PowerUpRun');
+	return true;
+}
+
+// (bPowerUpRun) To the power-up, shooting on the way, as on an ammo run
+state PowerUpRun
+{
+	ignores HearNoise;
+
+	function BeginState()
+	{
+		Pawn.bWantsToCrouch = false;
+	}
+	function EndState()
+	{
+		NextPowerUpRunTime = Level.TimeSeconds + 3.f;
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		if ( Enemy != None )
+			TimedFireWeaponAtEnemy();
+		else
+			SetCombatTimer();
+	}
+	// still there, nothing inside its kite distance from us, and closer within the last few legs (the ammo run's count)
+	final function bool KeepGoing()
+	{
+		local float D, TD, TM;
+
+		if ( PowerUpRunTarget == None || PowerUpRunTarget.bDeleteMe || PowerUpRunTarget.bTaken || EnemyReallyScary()
+			|| (FindNearestThreat(TD, TM) != None && TM < 0.f) )
+			return false;
+		D = VSize(PowerUpRunTarget.Location - Pawn.Location);
+		if ( D < AmmoRunBestDist - 48.f )
+		{
+			AmmoRunBestDist = D;
+			AmmoRunStalls = 0;
+		}
+		else if ( ++AmmoRunStalls > 8 )
+			return false;
+		return true;
+	}
+Begin:
+	WaitForLanding();
+	AmmoRunBestDist = 1000000.f;
+	AmmoRunStalls = 0;
+KeepMoving:
+	if ( !KeepGoing() )
+		WhatToDoNext(197);
+	else if ( CanReach(PowerUpRunTarget) )
+	{
+		MoveToward(PowerUpRunTarget, FaceActor(1),, Enemy != None);
+		Goto('KeepMoving');
+	}
+	else if ( FindBestPathToward(PowerUpRunTarget, true, true) )
+	{
+		MoveToward(MoveTarget, FaceActor(1),, Enemy != None);
+		Goto('KeepMoving');
+	}
+	else
+		WhatToDoNext(198);
 }
 
 // To a player who called for cover (see CoverAssignment), shooting on the way
@@ -6835,12 +7447,23 @@ state GoHealSelf
 	{
 		StopFiring();
 		HealState = 0;
+		HealSelfStart = Level.TimeSeconds;
 		SetTimer(0.25f,true);
 	}
 	function Timer()
 	{
+		local float D, M;
+
 		if( Syringe(Pawn.Weapon)==None )
 		{
+			// (bSafeSelfHeal) not while a specimen gets inside its kite distance, nor waiting on a gun that will not go down
+			// (a reload that runs to its end, an empty double barrel): it was tried again every quarter second for as long
+			if ( bSafeSelfHeal && (Level.TimeSeconds - HealSelfStart > 3.f || (FindNearestThreat(D, M) != None && M < 0.f)) )
+			{
+				Global.SwitchToBestWeapon();
+				WhatToDoNext(9);
+				return;
+			}
 			Pawn.PendingWeapon = MySyringe;
 			if( Pawn.Weapon!=None )
 				Pawn.Weapon.PutDown();
@@ -6870,6 +7493,7 @@ Begin:
 final function bool TryNade( KFMonster Threat, float ThreatMargin )
 {
 	local KFMonster FP;
+	local bool bClose;
 
 	// a frag for a Fleshpound goes before the toss of a coin (bFragFP)
 	if ( bFragFP && NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() )
@@ -6880,21 +7504,24 @@ final function bool TryNade( KFMonster Threat, float ThreatMargin )
 			Enemy = FP;
 			FragTarget = FP;
 			FragTime = Level.TimeSeconds;
+			bLobThrow = false;
 			NextNadeTimer = Level.TimeSeconds+2.5f+FRand();
 			GoalString = "Frag the Fleshpound";
 			GoToState('NadeTarget');
 			return true;
 		}
 	}
-	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (Threat==None || ThreatMargin>0.f) && (Rand(2)==0 || ManyEnemiesAround(5, Pawn.Location))
-		&& !(bFragFP && KeepFragsForFP()) && ShouldNadeEnemy() )
+	bClose = ( Threat != None && ThreatMargin <= 0.f );
+	if( NextNadeTimer<Level.TimeSeconds && MyGrenades!=None && MyGrenades.HasAmmo() && (!bClose || (bNadeLob && CountThreatsWithin(NadeLobClose) == 0))
+		&& (Rand(2)==0 || ManyEnemiesAround(5, Pawn.Location)) && !(bFragFP && KeepFragsForFP()) && ShouldNadeEnemy(bClose) )
 	{
 		NextNadeTimer = Level.TimeSeconds+6.f+FRand()*5.f;
 		GoalString = "NadeEnemy";
 		GoToState('NadeTarget');
 		return true;
 	}
-	else NextNadeTimer = Level.TimeSeconds+1.f+FRand()*4.f;
+	else if ( !bNadeTimer || NextNadeTimer < Level.TimeSeconds )
+		NextNadeTimer = Level.TimeSeconds+1.f+FRand()*4.f;
 	return false;
 }
 
@@ -6941,6 +7568,8 @@ final function bool KeepFragsForFP()
 {
 	if ( GetPerkName() == "Field Medic" || GetPerkName() == "Firebug" || MyGrenades == None )
 		return false;
+	if ( KFEndlessGameType(Level.Game) != None )
+		return MyGrenades.AmmoAmount(0) <= EndlessFragReserve && FleshpoundWave();
 	return MyGrenades.AmmoAmount(0) <= FragReserve && FleshpoundWave();
 }
 
@@ -7187,11 +7816,14 @@ final function int SpecimensNear( vector Loc, float R )
 	return Count;
 }
 
-final function bool ShouldNadeEnemy()
+final function bool ShouldNadeEnemy( optional bool bLobOnly )
 {
 	local Controller C;
 	local KFMonster M,MM,Best;
 	local float D,Score,BestScore;
+	local bool bLob, bBestLob;
+
+	bLobThrow = false;
 
 	// Bots who are medics always want to throw heal nades
 	if (NearbyAllyNeedsHealing() != None)	
@@ -7216,10 +7848,18 @@ final function bool ShouldNadeEnemy()
 		{
 			Score += FMin(MM.Health,200.f) * (1.25f - (VSize(MM.Location-M.Location) / 600.f));
 		}
-		if( Score>450.f && (Best == None || BestScore < Score) && NadeLaneClear(M) && NadePathClear(M) )
+		// (bNadeLob) a bunch behind specimens in the way, or with one inside its kite distance, gets a grenade over their heads
+		if( Score>450.f && (Best == None || BestScore < Score) )
 		{
+			if ( !bLobOnly && NadeLaneClear(M) && NadePathClear(M) )
+				bLob = false;
+			else if ( bNadeLob && NadePathClear(M, true) )
+				bLob = true;
+			else
+				continue;
 			Best = M;
 			BestScore = Score;
+			bBestLob = bLob;
 
 			// Early exit if a high-priority target is found
             if (BestScore > 600.f)
@@ -7229,6 +7869,7 @@ final function bool ShouldNadeEnemy()
 	if( Best!=None )
 	{
 		Enemy = Best;
+		bLobThrow = bBestLob;
 		return true;
 	}
 	return false;
@@ -7322,7 +7963,7 @@ final function FindBetterTarget()
 	for( C=Level.ControllerList; C!=None; C=C.nextController )
 	{
 		P = KFMonster(C.Pawn);
-		if( P==None || P.Health<=0 || !LineOfSightTo(P) || P.bDecapitated )
+		if( P==None || P.Health<=0 || !LineOfSightTo(P) || P.bDecapitated || P.IsTurned() )
 			continue;
 		Cost = GetEnemyDesire(P,true);
 		if( BP==None || Best>Cost )
@@ -7333,7 +7974,7 @@ final function FindBetterTarget()
 	}
 	if( BP!=None )
 		BP = KFMonster(SpecimenInLine(BP));
-	if( BP!=None && BP!=Enemy )
+	if( BP!=None && BP!=Enemy && !BP.IsTurned() )
 	{
 		Enemy = BP;
 		Target = BP;
@@ -8415,4 +9056,19 @@ defaultproperties
 	bBarrelSense=True
 	bPumpFirst=True
 	bVestEarly=True
+	bWeaponStick=True
+	WeaponStickScale=1.300000
+	bSafeSelfHeal=True
+	bNadeTimer=True
+	EndlessFragReserve=1
+	bNadeLob=True
+	NadeLobClose=200.000000
+	bPowerUpRun=True
+	PowerUpRunDist=1200.000000
+	bZombiesErrands=True
+	ErrandSafeDist=600.000000
+	ErrandBuyDist=3500.000000
+	ErrandMendDist=1600.000000
+	ErrandTimeLimit=25.000000
+	ErrandKeepPoints=500
 }

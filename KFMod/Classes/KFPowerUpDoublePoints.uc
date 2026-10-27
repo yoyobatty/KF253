@@ -1,6 +1,6 @@
 class KFPowerUpDoublePoints extends KFZombiesPowerUp;
 
-function Activate( KFHumanPawn P, KFZombiesGameType G )
+function Activate( KFHumanPawn P, KFEndlessGameType G )
 {
 	G.StartDoublePoints();
 }

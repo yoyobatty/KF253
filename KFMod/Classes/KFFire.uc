@@ -1,6 +1,11 @@
 class KFFire extends InstantFire
     abstract;
 
+var() class<KFFlash> FlashFXClass;	// its muzzle flash (KFFlash), drawn at the gun's muzzle
+var() bool bNotAShot;		// a fire mode that is no shot (the 9mm's light): no burst, casing, layers or energy hum
+var() Sound MechSound;		// a close, quiet sound of the gun's works under the shooter's own shot (KFWeapon.LocalShotLayers)
+var() float MechVolume, MechPitch;
+
 var float LastClickTime;
 var float LastFireTime;
 
@@ -28,6 +33,11 @@ var float     KickScale;            // This shot's share of the weapon's UpKick 
 // Accuracy update based on pawn velocity
 var() float RecoilMovePenaltySlow, RecoilMovePenaltyFast;            
 var() float BotRecoilMovePenaltySlow, BotRecoilMovePenaltyFast;     
+
+// An upgraded gun's burst (KFWeapon.UpgradeBurst): the rest of a pull's shots follow on their own
+var() float BurstGap;
+var int BurstLeft;
+var bool bBurstShot;
 
 function float GetFireSpeed()
 {
@@ -102,7 +112,8 @@ function PlayFiring()
         }
     }
 
-    Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,(1.0 + RandPitch),false);
+    Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,(1.0 + RandPitch)*UpgradePitch(),false);
+    UpgradeLayer();
     //Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,Default.FireAnimRate/FireAnimRate,false);
     ClientPlayForceFeedback(FireForce);  // jdf
 
@@ -134,8 +145,27 @@ function FlashMuzzleFlash()
    //log(r);
 
     Super.FlashMuzzleFlash();
-    if ( FlashEmitterClass != None && KFWeapon(Weapon) != None )
+    if ( FlashFXClass != None && KFWeapon(Weapon) != None )
+        KFWeapon(Weapon).MuzzleFlashFX(FlashFXClass, FlashFXBone());
+    if ( (FlashEmitterClass != None || FlashFXClass != None) && KFWeapon(Weapon) != None )
         KFWeapon(Weapon).ShotLight();
+    if ( KFWeapon(Weapon) != None && !bNotAShot )
+    {
+        KFWeapon(Weapon).LocalShotLayers(MechSound, MechVolume, MechPitch);
+        KFWeapon(Weapon).EjectBrass(BrassFXBone());
+    }
+}
+
+// The port this shot's casing leaves (a pair of pistols takes turns)
+simulated function name BrassFXBone()
+{
+	return KFWeapon(Weapon).BrassBone;
+}
+
+// The muzzle this shot leaves (a pair of pistols takes turns)
+simulated function name FlashFXBone()
+{
+	return KFWeapon(Weapon).FlashBoneName;
 }
 
 event ModeDoFire()
@@ -169,7 +199,7 @@ event ModeDoFire()
     }
 
 	Rec = GetFireSpeed();
-	FireRate = default.FireRate/Rec;
+	FireRate = default.FireRate/Rec*KFWeapon(Weapon).UpgradeFireRate();
 	FireAnimRate = default.FireAnimRate*Rec;
 	ReloadAnimRate = default.ReloadAnimRate*Rec;
 	Rec = 1;
@@ -223,6 +253,118 @@ event ModeDoFire()
     {
         HandleRecoil();
     }
+
+	// the first shot of an upgraded gun's burst: the others follow on their own, the trigger let go or not
+	if ( !bBurstShot && !bNotAShot && Upgraded() && KFWeapon(Weapon).UpgradeBurst > 1 )
+	{
+		BurstLeft = KFWeapon(Weapon).UpgradeBurst - 1;
+		SetTimer(BurstGap, true);
+	}
+}
+
+// The next shot of an upgraded burst
+event Timer()
+{
+	if ( BurstLeft <= 0 || Weapon == None || Instigator == None || Instigator.Weapon != Weapon || KFWeapon(Weapon).bIsReloading )
+	{
+		BurstLeft = 0;
+		SetTimer(0, false);
+		return;
+	}
+	BurstLeft--;
+	bBurstShot = true;
+	ModeDoFire();
+	bBurstShot = false;
+	if ( BurstLeft <= 0 )
+		SetTimer(0, false);
+}
+
+simulated function bool Upgraded()
+{
+	return KFWeapon(Weapon) != None && KFWeapon(Weapon).bUpgraded;
+}
+
+// An upgraded gun sounds heavier
+function float UpgradePitch()
+{
+	if ( Upgraded() )
+		return 0.85;
+	return 1.0;
+}
+
+function ServerPlayFiring()
+{
+	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,UpgradePitch(),false);
+	UpgradeLayer();
+}
+
+// What an upgraded gun's shot does to a specimen besides the harm (bWasAlive: it was before this shot)
+function UpgradeHit( Actor Target, vector HitLocation, bool bWasAlive )
+{
+	local KFMonster M, Near;
+	local KFWeapon W;
+
+	W = KFWeapon(Weapon);
+	M = KFMonster(Target);
+	if ( W == None || !W.bUpgraded || M == None )
+		return;
+	if ( W.bUpgradeIncendiary && M.Health > 0 )
+		M.TakeIncendiary(2, Instigator);
+	if ( W.bUpgradeStagger && M.Health > 0 && Instigator != None )
+		M.BlastStagger(Instigator.Location);
+	// a head burst by the shot jolts those around it
+	if ( W.bUpgradeHeadShock && bWasAlive && M.Health <= 0 && M.bDecapitated )
+		foreach M.VisibleCollidingActors(class'KFMonster', Near, 300, M.Location + vect(0,0,1) * M.CollisionHeight)
+			if ( Near != M && Near.Health > 0 )
+				Near.BlastStagger(M.Location);
+}
+
+// An upgraded round that has hit a wall goes on to the nearest specimen in front of the wall it can reach
+function Ricochet( vector From, vector WallNormal, float Damage )
+{
+	local KFMonster M, Best;
+	local float D, BestD;
+	local vector Aim, HL, HN, Dir;
+	local Actor Other, Target;
+	local KFRicochet R;
+	local bool bWasAlive;
+
+	From += 4 * WallNormal;
+	foreach Weapon.VisibleCollidingActors(class'KFMonster', M, 1000, From)
+	{
+		if ( M.Health <= 0 )
+			continue;
+		Dir = Normal(M.Location - From);
+		if ( (Dir dot WallNormal) < 0.2 )
+			continue;
+		D = VSize(M.Location - From);
+		if ( Best == None || D < BestD )
+		{
+			Best = M;
+			BestD = D;
+		}
+	}
+	if ( Best == None )
+		return;
+	Aim = Best.Location + vect(0,0,0.3) * Best.CollisionHeight;
+	Dir = Normal(Aim - From);
+	Other = Weapon.Trace(HL, HN, Aim + 60 * Dir, From, true);
+	Target = Other;
+	if ( ExtendedZCollision(Other) != None && Other.Owner != None )
+		Target = Other.Owner;
+	if ( KFMonster(Target) == None || Pawn(Target).Health <= 0 )
+		return;
+	bWasAlive = true;
+	Target.TakeDamage(int(Damage * 0.8), Instigator, HL, Momentum * Dir, DamageType);
+	UpgradeHit(Target, HL, bWasAlive);
+	R = Weapon.Spawn(class'KFRicochet',,, From);
+	if ( R != None )
+		R.ShowTo(HL);
+}
+
+function bool Ricochets()
+{
+	return Upgraded() && KFWeapon(Weapon).UpgradeRicochets > 0;
 }
 
 function HandleRecoil()
@@ -231,12 +373,25 @@ function HandleRecoil()
 	KFWeapon(Weapon).ViewKick(KickScale, 1.0 + FClamp(FireCount/6.f,0.0,2.0), ViewPunchDamping, ViewPunchSpring);
 }
 
-// Bodies a shot goes on through after the first: its own, and its shooter's perk's on top
+// Bodies a shot goes on through after the first: its own, its shooter's perk's and an upgrade's on top
 function int Penetrations()
 {
+	local int N;
+
+	N = MaxPenetrations;
 	if ( KFPawn(Instigator) != None && KFPawn(Instigator).GetVeteran() != None )
-		return MaxPenetrations + KFPawn(Instigator).GetVeteran().static.ExtraPenetrations(self);
-	return MaxPenetrations;
+		N += KFPawn(Instigator).GetVeteran().static.ExtraPenetrations(self);
+	if ( Upgraded() )
+		N += KFWeapon(Weapon).UpgradePenetrations;
+	return N;
+}
+
+// The share of its damage a shot keeps past each body
+function float PenScale()
+{
+	if ( Upgraded() && KFWeapon(Weapon).UpgradePenDamageScale > 0 )
+		return KFWeapon(Weapon).UpgradePenDamageScale;
+	return PenDamageScale;
 }
 
 function DoTrace(Vector Start, Rotator Dir)
@@ -245,6 +400,10 @@ function DoTrace(Vector Start, Rotator Dir)
     local Actor Other;
     local Actor DamageTarget;
     local KFWeaponAttachment WeapAttach;
+    local bool bWasAlive;
+
+    // (the fire grid) a muzzle flash sets off fuel vapour hanging round the gun
+    class'KFFireGrid'.static.Heat(Weapon, Start + vector(Dir) * 70.0, 90, 1.4);
 
     if ( Penetrations() > 0 )
     {
@@ -277,13 +436,17 @@ function DoTrace(Vector Start, Rotator Dir)
             // every client keeps a body of its own for a dead specimen, and tries the shot on that
             else if ( WeapAttach != None && KFMonster(DamageTarget) != None && KFMonster(DamageTarget).Health <= 0 )
                 WeapAttach.UpdateCorpseHit(HitLocation);
+            bWasAlive = Pawn(DamageTarget) != None && Pawn(DamageTarget).Health > 0;
             DamageTarget.TakeDamage(Lerp(FRand(), DamageMin, DamageMax), Instigator, HitLocation, Momentum*X, DamageType);
+            UpgradeHit(DamageTarget, HitLocation, bWasAlive);
         }
         else
         {
             HitLocation = HitLocation + 2.0 * HitNormal;
             if ( WeapAttach != None )
                 WeapAttach.UpdateHit(Other,HitLocation,HitNormal);
+            if ( Ricochets() )
+                Ricochet(HitLocation, HitNormal, Lerp(FRand(), DamageMin, DamageMax));
         }
     }
     else
@@ -306,7 +469,7 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 	local KFWeaponAttachment WeapAttach;
 	local float HitDamage;
 	local int i, Passed, Tries, Pens;
-	local bool bSeen, bFree;
+	local bool bSeen, bFree, bWasAlive;
 
 	MaxRange();
 	Pens = Penetrations();
@@ -333,6 +496,8 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 		{
 			if ( WeapAttach != None )
 				WeapAttach.UpdateHit(Other, HitLocation + 2.0 * HitNormal, HitNormal);
+			if ( Ricochets() )
+				Ricochet(HitLocation + 2.0 * HitNormal, HitNormal, HitDamage);
 			break;
 		}
 
@@ -366,7 +531,9 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 		// every client keeps a body of its own for a dead specimen, and tries the shot on that
 		if ( Pawn(Target).Health <= 0 && KFMonster(Target) != None && WeapAttach != None )
 			WeapAttach.UpdateCorpseHit(HitLocation);
+		bWasAlive = Pawn(Target).Health > 0;
 		Target.TakeDamage(int(HitDamage), Instigator, HitLocation, Momentum*X, DamageType);
+		UpgradeHit(Target, HitLocation, bWasAlive);
 		Hit[Hit.Length] = Target;
 		LookThrough(Other, Off);
 		if ( Target != Other )
@@ -377,7 +544,7 @@ function PenetratingTrace(Vector Start, Rotator Dir)
 		{
 			if ( Passed++ >= Pens )
 				break;
-			HitDamage *= PenDamageScale;
+			HitDamage *= PenScale();
 		}
 	}
 
@@ -416,8 +583,22 @@ simulated function AccuracyUpdate(float Velocity)
 	Spread = ((default.Spread * 0.75) + (Velocity * 0.0005 ));   //.0005
 }
 
+// An upgraded gun's shot has a hum of energy under it, pitched by its element (KFElement)
+function UpgradeLayer()
+{
+	local KFWeapon W;
+
+	W = KFWeapon(Weapon);
+	if ( W == None || bNotAShot || !W.bUpgraded || !class'KFElement'.static.Has(W.Element) || class'KFElement'.default.FireLayer == None )
+		return;
+	Weapon.PlayOwnedSound(class'KFElement'.default.FireLayer, SLOT_None, class'KFElement'.default.FireLayerVolume,, TransientSoundRadius,
+		class'KFElement'.default.LayerPitches[W.Element] * (0.97 + 0.06 * FRand()), false);
+}
+
 defaultproperties
 {
+	MechVolume=0.300000
+	MechPitch=1.000000
 	EmptyAnim="Empty"
 	EmptyAnimRate=1.000000
 	EmptyFireAnim="EmptyFire"
@@ -434,4 +615,5 @@ defaultproperties
     RecoilMovePenaltyFast=0.250000
     BotRecoilMovePenaltySlow=0.250000
     BotRecoilMovePenaltyFast=0.500000
+	BurstGap=0.070000
 }

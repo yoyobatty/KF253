@@ -81,7 +81,7 @@ function class<KFWeaponPickup> PickWeaponFor( Pawn P )
 
 function UsedBy( Pawn user )
 {
-	if( !IsValidUser(user) || PlayerController(user.Controller)==None )
+	if( !IsValidUser(user) || (PlayerController(user.Controller)==None && KFInvasionBot(user.Controller)==None) )
 		Return;
 
 	if( IsInState('Won') )

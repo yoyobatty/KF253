@@ -1,4 +1,15 @@
-class LAWProj extends Projectile;
+class LAWProj extends Projectile
+	DependsOn(KFFarSound);
+
+var() float BlastSize;	// how big a blast it makes round it (KFBlast)
+
+var bool bNapalm;	// from an upgraded LAW: its fuel burns where it bursts (Napalm)
+
+replication
+{
+	reliable if ( bNetInitial && Role == ROLE_Authority )
+		bNapalm;
+}
 
 #exec OBJ LOAD FILE=WeaponSounds.uax
 
@@ -53,7 +64,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
     local Actor FX;
 
     //log("LAW Explode at: " $ HitLocation);
-    PlaySound(sound'ONSVehicleSounds-S.TankFire01',,255+TransientSoundVolume);
+    class'KFBlastSound'.static.Play(self, sound'ONSVehicleSounds-S.TankFire01', 255+TransientSoundVolume);
+    if ( Role == ROLE_Authority )
+        class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Blast);
     if ( EffectIsRelevant(Location,false) )
     {
         FX = Spawn(class'KFNadeExplosion',,,HitLocation + HitNormal*16,rotator(HitNormal) + rot(-16384,0,0)); //Fixes explosion rotation
@@ -63,7 +76,10 @@ simulated function Explode(vector HitLocation, vector HitNormal)
         Spawn(class'ExplosionCrap',,, HitLocation + HitNormal*16, rotator(HitNormal));
         if ( (ExplosionDecal != None) && (Level.NetMode != NM_DedicatedServer) )
 		    Spawn(ExplosionDecal,self,,Location, rotator(-HitNormal));
+        class'KFBlast'.static.Go(self, HitLocation, HitNormal, BlastSize);
     }
+    else
+        class'KFBlast'.static.Far(self, HitLocation, BlastSize);
 
     // Shake nearby players screens
     LocalPlayer = Level.GetLocalPlayerController();
@@ -75,8 +91,38 @@ simulated function Explode(vector HitLocation, vector HitNormal)
             && (VSize(Location - PlayerController(C).ViewTarget.Location) < DamageRadius) )
             C.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 
+    if ( bNapalm )
+        Napalm(HitLocation, HitNormal);
+
     BlowUp(HitLocation);
     Destroy();
+}
+
+// An upgraded LAW's rocket: a ball of fire, and its fuel left burning on the ground in the middle and around (each
+// machine lays its own fires, as the flamethrower's tendrils do)
+simulated function Napalm( vector Spot, vector Up )
+{
+	local int i;
+	local vector Way, P, HL, HN;
+	local Actor A;
+
+	if ( EffectIsRelevant(Location, false) )
+		Spawn(class'KFIncendiaryExplosion',,, Spot + 16 * Up, rotator(Up));
+	if ( PhysicsVolume.bWaterVolume || (Level.NetMode == NM_Client && !EffectIsRelevant(Location, false)) )
+		return;
+	class'FlameGroundFire'.static.Lay(self, Spot, Up, None, 5.0);
+	for ( i = 0; i < 6; i++ )
+	{
+		Way.X = Cos(i * Pi / 3.0);
+		Way.Y = Sin(i * Pi / 3.0);
+		Way.Z = 0;
+		P = Spot + 30 * Up + 125 * Way;
+		if ( !FastTrace(P, Spot + 30 * Up) )
+			continue;
+		A = Trace(HL, HN, P - vect(0,0,180), P, false);
+		if ( A != None && HN.Z >= 0.6 )
+			class'FlameGroundFire'.static.Lay(self, HL, HN, A, 3.0);
+	}
 }
 
 simulated function PostBeginPlay()
@@ -128,6 +174,9 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
         return;
 
     bHurtEntry = true;
+    // (a blast sets off fuel vapour and fuel in its reach: KFFireGrid)
+    if ( Role == ROLE_Authority )
+        class'KFFireGrid'.static.Heat(self, HitLocation, DamageRadius, 3.0);
 
     // A rocket that hit a specimen's extra collision hit the specimen
     if ( ExtendedZCollision(LastTouched) != None )
@@ -214,6 +263,7 @@ simulated function ProcessTouch(Actor Other, Vector HitLocation)
 
 defaultproperties
 {
+     BlastSize=1.000000
     ShakeRotMag=(Z=250.000000)
     ShakeRotRate=(Z=2500.000000)
     ShakeRotTime=6.000000

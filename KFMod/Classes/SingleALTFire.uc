@@ -38,6 +38,7 @@ function HandleRecoil(){}
 
 defaultproperties
 {
+	bNotAShot=True
      bFiringDoesntAffectMovement=True
      DamageType=Class'KFMod.DamTypeDualies'
      Momentum=0.000000

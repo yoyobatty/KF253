@@ -153,6 +153,8 @@ exec function ReloadMeNow()
 		ReloadMulti = KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
 	if( KFPawn(Instigator)!=None )
 		ReloadMulti *= KFPawn(Instigator).GetReloadSpeedScale();
+	if ( bUpgraded )
+		ReloadMulti *= UpgradeReloadScale;
 
 	// changing shell type empties both barrels; otherwise a live shell stays where it is
 	bSwapReload = (bWantSlugs != bSlugsLoaded);
@@ -181,6 +183,8 @@ simulated function ClientReloadShells(bool bSingle)
 		Rate *= KFPlayerReplicationInfo(Instigator.PlayerReplicationInfo).ClientVeteranSkill.Static.GetReloadSpeedModifier(self);
 	if( KFPawn(Instigator)!=None )
 		Rate *= KFPawn(Instigator).GetReloadSpeedScale();
+	if ( bUpgraded )
+		Rate *= UpgradeReloadScale;
 
 	bIsReloading = true;
 	if ( bSingle )
@@ -193,6 +197,11 @@ simulated function ClientReloadShells(bool bSingle)
 simulated function bool InterruptReload()
 {
 	return false;
+}
+
+// (and a quick heal waits for it: KFWeapon.ClientFinishReloading brings the syringe out)
+simulated function CancelReload()
+{
 }
 
 exec function FinishReloading()
@@ -245,6 +254,11 @@ simulated event WeaponTick(float dt)
 
 defaultproperties
 {
+	MeshMats(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+     Element=4
+	FarKind(0)=FAR_BigShotgun
+	FarKind(1)=FAR_BigShotgun
 	SlugsPerFire=1
 	ReloadSingleAnim="ReloadSingle"
 	SingleReloadSpeed=1.150000
@@ -285,4 +299,8 @@ defaultproperties
 	bUseDynamicLights=True
 	Mesh=SkeletalMesh'KFWeaponModels.BoomStick'
 	TransientSoundVolume=1.000000
+     UpgradeName="Widowmaker"
+     UpgradeReloadScale=1.300000
+     SheenSlots(0)=2
+     SheenMats(0)=Shader'KillingFloorWeapons.BoomStick.BoomStickShader'
 }

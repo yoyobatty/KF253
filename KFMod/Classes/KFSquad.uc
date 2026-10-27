@@ -454,7 +454,7 @@ function bool FindNewEnemyFor(Bot B, bool bSeeEnemy)
 	OldEnemy = B.Enemy;
 	if ( BestEnemy != None )
 	{
-		if ( (BestEnemy.Health <= 0) || (BestEnemy.Controller == None) )
+		if ( (BestEnemy.Health <= 0) || (BestEnemy.Controller == None) || (KFMonster(BestEnemy) != None && KFMonster(BestEnemy).IsTurned()) )
 		{
 			B.Enemy = None;
 			BestEnemy = None;
@@ -468,7 +468,7 @@ function bool FindNewEnemyFor(Bot B, bool bSeeEnemy)
 	}
 	for ( i=0; i<ArrayCount(Enemies); i++ )
 	{
-		if ( (Enemies[i] != None) && (Enemies[i].Health > 0) && (Enemies[i].Controller != None) )
+		if ( (Enemies[i] != None) && (Enemies[i].Health > 0) && (Enemies[i].Controller != None) && (KFMonster(Enemies[i]) == None || !KFMonster(Enemies[i]).IsTurned()) )
 		{
 			if ( BestEnemy == None )
 			{
@@ -501,6 +501,14 @@ function bool FindNewEnemyFor(Bot B, bool bSeeEnemy)
 		return true;
 	}
 	return false;
+}
+
+// (a specimen turned by a special ammo is on the players' side: KFAmmoMod.Turn)
+function bool ValidEnemy( Pawn NewEnemy )
+{
+	if ( KFMonster(NewEnemy) != None && KFMonster(NewEnemy).IsTurned() )
+		return false;
+	return Super.ValidEnemy(NewEnemy);
 }
 
 function bool SetEnemy( Bot B, Pawn NewEnemy )

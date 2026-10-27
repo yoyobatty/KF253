@@ -59,6 +59,8 @@ function AttachToPawn(Pawn P)
 
 	altThirdPersonActor.SetRelativeRotation(rot(0,32768,0));
 	altThirdPersonActor.SetRelativeLocation(vect(10,-5,-5));
+	if ( bUpgraded )
+		MarkAttachment();
 
 	if(altThirdPersonActor != None)
 		DualiesAttachment(altThirdPersonActor).bIsOffHand = true;
@@ -123,7 +125,7 @@ function GiveTo( pawn Other, optional Pickup Pickup )
 {
 	local Inventory I;
 	local int OldAmmo;
-	local bool bNoPickup;
+	local bool bNoPickup, bWasUpgraded;
 
 	ClipLeft = 0;
 	For( I=Other.Inventory; I!=None; I=I.Inventory )
@@ -141,6 +143,7 @@ function GiveTo( pawn Other, optional Pickup Pickup )
 			}
 
 			ClipLeft = Single(I).ClipLeft;
+			bWasUpgraded = Single(I).bUpgraded;
 
 			I.Destroyed();
 			I.Destroy();
@@ -152,6 +155,8 @@ function GiveTo( pawn Other, optional Pickup Pickup )
 		ClipLeft = Clamp(ClipLeft+KFWeaponPickup(Pickup).ClipLeft,0,ClipCount);
 	else ClipLeft = Clamp(ClipLeft+Class'Single'.Default.ClipCount,0,ClipCount);
 	Super(Weapon).GiveTo(Other,Pickup);
+	if ( bWasUpgraded )
+		TakeUpgrade();
 
 	if ( bNoPickup )
 	{
@@ -188,6 +193,8 @@ function DropFrom(vector StartLocation)
 		AmmoThrown-=OtherAmmo;
 		I = Spawn(Class'Single');
 		I.GiveTo(Instigator);
+		if ( bUpgraded && KFWeapon(I) != None )
+			KFWeapon(I).TakeUpgrade();
 		Weapon(I).Ammo[0].AmmoAmount = OtherAmmo;
 		Single(I).ClipLeft = max(ClipLeft/2,0);
 		ClipLeft = Max(ClipLeft-Single(I).ClipLeft,0);
@@ -208,8 +215,24 @@ function DropFrom(vector StartLocation)
 	Destroy();
 }
 
+function MarkAttachment()
+{
+	Super.MarkAttachment();
+	if ( KFWeaponAttachment(altThirdPersonActor) != None )
+	{
+		KFWeaponAttachment(altThirdPersonActor).bUpgraded = true;
+		KFWeaponAttachment(altThirdPersonActor).UpgradeElement = Element;
+	}
+}
+
 defaultproperties
 {
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(2)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+     Element=1
+	FarKind(0)=FAR_Pistol
      altFlashBoneName="tip"
      altTPAnim="DualiesAttackLeft"
      altWeaponAttach="Bone_weapon2"
@@ -253,4 +276,13 @@ defaultproperties
      Mesh=SkeletalMesh'KFWeaponModels.Dualies'
      DrawScale=0.900000
      TransientSoundVolume=1.000000
+     UpgradeName="Hellcats"
+     UpgradeMagScale=1.500000
+     bUpgradeIncendiary=True
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
+     SheenSlots(1)=3
+     SheenMats(1)=Shader'KillingFloorWeapons.Deagle.DeagleShineShader'
+     SheenSlots(2)=4
+     SheenMats(2)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
 }

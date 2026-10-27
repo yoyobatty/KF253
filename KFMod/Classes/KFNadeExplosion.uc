@@ -97,7 +97,9 @@ defaultproperties
      End Object
      Emitters(1)=SpriteEmitter'KFMod.KFNadeExplosion.SpriteEmitter1'
 
-     Begin Object Class=SpriteEmitter Name=SpriteEmitter2
+     // the smoke that rolls out along the ground (made again: the old one's puffs grew past 300 units and walls, floor
+     // and ceiling cut them along straight lines, a hard square the shape of a corridor)
+     Begin Object Class=SpriteEmitter Name=NadeGroundSmoke
          UseColorScale=True
          FadeOut=True
          FadeIn=True
@@ -109,31 +111,24 @@ defaultproperties
          AutomaticInitialSpawning=False
          ColorScale(0)=(Color=(B=155,G=180,R=205,A=255))
          ColorScale(1)=(RelativeTime=1.000000,Color=(B=155,G=180,R=205,A=255))
+         Opacity=0.700000
          FadeOutStartTime=1.000000
          FadeInEndTime=0.100000
-         CoordinateSystem=PTCS_Relative
-         MaxParticles=15
-         StartLocationRange=(X=(Min=-200.000000,Max=200.000000),Y=(Min=-200.000000,Max=200.000000))
-         StartLocationShape=PTLS_Polar
-         StartLocationPolarRange=(X=(Min=-128.000000,Max=128.000000),Y=(Min=-128.000000,Max=128.000000))
-         AlphaRef=4
+         MaxParticles=22
+         StartLocationRange=(X=(Min=-60.000000,Max=60.000000),Y=(Min=-60.000000,Max=60.000000))
          SpinsPerSecondRange=(X=(Min=-0.100000,Max=0.100000))
          StartSpinRange=(X=(Min=-1.000000,Max=1.000000))
-         SizeScale(0)=(RelativeSize=1.500000)
-         SizeScale(1)=(RelativeTime=1.000000,RelativeSize=6.000000)
-         StartSizeRange=(X=(Min=50.000000))
-         InitialParticlesPerSecond=1000.000000
+         SizeScale(0)=(RelativeSize=1.200000)
+         SizeScale(1)=(RelativeTime=1.000000,RelativeSize=3.500000)
+         StartSizeRange=(X=(Min=30.000000,Max=45.000000))
+         InitialParticlesPerSecond=1500.000000
          DrawStyle=PTDS_AlphaBlend
          Texture=Texture'BenTex01.textures.SmokePuff01'
-         LifetimeRange=(Min=1.500000)
-         InitialDelayRange=(Max=0.100000)
-         StartVelocityRange=(X=(Min=-600.000000,Max=600.000000),Y=(Min=-600.000000,Max=600.000000),Z=(Max=50.000000))
-         StartVelocityRadialRange=(Min=100.000000,Max=200.000000)
-         VelocityLossRange=(X=(Min=1.000000,Max=3.000000),Y=(Min=1.000000,Max=3.000000))
-         RotateVelocityLossRange=True
-         GetVelocityDirectionFrom=PTVD_AddRadial
+         LifetimeRange=(Min=1.200000,Max=1.800000)
+         StartVelocityRange=(X=(Min=-450.000000,Max=450.000000),Y=(Min=-450.000000,Max=450.000000),Z=(Max=50.000000))
+         VelocityLossRange=(X=(Min=1.500000,Max=3.000000),Y=(Min=1.500000,Max=3.000000))
      End Object
-     Emitters(2)=SpriteEmitter'KFMod.KFNadeExplosion.SpriteEmitter2'
+     Emitters(2)=SpriteEmitter'KFMod.KFNadeExplosion.NadeGroundSmoke'
 
      Begin Object Class=SpriteEmitter Name=SpriteEmitter3
          UseColorScale=True

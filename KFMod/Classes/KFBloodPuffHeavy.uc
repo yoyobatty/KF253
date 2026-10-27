@@ -49,13 +49,16 @@ simulated function WallSplat()
 
 defaultproperties
 {
+	bFXDrip=True
+	bFXHeavy=True
+	FXSize=1.500000
      ExtraSplats=2
      SplatRange=450.000000
      SplatSpread=0.300000
      SplatDrop=0.700000
      ExtraDecalClass=Class'KFMod.KFBloodDrip'
-     mStartParticles=11
-     mMaxParticles=11
+     mStartParticles=4
+     mMaxParticles=4
      mLifeRange(0)=0.600000
      mLifeRange(1)=0.900000
      mPosDev=(X=5.000000,Y=5.000000,Z=5.000000)

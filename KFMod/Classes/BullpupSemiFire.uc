@@ -44,6 +44,7 @@ simulated function bool AllowFire()
 
 defaultproperties
 {
+     FlashFXClass=Class'KFMod.KFFlashRifle'
      KickMomentum=(X=-1.500000,Z=1.000000)
      DamageType=Class'KFMod.DamTypeBullpup'
      DamageMin=15
@@ -64,6 +65,6 @@ defaultproperties
      ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
      ShakeOffsetTime=2.000000
      BotRefireRate=0.120000
-     FlashEmitterClass=Class'KFMod.BullpupMuzzFlash'
+     FlashEmitterClass=None
      aimerror=0.000000
 }

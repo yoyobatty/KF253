@@ -59,9 +59,11 @@ struct Swing
 	var() float Lunge;				// how far the first-person view is pushed forward with the blade
 };
 var() bool bSweep;
+var() byte MeleeKind;				// what its blows on the world look like (KFMeleeHitEffect): 0 a blade, 1 a heavy blade, 2 blunt
 var() array<Swing> Swings;			// played in this order while the player keeps swinging
 var() float ChainTime;				// longer than this between two swings and the order starts again
 var() float SideDamageScale;
+var() float UpgradeSideDamageScale;	// the same, upgraded (0: as before)
 var() float SweepStep;				// degrees between the rays of a sweep
 var() float RunHitSpeed;			// a swing begun faster than this knocks over a specimen no heavier than the player
 var() float HitPunch;				// view kick of a blow that lands (rotator units), along the swing
@@ -623,6 +625,17 @@ simulated function LandOn( Pawn V, vector Eye, vector Dir, vector Where )
 	Strike(V, Where, Dir, bAimed);
 }
 
+// What the blow's mark and impact on the world go by (KFMeleeHitEffect, read as it is spawned): which way the blade was
+// going, and what kind of weapon it is
+simulated function NoteWorldHit()
+{
+	if ( bSweep && Swings.Length > 0 && Instigator != None )
+		class'KFMeleeHitEffect'.default.SwingDir = SwingMotion();
+	else
+		class'KFMeleeHitEffect'.default.SwingDir = VRand();
+	class'KFMeleeHitEffect'.default.Kind = MeleeKind;
+}
+
 // Which way the first-person blade is crossing the view, in the world
 simulated function vector SwingMotion()
 {
@@ -671,11 +684,11 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, option
 	{
 		// the first body it meets takes the whole blow
 		if ( SwingHits.Length > 1 )
-			Dealt *= SideDamageScale;
+			Dealt *= SideScale();
 	}
 	else if ( !bAimed )
 	{
-		Dealt *= FClamp(Normal(V.Location - Instigator.Location) dot vector(SwingAim(Instigator.Location + Instigator.EyePosition())), SideDamageScale, 1.0);
+		Dealt *= FClamp(Normal(V.Location - Instigator.Location) dot vector(SwingAim(Instigator.Location + Instigator.EyePosition())), SideScale(), 1.0);
 		// in level and low: the head is only for the blow that is aimed at it
 		Where.Z = FMin(Where.Z, V.Location.Z + 0.3 * V.CollisionHeight);
 		Dir = Normal(Dir * vect(1,1,0));
@@ -710,6 +723,9 @@ simulated function Strike( Pawn V, vector Where, vector Dir, bool bAimed, option
 	FleshFelt(bFirst);
 	if ( Weapon.Role == ROLE_Authority && V.Health <= 0 )
 	{
+		// an upgraded blade gives its holder some health for each kill
+		if ( KFMonster(V) != None && KFWeapon(Weapon).bUpgraded && KFWeapon(Weapon).UpgradeKillHeal > 0 )
+			Instigator.GiveHealth(KFWeapon(Weapon).UpgradeKillHeal, Instigator.HealthMax);
 		if ( Instigator.IsLocallyControlled() )
 			KillFelt();
 		else
@@ -724,6 +740,8 @@ simulated function CentreRay( vector Eye, vector Aim )
 	local Pawn V;
 	local vector HL, HN;
 
+	// (giblets lying where the blade goes)
+	class'KFGib'.static.Chop(Instigator, Eye, Aim, weaponRange + 30.0, MeleeKind);
 	foreach Instigator.TraceActors(class'Actor', A, HL, HN, Eye + Aim * weaponRange, Eye)
 	{
 		V = SwingBody(A);
@@ -785,7 +803,10 @@ simulated function WorldHit( Actor A, vector Where, vector Eye, vector Aim )
 	if ( Weapon.Role == ROLE_Authority )
 		A.TakeDamage(int(SwingDamage), Instigator, Where, Aim, hitDamageClass);
 	if ( Weapon.Role == ROLE_Authority || Instigator.IsLocallyControlled() )
+	{
+		NoteWorldHit();
 		Spawn(class'KFMeleeHitEffect',,, Where, rotator(Where - Eye));
+	}
 
 	// the blade jars back off it
 	PC = KFPlayerController(Instigator.Controller);
@@ -942,7 +963,10 @@ simulated function DoTrace()
 			if( Level.NetMode==NM_Client )
 			{
 				if( KFMonster(HitActor)==None )
+				{
+					NoteWorldHit();
 					Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - StartTrace));
+				}
 				// a body this machine is keeping: the server has none, so the blow lands here
 				else if ( HitActor.bTearOff && KFMonster(HitActor).Health <= 0 )
 					HitActor.TakeDamage(MyDamage, Instigator, HitLocation, vector(PointRot), hitDamageClass);
@@ -968,6 +992,7 @@ simulated function DoTrace()
 			else
 			{
 				HitActor.TakeDamage(MyDamage, Instigator, HitLocation, vector(PointRot), hitDamageClass) ;
+				NoteWorldHit();
 				Spawn(class'KFMeleeHitEffect',,, HitLocation, rotator(HitLocation - StartTrace));
 			}
 		}
@@ -1141,6 +1166,14 @@ function ImpactShakeView()
 		P.WeaponShakeView(ImpactShakeRotMag, ImpactShakeRotRate, ImpactShakeRotTime,ImpactShakeOffsetMag,ImpactShakeOffsetRate,ImpactShakeOffsetTime);
 }
 
+// The share of a blow taken by a body other than the first, or beside the aim
+simulated function float SideScale()
+{
+	if ( UpgradeSideDamageScale > 0 && KFWeapon(Weapon) != None && KFWeapon(Weapon).bUpgraded )
+		return UpgradeSideDamageScale;
+	return SideDamageScale;
+}
+
 defaultproperties
 {
      maxAdditionalDamage=5
@@ -1155,7 +1188,7 @@ defaultproperties
      SideDamageScale=0.500000
      SweepStep=6.000000
      BladeSpacing=6.000000
-     KillPause=0.050000
+     KillPause=0.015000
      RunHitSpeed=280.000000
      ImpactShakeRotMag=(X=50.000000,Y=50.000000,Z=50.000000)
      ImpactShakeRotRate=(X=10000.000000,Y=10000.000000,Z=10000.000000)

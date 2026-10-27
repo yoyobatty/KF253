@@ -20,6 +20,7 @@ function PlayFiring()
 
 defaultproperties
 {
+     MeleeKind=1
 	bSweep=False
 	WeaponRange=150.000000
 	maxAdditionalDamage=50

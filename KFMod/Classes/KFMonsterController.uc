@@ -16,6 +16,7 @@ var byte CorpseBiteCount;
 
 var KFDoorMover TargetDoor;
 var KFBarricadePlank TargetPlank;
+var float NextClimbTry;
 var PlayerDeathMark TargetCorpse;
 var() bool bWarnShotTarget;		// projectiles warn their target, as bots' do (AdjustAim)
 var KActor KickTarget;
@@ -183,6 +184,31 @@ function FearThisSpot(AvoidMarker aSpot)
 {
 	if ( Skill > 1 + 2.0 * FRand() )
         super(Controller).FearThisSpot(aSpot);
+}
+
+// A table or a crate head-on in the way, low enough: climbed onto (KFMonster.StartClimb), not walked around. Not a door
+// nor a window's planks, which are broken through, nor a mover, a prop or another pawn
+event bool NotifyHitWall( vector HitNormal, actor Wall )
+{
+	local vector Dir;
+
+	// (climbing, the edge it goes up is touched all the way: the engine would put it back down a step each time)
+	if ( KFM != None && KFM.ClimbStage > 0 )
+		return true;
+	if ( KFM != None && KFM.bClimbs && Pawn.Physics == PHYS_Walking && Level.TimeSeconds >= NextClimbTry && Abs(HitNormal.Z) < 0.5
+		&& Wall != None && (Wall.bWorldGeometry || Wall == Level) && Mover(Wall) == None
+		&& !IsInState('DoorBashing') && !IsInState('BarricadeBashing') )
+	{
+		NextClimbTry = Level.TimeSeconds + 0.4;
+		if ( MoveTarget != None )
+			Dir = MoveTarget.Location - Pawn.Location;
+		else
+			Dir = Destination - Pawn.Location;
+		Dir.Z = 0;
+		if ( VSize(Dir) > 1.0 && (Normal(Dir) Dot HitNormal) < -0.5 && KFM.StartClimb(-HitNormal) )
+			return true;
+	}
+	return Super.NotifyHitWall(HitNormal, Wall);
 }
 
 function BreakUpDoor( KFDoorMover Other ) // I have came up to a door, break it!
@@ -1622,8 +1648,11 @@ function ExecuteWhatToDoNext()
 // its shooter's ShotTarget, which the stock monster aim never set, so no bot ever sidestepped a Patriarch's rocket
 function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int aimerror)
 {
-	if ( bWarnShotTarget )
+	// (only a living pawn its controller still has: a body left behind, or a campaign soldier's AI after its death, is not warned)
+	if ( bWarnShotTarget && Pawn(Target)!=None && Pawn(Target).Health>0 && Pawn(Target).Controller!=None && Pawn(Target).Controller.Pawn==Target )
 		ShotTarget = Pawn(Target);
+	else if ( bWarnShotTarget )
+		ShotTarget = None;
 	return Super.AdjustAim(FiredAmmunition, projStart, aimerror);
 }
 

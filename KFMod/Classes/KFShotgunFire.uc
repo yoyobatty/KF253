@@ -1,5 +1,7 @@
 class KFShotgunFire extends FlakFire;
 
+var float LastGridHeat;
+
 var float LastClickTime;
 
 var() Name EmptyAnim;
@@ -21,13 +23,23 @@ var float   ViewPunchSpring;      // Spring force for return
 var float   KickScale;            // This shot's share of the weapon's UpKick
 
 var bool    bNoShotLight;         // its muzzle flash throws no light ahead (KFWeapon.ShotLight): the flamethrower's is its pilot flame
+var() class<KFFlash> FlashFXClass;	// its muzzle flash (KFFlash), drawn at the gun's muzzle
+var() Sound MechSound;		// a close, quiet sound of the gun's works under the shooter's own shot (KFWeapon.LocalShotLayers)
+var() float MechVolume, MechPitch;
 
 // (on the machine of whoever fires, as the flash is shown)
 function FlashMuzzleFlash()
 {
 	Super.FlashMuzzleFlash();
-	if ( FlashEmitterClass != None && !bNoShotLight && KFWeapon(Weapon) != None )
+	if ( FlashFXClass != None && KFWeapon(Weapon) != None )
+		KFWeapon(Weapon).MuzzleFlashFX(FlashFXClass, KFWeapon(Weapon).FlashBoneName);
+	if ( (FlashEmitterClass != None || FlashFXClass != None) && !bNoShotLight && KFWeapon(Weapon) != None )
 		KFWeapon(Weapon).ShotLight();
+	if ( KFWeapon(Weapon) != None )
+	{
+		KFWeapon(Weapon).LocalShotLayers(MechSound, MechVolume, MechPitch);
+		KFWeapon(Weapon).EjectBrass(KFWeapon(Weapon).BrassBone);
+	}
 }
 
 function float GetFireSpeed()
@@ -52,7 +64,7 @@ event ModeDoFire()
 	Spread = Default.Spread;
 
 	Rec = GetFireSpeed();
-	FireRate = default.FireRate/Rec;
+	FireRate = default.FireRate/Rec*KFWeapon(Weapon).UpgradeFireRate();
 	FireAnimRate = default.FireAnimRate*Rec;
 	ReloadAnimRate = default.ReloadAnimRate*Rec;
 	Rec = 1;
@@ -105,6 +117,13 @@ function HandleRecoil()
 function projectile SpawnProjectile(Vector Start, Rotator Dir)
 {
 	local vector HitLocation, HitNormal;
+
+	// (the fire grid) a muzzle flash sets off fuel vapour hanging round the gun, once a shot
+	if ( Level.TimeSeconds != LastGridHeat )
+	{
+		LastGridHeat = Level.TimeSeconds;
+		class'KFFireGrid'.static.Heat(Weapon, Start + vector(Dir) * 40.0, 90, 1.4);
+	}
 
 	if ( Instigator.Trace(HitLocation, HitNormal, Start, Instigator.Location + Instigator.EyePosition(), true) != None )
 		Start = HitLocation;
@@ -171,7 +190,8 @@ function PlayFiring()
         }
     }
 
-    Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,(1.0 + RandPitch),false);
+    Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,(1.0 + RandPitch)*UpgradePitch(),false);
+    UpgradeLayer();
     //Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,Default.FireAnimRate/FireAnimRate,false);
     ClientPlayForceFeedback(FireForce);  // jdf
 
@@ -206,8 +226,41 @@ function ShakeView()
 	Super.ShakeView();
 }
 
+simulated function bool Upgraded()
+{
+	return KFWeapon(Weapon) != None && KFWeapon(Weapon).bUpgraded;
+}
+
+// An upgraded gun sounds heavier
+function float UpgradePitch()
+{
+	if ( Upgraded() )
+		return 0.85;
+	return 1.0;
+}
+
+function ServerPlayFiring()
+{
+	Weapon.PlayOwnedSound(FireSound,SLOT_Interact,TransientSoundVolume,,TransientSoundRadius,UpgradePitch(),false);
+	UpgradeLayer();
+}
+
+// An upgraded gun's shot has a hum of energy under it, pitched by its element (KFElement)
+function UpgradeLayer()
+{
+	local KFWeapon W;
+
+	W = KFWeapon(Weapon);
+	if ( W == None || !W.bUpgraded || !class'KFElement'.static.Has(W.Element) || class'KFElement'.default.FireLayer == None )
+		return;
+	Weapon.PlayOwnedSound(class'KFElement'.default.FireLayer, SLOT_None, class'KFElement'.default.FireLayerVolume,, TransientSoundRadius,
+		class'KFElement'.default.LayerPitches[W.Element] * (0.97 + 0.06 * FRand()), false);
+}
+
 defaultproperties
 {
+	MechVolume=0.300000
+	MechPitch=1.000000
 	MaxAccuracyBonus=0.750000
 	CrouchedAccuracyBonus=0.600000
 	bRandomPitchFireSound=True

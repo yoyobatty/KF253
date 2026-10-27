@@ -33,7 +33,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
     if( KFHumanPawn(Instigator)!=None )
     {
 
-        PlaySound(sound'KFWeaponSound.Bang1',,100.5*TransientSoundVolume);
+        class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.Bang1', 100.5*TransientSoundVolume);
+        if ( Role == ROLE_Authority )
+            class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Grenade);
 
         // Shrapnel only spawns on normal grenade type, not incendiary.
 	

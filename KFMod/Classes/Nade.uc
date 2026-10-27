@@ -1,7 +1,10 @@
 //=============================================================================
 // Nade
 //=============================================================================
-class Nade extends Grenade;
+class Nade extends Grenade
+	DependsOn(KFFarSound);
+
+var() float BlastSize;	// how big a blast it makes round it (KFBlast)
 
 var() vector RotMag;            // how far to rot view
 var() vector RotRate;           // how fast to rot view
@@ -72,19 +75,21 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 
 	if(bIncendiary)
 	{
-		PlaySound(sound'KFWeaponSound.FlameThrowerFire',,100.5*TransientSoundVolume);
+		class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.FlameThrowerFire', 100.5*TransientSoundVolume);
 		if ( EffectIsRelevant(Location,false) )
 		{
 			Spawn(Class'KFmod.KFIncendiaryExplosion',,, HitLocation, rotator(vect(0,0,1)));
 			Spawn(ExplosionDecal,self,,HitLocation, rotator(-HitNormal));
 		}
 		SpawnIncendiaryGroundFires(HitLocation);
+		if ( Role == ROLE_Authority )
+			IncendiaryGrid(HitLocation);
 		//log("Nade: Spawned incendiary ground fires.");
 
 	}
 	else if(bHealing)
 	{
-		PlaySound(sound'KFWeaponSound.FlameThrowerFire',,80.5*TransientSoundVolume);
+		class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.FlameThrowerFire', 80.5*TransientSoundVolume);
 		if ( Role == ROLE_Authority )
 			Spawn(Class'KFMod.KFNadeHealingExplosion',,, HitLocation, rotator(vect(0,0,1)));
 	}
@@ -97,7 +102,9 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 	}
 	else
 	{
-		PlaySound(sound'KFWeaponSound.Bang1',,100.5*TransientSoundVolume);
+		class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.Bang1', 100.5*TransientSoundVolume);
+		if ( Role == ROLE_Authority )
+			class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Grenade);
 
 		// Shrapnel only spawns on normal grenade type, not incendiary.
 
@@ -114,13 +121,37 @@ simulated function Explode(vector HitLocation, vector HitNormal)
 			if( FX!=None )
 				FX.RemoteRole = ROLE_None;
 			Spawn(ExplosionDecal,self,,HitLocation, rotator(-HitNormal));
+			class'KFBlast'.static.Go(self, HitLocation, HitNormal, BlastSize);
 		}
+		else
+			class'KFBlast'.static.Far(self, HitLocation, BlastSize);
 		// Shake nearby players screens
 		LocalPlayer = Level.GetLocalPlayerController();
 		if ( (LocalPlayer != None) && (VSize(Location - LocalPlayer.ViewTarget.Location) < (DamageRadius * 1.5)) )
 			LocalPlayer.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
 	}
 	Destroy();
+}
+
+// (the fire grid) An incendiary's filling thrown about as burning fuel and vapour, so its fire spreads and runs on as
+// the flamethrower's gas does
+function IncendiaryGrid( vector BlastLoc )
+{
+	local int i;
+	local vector Dir, P;
+	local Pawn Thrower;
+
+	Thrower = Instigator;
+	for ( i = 0; i < 8; i++ )
+	{
+		Dir = VRand();
+		Dir.Z = 0;
+		P = BlastLoc + Normal(Dir) * (50 + 170 * FRand()) + vect(0,0,30);
+		if ( FastTrace(P, BlastLoc + vect(0,0,30)) )
+			class'KFFireGrid'.static.AddFuel(self, P, 0.5 + 0.5 * FRand(), Thrower, 300);
+	}
+	class'KFFireGrid'.static.AddGas(self, BlastLoc + vect(0,0,30), 2.2, Thrower);
+	class'KFFireGrid'.static.Heat(self, BlastLoc, 240, 3.0);
 }
 
 simulated function SpawnIncendiaryGroundFires(vector BlastLoc)
@@ -294,6 +325,9 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 		return;
 
 	bHurtEntry = true;
+	// (a blast sets off fuel vapour and fuel in its reach: KFFireGrid)
+	if ( Role == ROLE_Authority )
+		class'KFFireGrid'.static.Heat(self, HitLocation, DamageRadius, 3.0);
 
 	// Each actor in reach whose middle the blast point sees; with bFragCover each body by the lines FragReach draws, so one
 	// whose middle is hidden can still be caught at its head or feet
@@ -345,6 +379,7 @@ simulated function HurtRadius( float DamageAmount, float DamageRadius, class<Dam
 
 defaultproperties
 {
+     BlastSize=0.800000
 	RotMag=(X=100.000000,Y=100.000000,Z=100.000000)
 	RotRate=(X=500.000000,Y=500.000000,Z=500.000000)
 	RotTime=3.000000

@@ -20,6 +20,9 @@ const E_SMOKE	= 8;
 
 // Feeding
 var bool	bOn, bReleasing;
+var bool	bHot;			// an upgraded flamethrower's: blue-white, further (SetHot)
+var() Texture	HotFlames;
+var() Texture	HotFlare;		// (BlueFlame)
 var float	LastFeed, OnSince, OffSince, ReleaseAt;
 var float	FeedTimeout;	// no shot for this long and it stops (a remote one's last shot can be lost)
 var float	DribbleLeft;	// after release: drops still falling from the nozzle
@@ -51,6 +54,8 @@ var float	NextSample;
 
 var KFFlameStreamEnd	EndFX;
 var KFFlameStreamLight	Glow;
+var KFZapFree	ZapFree;		// (Blue Inferno) the lightning with it (TickZaps)
+var KFZapBeam	ZapBeams[3];
 var float	LightUp, Flicker, FlickerTo, NextFlicker;
 
 // Sound: the fire sound again before its tail, in the other slot, so it runs on; a crackle under it fades at release
@@ -69,6 +74,7 @@ simulated function PostBeginPlay()
 
 simulated function Destroyed()
 {
+	StopZaps();
 	if ( EndFX != None )
 		EndFX.Destroy();
 	if ( Glow != None )
@@ -140,7 +146,7 @@ simulated function SetFlight()
 
 	Speed = class'FlameTendril'.default.Speed;
 	Toss = class'FlameTendril'.default.TossZ;
-	Flight = class'FlameTendril'.static.FlightFor(Instigator);
+	Flight = class'FlameTendril'.static.FlightFor(Instigator, bHot);
 	Gravity = -950;
 	if ( Instigator != None && Instigator.PhysicsVolume != None )
 		Gravity = Instigator.PhysicsVolume.Gravity.Z;
@@ -285,6 +291,7 @@ simulated function TurnOn()
 		Glow = Spawn(class'KFFlameStreamLight', self);
 	if ( EndFX == None )
 		EndFX = Spawn(class'KFFlameStreamEnd', self);
+	HotParts();
 }
 
 simulated function TurnOff()
@@ -444,6 +451,8 @@ simulated function Tick( float DT )
 	PlaceAtNozzle();
 	if ( SeenFromEyes() != bFromEyes )
 		SetView();
+	if ( bHot || ZapFree != None )
+		TickZaps();
 
 	if ( bOn && Level.TimeSeconds >= NextSample )
 	{
@@ -526,6 +535,190 @@ simulated function Tick( float DT )
 
 	if ( !bOn && Level.TimeSeconds - OffSince > 3.0 )
 		Destroy();
+}
+
+// An upgraded flamethrower's stream: hotter, so blue and white, and it reaches further
+// (Blue Inferno) Lightning while it fires: loose bolts off the nozzle, and a bolt to each specimen the server strikes, one
+// after another (FlameThrowerAttachment.ZapTarget)
+simulated function TickZaps()
+{
+	local FlameThrowerAttachment A;
+	local KFMonster T;
+	local vector From;
+	local int i;
+	local bool bChain;
+
+	A = FlameThrowerAttachment(Owner);
+	if ( !bOn || !bHot || A == None )
+	{
+		StopZaps();
+		return;
+	}
+	if ( ZapFree == None )
+		ZapFree = Spawn(class'KFZapFree', self,, Location, Aim);
+	if ( ZapFree != None )
+	{
+		ZapFree.SetLocation(Location);
+		ZapFree.SetRotation(Aim);
+		ZapFree.Point();
+	}
+	From = Location;
+	bChain = true;
+	for ( i=0; i<ArrayCount(ZapBeams); i++ )
+	{
+		T = A.ZapTarget[i];
+		if ( bChain && T != None && !T.bDeleteMe && !T.bPlayedDeath )
+		{
+			if ( ZapBeams[i] == None )
+				ZapBeams[i] = Spawn(class'KFZapBeam', self,, From);
+			if ( ZapBeams[i] != None )
+				ZapBeams[i].Span(From, T.Location + 10 * VRand());
+			From = T.Location;
+		}
+		else if ( i == 0 && A.bZapSpot )
+		{
+			// no one to strike: it goes down into the metal floor or the water ahead (KFZapConduct carries it on)
+			if ( ZapBeams[i] == None )
+				ZapBeams[i] = Spawn(class'KFZapBeam', self,, From);
+			if ( ZapBeams[i] != None )
+				ZapBeams[i].Span(From, A.ZapSpot + 6 * VRand());
+			bChain = false;
+		}
+		else
+		{
+			bChain = false;
+			if ( ZapBeams[i] != None )
+			{
+				ZapBeams[i].Kill();
+				ZapBeams[i] = None;
+			}
+		}
+	}
+}
+
+simulated function StopZaps()
+{
+	local int i;
+
+	if ( ZapFree != None )
+	{
+		ZapFree.Stop();
+		ZapFree = None;
+	}
+	for ( i=0; i<ArrayCount(ZapBeams); i++ )
+		if ( ZapBeams[i] != None )
+		{
+			ZapBeams[i].Kill();
+			ZapBeams[i] = None;
+		}
+}
+
+simulated function SetHot( bool bHotter )
+{
+	local int i, k;
+	local color C[6];
+
+	if ( bHot == bHotter )
+		return;
+	bHot = bHotter;
+	SetFlight();
+	for ( i = 0; i < Emitters.Length; i++ )
+	{
+		if ( i == E_DRIP || i == E_FLARE || i == E_PUFF )
+		{
+			BlueFlame(Emitters[i], default.Emitters[i], bHot);
+			continue;
+		}
+		if ( i != E_CORE && i != E_BODY && i != E_LICK )
+			continue;
+		if ( !bHot )
+		{
+			Emitters[i].Texture = default.Emitters[i].Texture;
+			Emitters[i].TextureUSubdivisions = default.Emitters[i].TextureUSubdivisions;
+			Emitters[i].TextureVSubdivisions = default.Emitters[i].TextureVSubdivisions;
+			Emitters[i].UseRandomSubdivision = default.Emitters[i].UseRandomSubdivision;
+			for ( k = 0; k < Emitters[i].ColorScale.Length; k++ )
+				Emitters[i].ColorScale[k].Color = default.Emitters[i].ColorScale[k].Color;
+			continue;
+		}
+		if ( i == E_CORE )
+		{
+			C[0] = class'Canvas'.static.MakeColor(190, 220, 255);
+			C[1] = class'Canvas'.static.MakeColor(110, 170, 255);
+			C[2] = class'Canvas'.static.MakeColor(30, 70, 200);
+		}
+		else if ( i == E_BODY )
+		{
+			Emitters[i].Texture = HotFlames;
+			C[0] = class'Canvas'.static.MakeColor(160, 200, 255);
+			C[1] = class'Canvas'.static.MakeColor(100, 150, 255);
+			C[2] = class'Canvas'.static.MakeColor(45, 90, 235);
+			C[3] = class'Canvas'.static.MakeColor(20, 40, 160);
+			C[4] = class'Canvas'.static.MakeColor(6, 10, 60);
+			C[5] = class'Canvas'.static.MakeColor(0, 0, 0);
+		}
+		else
+		{
+			Emitters[i].Texture = HotFlames;
+			Emitters[i].TextureUSubdivisions = 4;
+			Emitters[i].TextureVSubdivisions = 4;
+			Emitters[i].UseRandomSubdivision = true;
+			C[0] = class'Canvas'.static.MakeColor(0, 0, 0);
+			C[1] = class'Canvas'.static.MakeColor(0, 0, 0);
+			C[2] = class'Canvas'.static.MakeColor(80, 130, 220);
+			C[3] = class'Canvas'.static.MakeColor(35, 60, 150);
+			C[4] = class'Canvas'.static.MakeColor(0, 0, 0);
+		}
+		for ( k = 0; k < Emitters[i].ColorScale.Length && k < 6; k++ )
+			Emitters[i].ColorScale[k].Color = C[k];
+	}
+	SetView();
+	HotParts();
+}
+
+// Its light and its end, made as it turns on, in the stream's colours (SetHot)
+simulated function HotParts()
+{
+	if ( EndFX != None )
+		EndFX.SetHot(bHot);
+	if ( Glow != None )
+	{
+		Glow.LightHue = Glow.default.LightHue;
+		Glow.LightSaturation = Glow.default.LightSaturation;
+		if ( bHot )
+		{
+			Glow.LightHue = 160;
+			Glow.LightSaturation = 90;
+		}
+	}
+}
+
+// One of the flamethrower's flame emitters in an upgraded one's blue, or back to its own (D, as the class has it): red
+// and blue turned about, a little less green; its flame and flare pictures for an uncoloured and a blue one
+static function BlueFlame( ParticleEmitter E, ParticleEmitter D, bool bBlue )
+{
+	local int k;
+	local color C;
+
+	E.Texture = D.Texture;
+	for ( k = 0; k < E.ColorScale.Length && k < D.ColorScale.Length; k++ )
+	{
+		C = D.ColorScale[k].Color;
+		if ( bBlue )
+		{
+			E.ColorScale[k].Color.R = C.B;
+			E.ColorScale[k].Color.G = byte(float(C.G) * 0.85);
+			E.ColorScale[k].Color.B = C.R;
+		}
+		else
+			E.ColorScale[k].Color = C;
+	}
+	if ( !bBlue )
+		return;
+	if ( D.Texture == Texture'EmitterTextures.MultiFrame.LargeFlames' )
+		E.Texture = default.HotFlames;
+	else if ( D.Texture == Texture'EmitterTextures.Flares.EFlareOY' )
+		E.Texture = default.HotFlare;
 }
 
 defaultproperties
@@ -859,4 +1052,6 @@ defaultproperties
 
 	bNoDelete=False
 	bNotOnDedServer=True
+	HotFlames=Texture'EmitterTextures.MultiFrame.LargeFlames-grey'
+	HotFlare=Texture'EmitterTextures.Flares.EFlareB'
 }

@@ -22,6 +22,7 @@ function bool HandlePickupQuery( pickup Item )
 		{
 			MaxAmmo = float(MaxAmmo) * KFPlayerReplicationInfo(KFPawn(Owner).PlayerReplicationInfo).ClientVeteranSkill.Static.AddExtraAmmoFor(Class);
 		}
+		MaxAmmo = float(MaxAmmo) * class'KFWeapon'.static.UpgradeAmmoFor(Pawn(Owner), Class);
 		if (AmmoAmount==MaxAmmo) 
 			return true;
 		item.AnnouncePickup(Pawn(Owner));

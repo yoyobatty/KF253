@@ -14,6 +14,12 @@ function byte BestMode()
 
 defaultproperties
 {
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(2)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+     Element=3
+	FarKind(0)=FAR_Pistol
 	ClipCount=40
 	ReloadRate=2.000000
 	ReloadAnim="Reload"
@@ -42,4 +48,11 @@ defaultproperties
 	IconCoords=(X1=434,Y1=253,X2=506,Y2=292)
 	ItemName="Machine-Pistol"
 	Mesh=SkeletalMesh'KFWeaponModels.9MM'
+     UpgradeName="Hornet"
+     UpgradeMagScale=2.000000
+     UpgradeRicochets=1
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
+     SheenSlots(1)=3
+     SheenMats(1)=Shader'KillingFloorWeapons.Dualies.DualiesShineShader'
 }

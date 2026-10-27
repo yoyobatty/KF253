@@ -1,5 +1,8 @@
 class KFWeapon extends Weapon
-	abstract;
+	abstract
+	DependsOn(KFFarSound);
+
+#exec OBJ LOAD FILE=KFWeaponSound.uax
 
 var()   vector FirstPersonFlashlightOffset;	
 
@@ -10,6 +13,7 @@ var int ClipLeft; // How Much ammo is left in the magazine
 var bool bzoomed;
 var float ZoomLevel;
 var Bool bSpeedMeUp;
+var() KFFarSound.EFarKind FarKind[2];	// how each fire mode's shots sound far off (KFFarSound)
 
 var() sound ReloadBeginSound, ReloadSound, ReloadEndSound, ToggleSound;
 var() name ReloadAnim;
@@ -78,6 +82,9 @@ var class<Effect_TacLightProjector> FlashLightClass;	// the light it makes (a mu
 var class<Actor> MuzzleLightClass;	// the light a shot throws ahead, made on the shooter's machine (a mutator may hand one, as KFTorch does)
 var() bool bLoadsWithFire;		// the next round goes in with the fire animation (crossbow, LAW): it never reloads, the round is in at once
 var Actor MuzzleLight;				// ...the player's one, shared by every weapon; while it is there the weapon's own flash light is not used
+var vector DrawnMuzzle;			// where the drawn first-person gun's muzzle is seen (on the view at its depth), for its
+var float DrawnMuzzleTime;			// ...smoke (KFGunSmoke); when that was
+var KFFlash MuzzleFX[2];			// its muzzle flashes, drawn at its muzzles in first person (MuzzleFlashFX)
 
 var float NextAmmoCheckTime,LastAmmoResult,LastHasGunMsgTime;
 
@@ -153,6 +160,56 @@ var() rotator SprintDownRot;
 var() vector SprintDownOffset;
 var() float ZombiesSprintBobMulti;
 var bool bUpgraded;
+// Its upgrade at a Zombies upgrade machine (KFPackAPunchMachine). A weapon without an UpgradeName has none.
+var() string	UpgradeName;
+var() float		UpgradeMagScale;		// its magazine, upgraded
+var() float		UpgradeAmmoScale;		// its spare ammo, upgraded
+var() float		UpgradeFireRateScale;	// the time between its shots, upgraded
+var() int		UpgradeBurst;			// shots to each pull of the trigger, upgraded (0: as before)
+var() int		UpgradePenetrations;	// more bodies its shots go on through, upgraded
+var() float		UpgradePenDamageScale;	// share of the damage kept past each body, upgraded (0: its own)
+var() int		UpgradeRicochets;		// a shot of it that hits a wall goes on to a specimen, upgraded
+var() bool		bUpgradeIncendiary;		// its hits heat a specimen until it burns, upgraded
+var() bool		bUpgradeStagger;		// a specimen its shot hits stumbles, upgraded
+var() bool		bUpgradeHeadShock;		// a head it bursts staggers the specimens around, upgraded
+var() float		UpgradeReloadScale;		// how much faster it reloads, upgraded
+var() int		UpgradeKillHeal;		// health back for each kill with it, upgraded
+var() Material	UpgradePanner;			// the moving sheen over every upgraded weapon (UpgradeSheen), dimmed
+var() float		UpgradeSheenLevel;		// ...to this share
+var() float		UpgradePartSheenLevel;	// ...and to this on the parts of the weapon in hand (SheenOf), which fill the view
+var Material	UpgradeSheenMat;		// (made once: class'KFWeapon'.default's)
+var Material	UpgradeSheenSpec;		// (its moving texture: a part's shine, SheenOf)
+var() array<int>		SheenSlots;		// the parts of its first-person model the sheen goes on (not the hands, which are
+var() array<Material>	SheenMats;		// ...part of that model), and what each part is; none: drawn over all of it
+var array<Material>		SheenMade;		// (each part's material with the sheen)
+var() array<Material>	MeshMats;		// its first-person model's own materials for the slots below the sheen's that are
+										// not sheened (the hands, the arms): a slot left empty draws the engine's default
+var() color		UpgradeTint;			// an upgraded gun's tracers
+var() byte		Element;				// its upgrade's element (KFElement): its camo, and the colour of its flashes, tracers,
+										// ...light, hits and kills
+var ConstantColor	CamoLevel;			// (its own camo's colour, which its shots pulse)
+var() Sound		LowAmmoSound;			// ticks under the shooter's last shots of a magazine, rising (LocalShotLayers)
+var() float		LowAmmoVolume;
+var() class<KFBrass> BrassClass;		// the casings it throws in first person (KFBrass), out of BrassBone
+var() name		BrassBone;
+var() float		BrassSize;				// ...against a pistol's
+var() float		BrassDelay;				// ...this long after the shot (a pump or a lever throws it later)
+var() Sound		BrassLandSound;			// ...and heard landing
+var KFBrass		BrassFX;
+var name		ShotBone;				// (the muzzle the last shot left: its tracer starts there, ShotMuzzle)
+var name		BrassDueBone;			// (one to throw at BrassDueAt; then heard landing at BrassLandAt)
+var float		BrassDueAt, BrassLandAt;
+var bool		bUpgradeBusy;			// the upgrade machine has it (KFPackAPunchMachine): it does not fire, and is drawn lowered
+var byte		AmmoMod;				// its re-pack's special ammo (KFAmmoMod)
+var float		ModReadyAt;				// (the server: when that may go off again)
+var float		BusyLower;				// (drawn lowered: 0 up, 1 out of sight)
+var float		CardUntil;				// (its name card on its holder's screen until then: HUDKillingFloor.DrawUpgradeCard)
+var string		CardText;
+var color		CardColor;
+var byte		CardMod;				// (the special ammo last shown)
+var Material		CamoSpec;
+var float			CamoPulse;
+var bool		bUpgradeShown;			// (the upgrade's changes made on this machine)
 
 // === Aiming (alt fire held on a weapon whose alt fire is KFZoom) ===
 var() float AimZoom;			// how many times the view is magnified once aimed (1 = not at all)
@@ -174,7 +231,7 @@ replication
 		ClipLeft;
 
 	reliable if( bNetDirty && bNetOwner && (Role==ROLE_Authority) )
-		ClipCount, bUpgraded;
+		ClipCount, bUpgraded, bUpgradeBusy, AmmoMod;
 
 	reliable if( bNetInitial && bNetOwner && (Role==ROLE_Authority) )
 		MuzzleLightClass;
@@ -305,6 +362,9 @@ simulated event RenderOverlays( Canvas Canvas )
 	WeaponOffset = (X*WallPivotOffset.X + Y*WallPivotOffset.Y + Z*WallPivotOffset.Z);
 
     WeaponOffset += (VM_PosOffset + Z * BreathOffsetZ) * Free;
+    // (in the upgrade machine: down out of sight)
+    if ( BusyLower > 0.0 )
+        WeaponOffset -= Z * 90.0 * Smerp(BusyLower, 0.0, 1.0);
     WeaponOffset += (X * BobPosOffset.X + Y * (BobPosOffset.Y + StrafeOffsetY) + Z * BobPosOffset.Z) * Free;
 
     SetLocation(Instigator.Location + Instigator.CalcDrawOffset(self) + WeaponOffset);
@@ -324,14 +384,110 @@ simulated event RenderOverlays( Canvas Canvas )
     NewRotation.Pitch += int( (VM_RotOffset.X + BreathPitchOffset + BobRotOffset.X) * Free * (65536.0/360.0) );
     NewRotation.Yaw  += int( (VM_RotOffset.Y + BobRotOffset.Y) * Free * (65536.0/360.0) );
     NewRotation.Roll += int( (VM_RotOffset.Z + BobRotOffset.Z + StrafeRoll) * Free * (65536.0/360.0) );
+    if ( BusyLower > 0.0 )
+        NewRotation.Pitch -= int(7000.0 * Smerp(BusyLower, 0.0, 1.0));
     SetRotation(NewRotation);
     if ( KFPlayerController(Instigator.Controller) != None && KFPlayerController(Instigator.Controller).bSwaying )
         KFPlayerController(Instigator.Controller).SwayDrawn(self);
     bDrawingFirstPerson = true;
     Canvas.DrawActor(self, false, false, DisplayFOV);
     bDrawingFirstPerson = false;
+    DrawMuzzleFX(Canvas);
+    DrawBrass(Canvas);
+    if ( KFWeaponAttachment(ThirdPersonActor) != None && KFWeaponAttachment(ThirdPersonActor).SmokeHeat > 0
+        && PlayerController(Instigator.Controller) != None )
+        DrawnMuzzleAt(PlayerController(Instigator.Controller));
     if ( Hand == 0 )
         PlayerViewOffset.Y = 0;
+}
+
+// Where the drawn gun's muzzle is seen, at a depth on the view (it is drawn at a field of view of its own)
+simulated function DrawnMuzzleAt( PlayerController PC )
+{
+	DrawnMuzzle = class'KFFlameStream'.static.OnSceneView(GetBoneCoords(SmokeBone()).Origin, PC.CalcViewLocation,
+		PC.CalcViewRotation, DisplayFOV, PC.FovAngle, 50.0);
+	DrawnMuzzleTime = Level.TimeSeconds;
+}
+
+// Where the shooter sees the last shot leave the gun, on the scene's view (its tracer starts there): on the line from the
+// eye through the drawn muzzle, far enough out that a tracer's width is not swollen by being right at the eye
+simulated function vector ShotMuzzle()
+{
+	local PlayerController PC;
+
+	if ( Instigator != None )
+		PC = PlayerController(Instigator.Controller);
+	if ( PC == None || ShotBone == '' )
+		return DrawnMuzzle;
+	return class'KFFlameStream'.static.OnSceneView(GetBoneCoords(ShotBone).Origin, PC.CalcViewLocation,
+		PC.CalcViewRotation, DisplayFOV, PC.FovAngle, 120.0);
+}
+
+// A shot's flash (KFFlash) at the muzzle of Bone, seen by the one firing; one is kept for each muzzle
+simulated function MuzzleFlashFX( class<KFFlash> FX, name Bone )
+{
+	local int i, Free;
+
+	if ( Level.NetMode == NM_DedicatedServer )
+		return;
+	ShotBone = Bone;
+	if ( FX == None )
+		return;
+	Free = -1;
+	for ( i = 0; i < ArrayCount(MuzzleFX); i++ )
+	{
+		if ( MuzzleFX[i] != None && !MuzzleFX[i].bDeleteMe && MuzzleFX[i].Class == FX && MuzzleFX[i].FlashBone == Bone )
+			break;
+		if ( Free < 0 && (MuzzleFX[i] == None || MuzzleFX[i].bDeleteMe) )
+			Free = i;
+	}
+	if ( i == ArrayCount(MuzzleFX) )
+	{
+		if ( Free < 0 )
+		{
+			Free = 0;
+			MuzzleFX[0].Destroy();
+		}
+		i = Free;
+		MuzzleFX[i] = Spawn(FX, self);
+		if ( MuzzleFX[i] == None )
+			return;
+		MuzzleFX[i].FlashBone = Bone;
+		MuzzleFX[i].bHidden = true;
+	}
+	PlaceMuzzleFX(MuzzleFX[i]);
+	if ( bUpgraded && class'KFElement'.static.Has(Element) )
+	{
+		MuzzleFX[i].SetTint(class'KFElement'.static.Glow(Element));
+		CamoKick();
+	}
+	MuzzleFX[i].Flash();
+}
+
+// At its muzzle on the drawn gun, along the barrel
+simulated function PlaceMuzzleFX( KFFlash FX )
+{
+	FX.SetLocation(GetBoneCoords(FX.FlashBone).Origin + vector(Rotation) * FX.Forward);
+	FX.SetRotation(Rotation);
+}
+
+// The flashes are drawn with the gun, at its field of view
+simulated function DrawMuzzleFX( Canvas Canvas )
+{
+	local int i;
+
+	for ( i = 0; i < ArrayCount(MuzzleFX); i++ )
+		if ( MuzzleFX[i] != None && !MuzzleFX[i].bDeleteMe && MuzzleFX[i].IsLive() )
+		{
+			PlaceMuzzleFX(MuzzleFX[i]);
+			Canvas.DrawActor(MuzzleFX[i], false, false, DisplayFOV);
+		}
+}
+
+// The bone its smoke comes from
+simulated function name SmokeBone()
+{
+	return FlashBoneName;
 }
 
 // The angle the weapon is drawn at on this screen. At the hip it is DisplayFOV across, as the weapon was made, on any
@@ -483,6 +639,9 @@ simulated function bool StartFire(int Mode)
 
 	if( KFHumanPawn(Instigator)!=None && KFHumanPawn(Instigator).bIsDowned )
 		return false;
+	// (the upgrade machine has it)
+	if ( bUpgradeBusy )
+		return false;
 
 	ShotDue[Mode] = 0;
 	RetVal = super.StartFire(Mode);
@@ -550,6 +709,17 @@ simulated function ClientInterruptReload()
 {
 	bIsReloading = false;
 	PlayIdle();
+}
+
+// A reload given up part way whatever the weapon (KFPawn.QuickHeal): a magazine goes in only at the end, so only the time
+// is lost; shells already in stay in
+simulated function CancelReload()
+{
+	if( !bIsReloading )
+		return;
+	ServerInterruptReload();
+	if ( Level.NetMode != NM_StandAlone && (Level.NetMode != NM_ListenServer || !Instigator.IsLocallyControlled()) )
+		ClientInterruptReload();
 }
 
 exec function FinishReloading()
@@ -720,11 +890,18 @@ simulated function Destroyed()
 
 	AmbientSound = None;
 
+	if ( BrassFX != None )
+		BrassFX.Destroy();
+
 	if ( FlashLight != none )
 		FlashLight.Destroy();
 
 	if ( TacShine != none )
 		TacShine.Destroy();
+
+	for ( m = 0; m < ArrayCount(MuzzleFX); m++ )
+		if ( MuzzleFX[m] != None )
+			MuzzleFX[m].Destroy();
 
 	if ( Owner == none )
 	{
@@ -1026,6 +1203,10 @@ simulated function BringUp(optional Weapon PrevWeapon)
 		OldWeapon = PrevWeapon;
 	else
 		OldWeapon = None;
+
+	// a quick heal whose syringe was passed over for this weapon (drawn while a reload held the gun) is over
+	if ( Syringe(self) == None && KFPawn(Instigator) != None && KFPawn(Instigator).bIsQuickHealing == 1 )
+		KFPawn(Instigator).bIsQuickHealing = 0;
 }
 
 simulated function bool ConsumeAmmo( int Mode, float Load, optional bool bAmountNeededIsMax )
@@ -1213,6 +1394,45 @@ simulated function WeaponTick(float DT)
 simulated function Tick(float DeltaTime)
 {
 	Super.Tick(DeltaTime);
+	// (on its holder's machine the upgrade shows once bUpgraded arrives; the sheen is put back if anything took it)
+	if ( bUpgraded && !bUpgradeShown )
+		ShowUpgrade();
+	else if ( bUpgraded && SheenSlots.Length == 0 && Level.NetMode != NM_DedicatedServer && OverlayMaterial != UpgradeLookOf(Element) )
+		SetOverlayMaterial(UpgradeLookOf(Element), 1000000.0, true);
+	// (a casing its pump or lever throws, and casings heard landing)
+	if ( BrassDueAt > 0.0 && Level.TimeSeconds >= BrassDueAt )
+	{
+		BrassDueAt = 0.0;
+		if ( Instigator != None && Instigator.IsFirstPerson() && Instigator.Weapon == self )
+			ThrowBrass(BrassDueBone);
+	}
+	if ( BrassLandAt > 0.0 && Level.TimeSeconds >= BrassLandAt )
+	{
+		BrassLandAt = 0.0;
+		if ( Instigator != None )
+			Instigator.PlaySound(BrassLandSound, SLOT_None, 0.35, false, 250.0, 0.9 + 0.25 * FRand(), false);
+	}
+	// (lowered into the machine and brought back up)
+	if ( bUpgradeBusy )
+		BusyLower = FMin(1.0, BusyLower + DeltaTime / 0.45);
+	else if ( BusyLower > 0.0 )
+		BusyLower = FMax(0.0, BusyLower - DeltaTime / 0.45);
+	// (a new special ammo is named on its holder's screen)
+	if ( AmmoMod != CardMod && Instigator != None && Instigator.IsLocallyControlled() )
+	{
+		CardMod = AmmoMod;
+		if ( AmmoMod > 0 )
+			ShowCard(class'KFAmmoMod'.static.NameOf(AmmoMod), class'KFAmmoMod'.static.ColourOf(AmmoMod));
+	}
+	// (a shot's pulse of the camo dies away)
+	if ( CamoPulse > 0.0 && CamoLevel != None )
+	{
+		CamoPulse = FMax(0.0, CamoPulse - DeltaTime * 3.5);
+		class'KFElement'.static.SetLevel(CamoLevel, Element, 1.0 + 1.8 * CamoPulse);
+	}
+	// (a held weapon's sounds play from here: keep it with a holder it is not drawn in front of, such as a bot)
+	if ( Instigator != None && Instigator.Weapon == self && Level.NetMode != NM_DedicatedServer && !Instigator.IsFirstPerson() )
+		SetLocation(Instigator.Location);
 	WallOffsetFactor += (TargetWallOffsetFactor - WallOffsetFactor) * FMin(DeltaTime * 8.0, 1.0);
 	if ( Instigator != None && Instigator.Weapon == self && KFZoom(FireMode[1]) != None
 		&& PlayerController(Instigator.Controller) != None && Instigator.IsLocallyControlled() )
@@ -1220,6 +1440,13 @@ simulated function Tick(float DeltaTime)
     if (Instigator != None && Instigator.Controller != None && Instigator.IsFirstPerson())
 		if (Level.NetMode != NM_DedicatedServer)
         	UpdateViewModelMotion(Instigator.GetViewRotation(), DeltaTime);
+}
+
+simulated function IncrementFlashCount(int Mode)
+{
+	Super.IncrementFlashCount(Mode);
+	if ( Role == ROLE_Authority && Instigator != None && Mode >= 0 && Mode < 2 )
+		class'KFFarSound'.static.Loud(self, Instigator.Location, FarKind[Mode]);
 }
 
 // The view punch that is in the owner's view right now.
@@ -1642,6 +1869,9 @@ simulated function bool CanThrow()
 
     if(bKFNeverThrow)
       return false;
+    // (the upgrade machine has it)
+    if(bUpgradeBusy)
+      return false;
 
     for (Mode = 0; Mode < NUM_FIRE_MODES; Mode++)
     {
@@ -1921,7 +2151,7 @@ simulated function float GetAmmoMulti()
 simulated function int MaxAmmo(int mode)
 {
 	if ( AmmoClass[mode] != None )
-		return AmmoClass[mode].Default.MaxAmmo*GetAmmoMulti();
+		return AmmoClass[mode].Default.MaxAmmo*GetAmmoMulti()*UpgradeAmmo();
 	return 0;
 }
 // Don't consider secondary fire modes, it fucks up the bots
@@ -2058,12 +2288,302 @@ simulated function UpdateMagCapacity(PlayerReplicationInfo PRI)
 {
 	if ( KFPlayerReplicationInfo(PRI) != none && KFPlayerReplicationInfo(PRI).ClientVeteranSkill != none )
 	{
-		ClipCount = default.ClipCount * KFPlayerReplicationInfo(PRI).ClientVeteranSkill.Static.GetMagCapacityMod(self);
+		ClipCount = default.ClipCount * KFPlayerReplicationInfo(PRI).ClientVeteranSkill.Static.GetMagCapacityMod(self) * UpgradeMag();
 	}
 	else
 	{
-		ClipCount = default.ClipCount;
+		ClipCount = default.ClipCount * UpgradeMag();
 	}
+}
+
+// Upgraded at a Zombies upgrade machine, on the server. The holder's machine follows when bUpgraded arrives (Tick).
+function Upgrade()
+{
+	TakeUpgrade();
+	MaxOutAmmo();
+	if ( ClipCount > 0 )
+		ClipLeft = Min(ClipCount, AmmoAmount(0));
+	NetUpdateTime = Level.TimeSeconds - 1;
+}
+
+// The upgrade without the ammo the machine gives with it: carried over to the weapon this one was made into (a pair)
+function TakeUpgrade()
+{
+	local int m;
+
+	bUpgraded = true;
+	ShowUpgrade();
+	for ( m = 0; m < NUM_FIRE_MODES; m++ )
+		if ( Ammo[m] != None )
+			Ammo[m].MaxAmmo = MaxAmmo(m);
+	MarkAttachment();
+}
+
+simulated function ShowUpgrade()
+{
+	bUpgradeShown = true;
+	if ( Instigator != None && Instigator.IsLocallyControlled() && Level.NetMode != NM_DedicatedServer )
+		ShowCard(UpgradeName, class'KFElement'.static.Glow(Element));
+	if ( Instigator != None )
+		UpdateMagCapacity(Instigator.PlayerReplicationInfo);
+	if ( Level.NetMode == NM_DedicatedServer )
+		return;
+	if ( SheenSlots.Length > 0 )
+		SheenSkins();
+	else
+		SetOverlayMaterial(UpgradeLookOf(Element), 1000000.0, true);
+}
+
+// What is drawn over an upgraded weapon of element E as a whole: its element's camo, or the plain sheen
+static function Material UpgradeLookOf( byte E )
+{
+	if ( class'KFElement'.static.Has(E) )
+		return class'KFElement'.static.Overlay(E);
+	return UpgradeSheen();
+}
+
+// The shine of the parts of the gun in hand: its own element's camo (so that its shots pulse it), or the plain sheen
+simulated function Material PartShine()
+{
+	if ( !class'KFElement'.static.Has(Element) )
+	{
+		if ( class'KFWeapon'.default.UpgradeSheenSpec == None )
+			class'KFWeapon'.default.UpgradeSheenSpec = SheenAt(class'KFWeapon'.default.UpgradePartSheenLevel);
+		return class'KFWeapon'.default.UpgradeSheenSpec;
+	}
+	if ( CamoSpec == None )
+	{
+		CamoLevel = new class'ConstantColor';
+		class'KFElement'.static.SetLevel(CamoLevel, Element, 1.0);
+		CamoSpec = class'KFElement'.static.Camo(Element, CamoLevel);
+	}
+	return CamoSpec;
+}
+
+// What only the one firing hears of their own shot (KFFire.FlashMuzzleFlash): the gun's works close by, and a tick
+// rising as the magazine runs low
+simulated function LocalShotLayers( Sound Mech, float MechVol, float MechPitch )
+{
+	local int Low;
+
+	if ( Instigator == None || !Instigator.IsLocallyControlled() || Level.NetMode == NM_DedicatedServer )
+		return;
+	if ( Mech != None )
+		PlaySound(Mech, SLOT_None, MechVol, false, 200.0, MechPitch * (0.96 + 0.08 * FRand()), false);
+	Low = ClipCount / 4;
+	if ( LowAmmoSound != None && ClipCount > 3 && !bHoldToReload && ClipLeft <= Low )
+		PlaySound(LowAmmoSound, SLOT_None, LowAmmoVolume, false, 200.0, 1.7 + 0.6 * (1.0 - float(ClipLeft) / float(Max(Low, 1))), false);
+}
+
+// A casing out of its port in first person (KFFire.FlashMuzzleFlash), now or when its pump or lever throws it
+simulated function EjectBrass( name Bone )
+{
+	if ( BrassClass == None || Level.NetMode == NM_DedicatedServer || Instigator == None || !Instigator.IsFirstPerson() )
+		return;
+	if ( Bone == '' )
+		Bone = BrassBone;
+	if ( BrassDelay > 0.0 )
+	{
+		BrassDueBone = Bone;
+		BrassDueAt = Level.TimeSeconds + BrassDelay;
+		return;
+	}
+	ThrowBrass(Bone);
+}
+
+simulated function ThrowBrass( name Bone )
+{
+	if ( BrassFX == None || BrassFX.bDeleteMe )
+	{
+		BrassFX = Spawn(BrassClass, self);
+		if ( BrassFX == None )
+			return;
+		BrassFX.SetSize(BrassSize);
+	}
+	BrassFX.Eject(GetBoneCoords(Bone).Origin, Rotation);
+	if ( BrassLandSound != None )
+		BrassLandAt = Level.TimeSeconds + 0.5 + 0.25 * FRand();
+}
+
+// Drawn with the gun, at its field of view
+simulated function DrawBrass( Canvas Canvas )
+{
+	if ( BrassFX != None && !BrassFX.bDeleteMe && BrassFX.IsLive() )
+		Canvas.DrawActor(BrassFX, false, false, DisplayFOV);
+}
+
+// Its name across its holder's screen a while (HUDKillingFloor.DrawUpgradeCard)
+simulated function ShowCard( string S, color C )
+{
+	if ( S == "" )
+		return;
+	CardText = S;
+	CardColor = C;
+	if ( C.R + C.G + C.B == 0 )
+		CardColor = class'Canvas'.static.MakeColor(255, 215, 0);
+	CardUntil = Level.TimeSeconds + 3.0;
+}
+
+// Re-packed at the upgrade machine (the server): a special ammo, not the one it had
+function Repack()
+{
+	local byte Old;
+
+	Old = AmmoMod;
+	AmmoMod = 1 + Rand(4);
+	if ( AmmoMod == Old )
+		AmmoMod = 1 + (AmmoMod % 4);
+	ModReadyAt = 0.0;
+	MaxOutAmmo();
+	if ( ClipCount > 0 )
+		ClipLeft = Min(ClipCount, AmmoAmount(0));
+	NetUpdateTime = Level.TimeSeconds - 1;
+}
+
+// A shot flares the camo up
+simulated function CamoKick()
+{
+	if ( CamoLevel != None )
+		CamoPulse = 1.0;
+}
+
+// The sheen on the parts of the first-person model that are the weapon's own
+simulated function SheenSkins()
+{
+	local int i;
+
+	for ( i = 0; i < MeshMats.Length; i++ )
+		if ( MeshMats[i] != None && (i >= Skins.Length || Skins[i] == None) )
+			Skins[i] = MeshMats[i];
+	for ( i = 0; i < SheenSlots.Length && i < SheenMats.Length; i++ )
+	{
+		if ( i >= SheenMade.Length || SheenMade[i] == None )
+			SheenMade[i] = SheenOf(SheenMats[i], PartShine());
+		Skins[SheenSlots[i]] = SheenMade[i];
+	}
+}
+
+// A part's material with the upgrade's sheen for its shine
+static function Material SheenOf( Material Base, Material Shine )
+{
+	local Shader S, B;
+
+	S = new class'Shader';
+	B = Shader(Base);
+	if ( B != None )
+	{
+		S.Diffuse = B.Diffuse;
+		S.Opacity = B.Opacity;
+		S.SelfIllumination = B.SelfIllumination;
+		S.SelfIlluminationMask = B.SelfIlluminationMask;
+		S.Detail = B.Detail;
+		S.DetailScale = B.DetailScale;
+		S.OutputBlending = B.OutputBlending;
+		S.TwoSided = B.TwoSided;
+	}
+	else
+		S.Diffuse = Base;
+	S.Specular = Shine;
+	return S;
+}
+
+// The sheen over every upgraded weapon, in hand and in others' hands: a moving texture, dimmed so the weapon shows
+// through. Made on each machine (a material made in play cannot be sent), once.
+static function Material UpgradeSheen()
+{
+	local Shader SH;
+
+	if ( class'KFWeapon'.default.UpgradeSheenMat != None )
+		return class'KFWeapon'.default.UpgradeSheenMat;
+	SH = new class'Shader';
+	SH.Specular = SheenAt(class'KFWeapon'.default.UpgradeSheenLevel);
+	class'KFWeapon'.default.UpgradeSheenMat = SH;
+	return SH;
+}
+
+// The sheen's moving texture dimmed to share K
+static function Material SheenAt( float K )
+{
+	local ConstantColor CC;
+	local Combiner CB;
+
+	CC = new class'ConstantColor';
+	CC.Color.R = 255 * K;
+	CC.Color.G = CC.Color.R;
+	CC.Color.B = CC.Color.R;
+	CC.Color.A = 255;
+	CB = new class'Combiner';
+	CB.CombineOperation = CO_Multiply;
+	CB.Material1 = class'KFWeapon'.default.UpgradePanner;
+	CB.Material2 = CC;
+	return CB;
+}
+
+// Its third-person model is told, for everyone who sees it (it is made anew each time the weapon is brought up)
+function MarkAttachment()
+{
+	if ( KFWeaponAttachment(ThirdPersonActor) != None )
+	{
+		KFWeaponAttachment(ThirdPersonActor).bUpgraded = true;
+		KFWeaponAttachment(ThirdPersonActor).UpgradeElement = Element;
+	}
+	else if ( KFMeleeAttachment(ThirdPersonActor) != None )
+	{
+		KFMeleeAttachment(ThirdPersonActor).bUpgraded = true;
+		KFMeleeAttachment(ThirdPersonActor).UpgradeElement = Element;
+	}
+}
+
+function AttachToPawn(Pawn P)
+{
+	Super.AttachToPawn(P);
+	if ( bUpgraded )
+		MarkAttachment();
+}
+
+simulated function float UpgradeMag()
+{
+	if ( bUpgraded )
+		return UpgradeMagScale;
+	return 1.0;
+}
+
+simulated function float UpgradeAmmo()
+{
+	if ( bUpgraded )
+		return UpgradeAmmoScale;
+	return 1.0;
+}
+
+simulated function float UpgradeFireRate()
+{
+	if ( bUpgraded )
+		return UpgradeFireRateScale;
+	return 1.0;
+}
+
+// How much spare ammo of this kind P may carry for an upgraded weapon that takes it (1: none)
+static function float UpgradeAmmoFor( Pawn P, class<Ammunition> A )
+{
+	local Inventory I;
+	local KFWeapon W;
+
+	if ( P == None )
+		return 1.0;
+	for ( I = P.Inventory; I != None; I = I.Inventory )
+	{
+		W = KFWeapon(I);
+		if ( W != None && W.bUpgraded && (W.AmmoClass[0] == A || W.AmmoClass[1] == A) )
+			return W.UpgradeAmmoScale;
+	}
+	return 1.0;
+}
+
+simulated function String GetHumanReadableName()
+{
+	if ( bUpgraded && UpgradeName != "" )
+		return UpgradeName;
+	return Super.GetHumanReadableName();
 }
 
 simulated function float DesireAmmo(class<Inventory> NewAmmoClass, bool bDetour)
@@ -2093,6 +2613,11 @@ simulated function ChangedPerk(String NewPerk)
 
 defaultproperties
 {
+	BrassSize=1.000000
+	BrassLandSound=ProceduralSound'WeaponSounds.PShell1.P1Shell1'
+	LowAmmoSound=Sound'KFWeaponSound.Clipsnap'
+	LowAmmoVolume=0.350000
+	SoundOcclusion=OCCLUSION_StaticMeshes
 	FlashBoneName="tip"
 	WeaponReloadAnim="Reload1"
 	ModeSwitchAnim="'"
@@ -2176,4 +2701,12 @@ defaultproperties
 	LandKickPos=40.0
 	LandKickRot=30.0
 	LandKickSpeedScale=0.8
+	UpgradeMagScale=1.000000
+	UpgradeAmmoScale=2.000000
+	UpgradeFireRateScale=1.000000
+	UpgradeReloadScale=1.000000
+	UpgradePanner=TexPanner'XGameShaders.PlayerShaders.WeaponUDamageP'
+	UpgradeSheenLevel=0.400000
+	UpgradePartSheenLevel=0.220000
+	UpgradeTint=(B=255,G=115,R=215)
 }

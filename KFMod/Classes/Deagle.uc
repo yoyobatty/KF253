@@ -15,6 +15,11 @@ function byte BestMode()
 
 defaultproperties
 {
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+	BrassSize=1.250000
+     Element=4
+	FarKind(0)=FAR_Magnum
      ClipCount=8
      ReloadRate=2.100000
      ReloadAnim="Reload"
@@ -55,4 +60,13 @@ defaultproperties
      Mesh=SkeletalMesh'KFWeaponModels.Deagle'
      DrawScale=0.900000
      TransientSoundVolume=1.000000
+     UpgradeName="Thunderclap"
+     UpgradeMagScale=1.500000
+     UpgradePenetrations=95
+     UpgradePenDamageScale=0.800000
+     bUpgradeStagger=True
+     SheenSlots(0)=0
+     SheenMats(0)=Shader'KillingFloorWeapons.Deagle.DeagleShineShader'
+     SheenSlots(1)=1
+     SheenMats(1)=Shader'KillingFloorWeapons.Deagle.DeagleMagShader'
 }

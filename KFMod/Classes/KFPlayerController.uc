@@ -1,5 +1,6 @@
 class KFPlayerController extends xPlayer
-	DependsOn(KFPlayerStats);
+	DependsOn(KFPlayerStats)
+	DependsOn(KFFarSound);
 
 //const MAX_BUYITEMS=50;
 const BUYLIST_CATS=7;
@@ -118,6 +119,8 @@ var Actor PropFloor;		// the physics prop under the player when the view was las
 var Pawn PropFloorPawn;		// the body that stood on it
 var rotator PropFloorRot;	// the prop's rotation then
 
+var KFFarSound FarSound;	// far-off gunfire and blasts at this machine, made on the first one
+
 replication
 {
 	reliable if(RemoteRole == ROLE_AUTONOMOUSPROXY)
@@ -132,7 +135,7 @@ replication
 
 	// (the cheats, typed on a client, run on the server)
 	reliable if( Role < ROLE_Authority )
-		Summon, Summon2, God, Arsenal, Backup, Horde, Horde2, MopUp, StartWave, EndWave, ExtraTime, SetWave, ZedsLeft,
+		Summon, Summon2, God, Arsenal, Upgrade, UpgradeAll, Backup, Horde, Horde2, MopUp, StartWave, EndWave, ExtraTime, SetWave, ZedsLeft,
 		ZedCap, PauseSpawns, WaveInfo, Holdout, NextWave, HoldoutTime, HoldoutHealth, EndHoldout, RiotZed, RiotRows,
 		RiotSources, Rush, Crowd, HordeNow, Pace, RiotReset, Heal, HealAll, SetHealth, SetHealthAll, Cash, CashAll,
 		Vest, VestAll, Nuke, AllAmmo, AllAmmoAll, NadeFull, NadeFullAll, GodAll, SuperMan, SuperManAll, ViewZombie, ViewSelf;
@@ -140,6 +143,8 @@ replication
 	// Functions server can call.
 	reliable if( Role == ROLE_Authority )
 		KFClientNetWorkMsg, ClientKFShakeView;
+	unreliable if( Role == ROLE_Authority )
+		ClientFarNoise;
 }
 
 simulated function InitInputSystem()
@@ -644,6 +649,22 @@ function UpdateShakeRotComponent(out float max, out int current, out float rate,
 	bTurningRot = true;
 	Super.UpdateShakeRotComponent(max, current, rate, time, dt);
 	bTurningRot = false;
+}
+
+// A shot or blast far off (KFFarSound.Loud).
+simulated function ClientFarNoise(vector Where, byte Kind)
+{
+	FarNoise(Where, Kind);
+}
+
+simulated function FarNoise(vector Where, byte Kind)
+{
+	if ( Level.NetMode == NM_DedicatedServer )
+		return;
+	if ( FarSound == None )
+		FarSound = Spawn(class'KFFarSound', self);
+	if ( FarSound != None )
+		FarSound.Hear(Where, Kind);
 }
 
 function ClientKFShakeView(vector shRotMag, vector shRotRate, float shRotTime,
@@ -2041,6 +2062,16 @@ exec function Arsenal()
 {
 	if( CheatsHere() )
 		OnlineCheats.Arsenal();
+}
+exec function Upgrade()
+{
+	if( CheatsHere() )
+		OnlineCheats.Upgrade();
+}
+exec function UpgradeAll()
+{
+	if( CheatsHere() )
+		OnlineCheats.UpgradeAll();
 }
 exec function Backup()
 {

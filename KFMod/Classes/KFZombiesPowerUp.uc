@@ -19,15 +19,16 @@ function Timer()
 		bHidden = !bHidden;
 }
 
-function Activate( KFHumanPawn P, KFZombiesGameType G );
+function Activate( KFHumanPawn P, KFEndlessGameType G );
 
 function Touch( Actor Other )
 {
 	local KFHumanPawn P;
-	local KFZombiesGameType G;
+	local KFEndlessGameType G;
 
+	// (Zombies and Endless both drop them: KFEndlessGameType.TryDropPowerUp)
 	P = KFHumanPawn(Other);
-	G = KFZombiesGameType(Level.Game);
+	G = KFEndlessGameType(Level.Game);
 	if( bTaken || P==None || G==None || P.Health<=0 || P.bIsDowned || P.Controller==None || !P.Controller.bIsPlayer )
 		Return;
 

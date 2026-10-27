@@ -13,10 +13,22 @@ var float SwingRate;
 var() vector BladeBase, BladeTip;
 var() float BladeExtend;	// reach added beyond the tip, along the blade
 
+var bool bUpgraded;	// its weapon is upgraded (KFWeapon.Upgrade): drawn with the upgrade's sheen
+var byte UpgradeElement;	// ...of its element (KFElement)
+
 replication
 {
 	reliable if ( bNetDirty && !bNetOwner && Role == ROLE_Authority )
 		SwingAnim, SwingRate;
+	reliable if ( bNetDirty && Role == ROLE_Authority )
+		bUpgraded, UpgradeElement;
+}
+
+simulated function Tick( float DT )
+{
+	Super.Tick(DT);
+	if ( bUpgraded && Level.NetMode != NM_DedicatedServer && OverlayMaterial != class'KFWeapon'.static.UpgradeLookOf(UpgradeElement) )
+		SetOverlayMaterial(class'KFWeapon'.static.UpgradeLookOf(UpgradeElement), 1000000.0, true);
 }
 
 simulated event ThirdPersonEffects()

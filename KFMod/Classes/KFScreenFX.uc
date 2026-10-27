@@ -57,6 +57,9 @@ var() float					NightGlowGain;		// at full night vision the glow is this much st
 var() int					NightGlowCut;		// ...and starts this much darker, of 255
 var() globalconfig bool		bTorch;				// the player's own tactical light worked out at every pixel, with shadows (KFTorch reads it)
 var() globalconfig bool		bMuzzleLight;		// the player's own shots light what is ahead, with shadows (KFWeapon.ShotLight, KFTorch's light)
+var() globalconfig bool		bShockWaves;		// blasts bend the air round them as their waves run out (KFWave)
+var() int					MaxWaves;			// ...at most this many at once, each drawing part of the scene again
+var array<KFWave>			Waves;
 
 var KFFrameTap				Tap;
 var PlayerController		PC;
@@ -139,6 +142,7 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 	PC = P;
 	DT = Level.TimeSeconds - LastPrep;
 	LastPrep = Level.TimeSeconds;
+	DoWaves(C);
 	if (BlurLevel > 0.0 && Level.TimeSeconds > BlurHoldUntil)
 		BlurLevel = FMax(0.0, BlurLevel - DT / BlurFadeTime);
 
@@ -212,6 +216,77 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 		Glow.Revision++;
 	}
 	Hang(Want);
+}
+
+// A blast's wave (KFBlast), for the player at this machine if it is near enough
+static function Wave(LevelInfo L, vector Spot, float Size)
+{
+	local PlayerController P;
+	local KFScreenFX F;
+	local KFWave W;
+
+	if (L.NetMode == NM_DedicatedServer)
+		return;
+	P = L.GetLocalPlayerController();
+	if (P == None || P.ViewTarget == None || VSize(P.ViewTarget.Location - Spot) > 3500)
+		return;
+	F = class'KFFrameTap'.static.GetFX(P);
+	if (F == None || !F.bShockWaves || F.Waves.Length >= F.MaxWaves)
+		return;
+	W = F.Spawn(class'KFWave',,, Spot);
+	if (W == None)
+		return;
+	W.FX = F;
+	W.SetSize(Size);
+	F.Waves[F.Waves.Length] = W;
+}
+
+simulated function WaveGone(KFWave W)
+{
+	local int i;
+
+	for (i = Waves.Length - 1; i >= 0; i--)
+		if (Waves[i] == W || Waves[i] == None)
+			Waves.Remove(i, 1);
+}
+
+// Before each frame: every wave placed for the frame's camera, and its picture taken while none of them is in it
+simulated function DoWaves(Canvas C)
+{
+	local Actor CamActor;
+	local vector CamLocation;
+	local rotator CamRotation;
+	local int i, Views;
+
+	if (Waves.Length == 0 || PC == None)
+		return;
+	PC.PlayerCalcView(CamActor, CamLocation, CamRotation);
+	if (CamActor == None)
+		CamActor = PC;
+	for (i = 0; i < Waves.Length; i++)
+	{
+		if (Waves[i] == None || Waves[i].bDeleteMe)
+			continue;
+		Waves[i].bHidden = true;
+		Waves[i].bNeedsView = false;
+		Waves[i].bShown = Waves[i].FrameSetup(C, CamActor, CamLocation, CamRotation, PC.FovAngle);
+		if (Waves[i].bShown && Waves[i].bNeedsView)
+		{
+			// (a ScriptedTexture is drawn when something is drawn with it: one pixel that changes nothing)
+			C.SetPos(0, 0);
+			C.DrawTile(Waves[i].Unseen, 1, 1, 0, 0, 1, 1);
+			Views++;
+		}
+	}
+	// (drawn now, while the waves are out of the picture)
+	if (Views > 0)
+		C.DrawActor(None, false, false);
+	for (i = 0; i < Waves.Length; i++)
+		if (Waves[i] != None && !Waves[i].bDeleteMe)
+		{
+			Waves[i].bHidden = !Waves[i].bShown;
+			Waves[i].ViewActor = None;
+		}
 }
 
 // These overlays, in this order, last of the player's camera effects; any other of ours taken off
@@ -554,6 +629,8 @@ simulated event RenderTexture(ScriptedTexture Tex)
 
 defaultproperties
 {
+	bShockWaves=True
+	MaxWaves=3
      bBloom=True
      bHitBlur=True
      bVivid=True

@@ -2,8 +2,9 @@ class BullpupAttachment extends KFWeaponAttachment;
 
 defaultproperties
 {
-     mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
-     mTracerClass=Class'KFMod.KFNewTracer'
+     TracerEvery=3
+     mMuzFlashClass=Class'KFMod.KFFlashRifle'
+     mTracerClass=Class'KFMod.KFRoundAuto'
      mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
      TPAnims(0)="BullpupFire"
      WeaponIdleMovementAnim="BullpupIdle"
@@ -12,4 +13,5 @@ defaultproperties
      SplashEffect=Class'XGame.BulletSplash'
      CullDistance=5000.000000
      Mesh=SkeletalMesh'KFWeaponModels.L853P'
+     SmokeHeat=0.035000
 }

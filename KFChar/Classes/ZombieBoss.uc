@@ -138,6 +138,7 @@ simulated function CloakBoss()
 	Skins[4] = Shader'BossCloakShader';
 	Skins[5] = Shader'BossCloakShader';
 	Skins[6] = Texture'KillingFloorLabTextures.LabCommon.voidtex';
+	HideStumps(true);
 
 	// Invisible - no shadow
 	if(PlayerShadow != none)
@@ -159,6 +160,7 @@ simulated function UnCloakBoss()
 	if( Level.NetMode==NM_DedicatedServer )
 		Return;
 	Skins = Default.Skins;
+	HideStumps(false);
 
 	if (PlayerShadow != none)
 		PlayerShadow.bShadowActive = true;
@@ -1054,6 +1056,7 @@ State FireChaingun
 		local Actor A;
 
 		Start = GetBoneCoords('tip').Origin;
+		class'KFFarSound'.static.Loud(self, Location, FAR_Auto);
 
 		if ( !SavedFireProperties.bInitialized )
 		{
@@ -1179,6 +1182,7 @@ State FireMissile
 		if( Pawn(Controller.Target)!=None && FindSplashPoint(Pawn(Controller.Target), Start, Splash) )
 			R = rotator(Splash-Start);
 		PlaySound(Sound'KFWeaponSound.LAWFire', SLOT_Interact);
+		class'KFFarSound'.static.Loud(self, Location, FAR_Launch);
 		if( bFlameVolley )
 		{
 			bFlameVolley = false;
@@ -1855,6 +1859,7 @@ function Died(Controller Killer, class<DamageType> damageType, vector HitLocatio
 
 defaultproperties
 {
+	bClimbs=False
 	AttackDecisionInterval=0.400000
 	SneakWeight=1.000000
 	DriveByWeight=2.000000

@@ -8,7 +8,9 @@ function DoFireEffect()
     local Shotgun S;
     S = Shotgun(Weapon);
 
-    if (S != None && S.bExplosiveMode)
+    if (Upgraded())
+        ProjectileClass = class'KFMod.ShotgunBulletDragon';
+    else if (S != None && S.bExplosiveMode)
     {
         // Fire a single explosive shell instead of the normal pellet spread
         ProjectileClass = class'KFMod.ExplosiveShotgunShell';
@@ -23,6 +25,7 @@ function DoFireEffect()
 
 defaultproperties
 {
+     FlashFXClass=Class'KFMod.KFFlashShotgun'
      KickMomentum=(X=-85.000000,Z=15.000000)
      bRandomPitchFireSound=False
      ProjPerFire=12
@@ -35,7 +38,7 @@ defaultproperties
      AmmoClass=Class'KFMod.ShotgunAmmo'
      ProjectileClass=Class'KFMod.ShotgunBullet'
      BotRefireRate=0.700000
-     FlashEmitterClass=Class'KFMod.ShotgunMuzzFlash'
+     FlashEmitterClass=None
      aimerror=1.000000
      Spread=1250.000000
 }

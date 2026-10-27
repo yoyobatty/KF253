@@ -140,13 +140,16 @@ function bool TraderSpot( ShopVolume S, vector From, out vector Spot )
 {
 	local vector HitLocation, HitNormal, Dir, To;
 	local Actor T;
+	local float Radius;
 
+	// (a shop with no trader in it: on toward the shop itself)
 	T = S.MyTrader;
 	if ( T == None )
-		return false;
+		T = S;
+	else Radius = T.CollisionRadius;
 	Dir = T.Location - From;
 	Dir.Z = 0;
-	if ( VSize(Dir) < T.CollisionRadius + 60 )
+	if ( VSize(Dir) < Radius + 60 )
 		return false;
 	Dir = Normal(Dir);
 	// (as far as a body could walk towards him: counters are often held by blocking volumes, which a line passes)
@@ -154,7 +157,7 @@ function bool TraderSpot( ShopVolume S, vector From, out vector Spot )
 	To.Z = From.Z;
 	if ( Trace(HitLocation, HitNormal, To, From, false, vect(20,20,30)) != None )
 		Spot = HitLocation - 16 * Dir;
-	else Spot = To - (T.CollisionRadius + 40) * Dir;
+	else Spot = To - (Radius + 40) * Dir;
 	return true;
 }
 

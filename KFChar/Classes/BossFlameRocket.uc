@@ -22,8 +22,10 @@ simulated function Destroyed()
 
 simulated function Explode( vector HitLocation, vector HitNormal )
 {
-	PlaySound(sound'KFWeaponSound.FlameThrowerFire',, 2.0*TransientSoundVolume);
-	PlaySound(sound'ONSVehicleSounds-S.TankFire01',, 0.6*TransientSoundVolume);
+	class'KFBlastSound'.static.Play(self, sound'KFWeaponSound.FlameThrowerFire', 2.0*TransientSoundVolume);
+	class'KFBlastSound'.static.Play(self, sound'ONSVehicleSounds-S.TankFire01', 0.6*TransientSoundVolume);
+	if ( Role == ROLE_Authority )
+		class'KFFarSound'.static.Loud(self, HitLocation + HitNormal*24, FAR_Blast);
 	if ( EffectIsRelevant(Location, false) )
 	{
 		Spawn(class'KFIncendiaryExplosion',,, HitLocation + HitNormal*16, rotator(vect(0,0,1)));

@@ -105,7 +105,7 @@ simulated singular function HitWall(vector HitNormal, actor Wall)
 
 	if(Level.NetMode != NM_DedicatedServer)
     {
-        Spawn(class'KFHitEffect',Wall,,Location, rotator(HitNormal));
+        Spawn(class'KFHitEffectPellet',Wall,,Location, rotator(HitNormal));
         Spawn(class'InvisBullet',,, Location);
     }
 	HurtWall = None;

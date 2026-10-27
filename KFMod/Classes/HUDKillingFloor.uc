@@ -57,6 +57,10 @@ var transient float ScorePopupRiseOffset;
 var float ScorePopupDuration;
 var float ScorePopupRiseDistance;
 var float ScorePopupRiseTime;
+var transient int PopAmount[10];		// Zombies: each award of points its own "+10" flying off the score (DrawPointsPops)
+var transient float PopStart[10], PopSide[10];
+var transient int PopNext;
+var float PopLife;
 
 var() SpriteWidget ToolChargeMeter;
 
@@ -142,6 +146,17 @@ var KFPlayerReplicationInfo KFPRI;
 var KFGameReplicationInfo KFGRI;
 
 var float NextStatsUdpTime,EndGameHUDTime,VomitHudTimer,DamageHUDTimer;
+
+// blood on the screen (AddScreenBlood): where each splat is, as a share of the screen, how big, when it came and for
+// how long, how fast it runs down, which picture (0-15 KFX.BloodSplash's sixteen, 16-31 KFX.BloodySpray's), how solid
+struct ScreenBlot
+{
+	var float X, Y, Size, Born, Life, Run;
+	var int Sub;
+	var byte Alpha;
+};
+var array<ScreenBlot> Blots;
+var() int MaxBlots;
 var ColorModifier MyColorMod;
 
 // Player Info List(Used to draw Name, Health, Armor, and Veterancy over players)
@@ -688,10 +703,13 @@ simulated function DrawHud( Canvas C )
 	Super(HUD).DrawHud(C);
 
 	UpdateHud();
+	DrawUpgradeCard(C);
 
 	StartScreenFX();
 	PassStyle = STY_Modulated;
 	DrawModOverlay(C);
+	if ( Blots.Length > 0 )
+		DrawScreenBlood(C);
 
 	if (!KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
 	{
@@ -763,6 +781,37 @@ simulated function DrawZombiesBar(Canvas C, float X, float Y, float W, float H, 
 	C.DrawTile(Texture'Engine.WhiteSquareTexture', (W-4)*FClamp(Pct,0.0,1.0), H-4, 0, 0, 2, 2);
 }
 
+// An upgraded or re-packed weapon's name across the screen as it comes back from the machine (KFWeapon.ShowCard)
+simulated function DrawUpgradeCard( Canvas C )
+{
+	local KFWeapon W;
+	local float Left, A, XL, YL;
+	local Font OldFont;
+
+	if ( PawnOwner == None )
+		return;
+	W = KFWeapon(PawnOwner.Weapon);
+	if ( W == None || W.CardText == "" )
+		return;
+	Left = W.CardUntil - Level.TimeSeconds;
+	if ( Left <= 0.0 )
+		return;
+	// (it comes up quickly and fades in its last second)
+	A = FMin(1.0, Left) * FMin(1.0, (3.0 - Left) * 5.0);
+	OldFont = C.Font;
+	C.Font = GetFontSizeIndex(C, 1);
+	C.Style = ERenderStyle.STY_Alpha;
+	C.TextSize(Caps(W.CardText), XL, YL);
+	C.SetDrawColor(0, 0, 0, int(160.0 * A));
+	C.SetPos(C.ClipX * 0.5 - XL * 0.5 + 2, C.ClipY * 0.30 + 2);
+	C.DrawText(Caps(W.CardText), false);
+	C.DrawColor = W.CardColor;
+	C.DrawColor.A = int(255.0 * A);
+	C.SetPos(C.ClipX * 0.5 - XL * 0.5, C.ClipY * 0.30);
+	C.DrawText(Caps(W.CardText), false);
+	C.Font = OldFont;
+}
+
 simulated function DrawZombiesText(Canvas C, string S, float CentreX, float Y)
 {
 	local float XL, YL;
@@ -821,6 +870,30 @@ simulated function ShowCriticalPrompt( string S )
 	bMessageBeep = bOldBeep;
 }
 
+// The time left of the power-ups that are running, outside Zombies (Zombies draws them with the rest of its HUD)
+simulated function DrawPowerUpTimes(Canvas C, KFGameReplicationInfo G)
+{
+	local float XL, YL, Y;
+	local byte OldStyle;
+
+	if( G.InstaKillTime==0 && G.DoublePointsTime==0 )
+		Return;
+	OldStyle = C.Style;
+	C.Style = ERenderStyle.STY_Alpha;
+	C.Font = GetFontSizeIndex(C, -1);
+	C.TextSize("A", XL, YL);
+	C.SetDrawColor(255,255,255,255);
+	Y = C.ClipY*0.12;
+	if( G.InstaKillTime>0 )
+	{
+		DrawZombiesText(C, "ONE-HIT KILLS" @ G.InstaKillTime, C.ClipX*0.5, Y);
+		Y += YL;
+	}
+	if( G.DoublePointsTime>0 )
+		DrawZombiesText(C, "DOUBLE DOSH" @ G.DoublePointsTime, C.ClipX*0.5, Y);
+	C.Style = OldStyle;
+}
+
 simulated function DrawZombiesHUD(Canvas C)
 {
 	local KFGameReplicationInfo ZGRI;
@@ -835,8 +908,14 @@ simulated function DrawZombiesHUD(Canvas C)
 	local byte OldStyle;
 
 	ZGRI = KFGameReplicationInfo(PlayerOwner.GameReplicationInfo);
-	if( ZGRI==None || !ZGRI.bZombiesMode )
+	if( ZGRI==None )
 		Return;
+	// (Endless has the power-ups too: only their time left)
+	if( !ZGRI.bZombiesMode )
+	{
+		DrawPowerUpTimes(C, ZGRI);
+		Return;
+	}
 
 	OldStyle = C.Style;
 	C.Style = ERenderStyle.STY_Alpha;
@@ -871,7 +950,12 @@ simulated function DrawZombiesHUD(Canvas C)
 	if( KFWeapon(ZP.Weapon)!=None && KFWeapon(ZP.Weapon).bUpgraded )
 	{
 		C.SetDrawColor(255,215,0,255);
-		DrawZombiesText(C, "UPGRADED", C.ClipX*0.90, C.ClipY*0.80);
+		DrawZombiesText(C, ZP.Weapon.GetHumanReadableName(), C.ClipX*0.90, C.ClipY*0.80);
+		if( KFWeapon(ZP.Weapon).AmmoMod>0 )
+		{
+			C.DrawColor = class'KFAmmoMod'.static.ColourOf(KFWeapon(ZP.Weapon).AmmoMod);
+			DrawZombiesText(C, class'KFAmmoMod'.static.NameOf(KFWeapon(ZP.Weapon).AmmoMod), C.ClipX*0.90, C.ClipY*0.835);
+		}
 	}
 
 	if( ZP.UsePrompt!="" && !ZP.bIsDowned )
@@ -1064,6 +1148,7 @@ simulated function UpdateHud()
 
 	if (DigitsNumLeftInClip.Value < 0)
 		DigitsNumLeftInClip.Value = 0;
+	TintClipDigits();
 
 	if(PlayerGrenade==none || LastGrenadePawn != PawnOwner)
 	{
@@ -1111,6 +1196,11 @@ simulated function UpdateHud()
 	{
 		LastDisplayedScore = PawnOwnerPRI.Score;
 		bScoreInited = true;
+	}
+	else if ( PawnOwnerPRI.Score > LastDisplayedScore && KFHumanPawnZombies(PawnOwner) != None )
+	{
+		AddPointsPop(int(PawnOwnerPRI.Score - LastDisplayedScore));
+		LastDisplayedScore = PawnOwnerPRI.Score;
 	}
 	else if ( PawnOwnerPRI.Score > LastDisplayedScore )
 	{
@@ -1229,6 +1319,7 @@ simulated function DrawHudPassA (Canvas C)
 	 DrawSpriteWidget(C, CashIcon);
 	 DrawNumericWidget(C, DigitsCash, DigitsBig);
 	 DrawScorePopup(C);
+	 DrawPointsPops(C);
         }
 
 	//10x easier and faster than using spritewidgets, also allows for more weight than the stock capped 20 - by YoYoBatty
@@ -1413,6 +1504,87 @@ simulated event PostRender( canvas Canvas )
 	Canvas.ColorModulate=OldModulate;
 	Canvas.DrawColor = OldColor;
 	OnPostRender(Self, Canvas);
+}
+
+// An upgraded gun's rounds in its element's colour, leaning red with a slow pulse when a quarter of the magazine or less
+// is left
+simulated function TintClipDigits()
+{
+	local KFWeapon W;
+	local color C, E;
+	local float K;
+
+	C = class'Canvas'.static.MakeColor(255, 255, 255);
+	if ( PawnOwner != None )
+		W = KFWeapon(PawnOwner.Weapon);
+	if ( W != None )
+	{
+		if ( W.bUpgraded && class'KFElement'.static.Has(W.Element) )
+		{
+			E = class'KFElement'.static.Glow(W.Element);
+			C.R = 255 - int(0.85 * (255 - E.R));
+			C.G = 255 - int(0.85 * (255 - E.G));
+			C.B = 255 - int(0.85 * (255 - E.B));
+		}
+		if ( W.ClipCount > 3 && !W.bHoldToReload && W.ClipLeft * 4 <= W.ClipCount )
+		{
+			K = 0.55 + 0.25 * Sin(Level.TimeSeconds * 6.0);
+			C.R = C.R + int(K * (255 - C.R));
+			C.G = int(C.G * (1.0 - K) + 50 * K);
+			C.B = int(C.B * (1.0 - K) + 40 * K);
+		}
+	}
+	DigitsNumLeftInClip.Tints[0].R = C.R;
+	DigitsNumLeftInClip.Tints[0].G = C.G;
+	DigitsNumLeftInClip.Tints[0].B = C.B;
+	DigitsNumLeftInClip.Tints[1].R = C.R;
+	DigitsNumLeftInClip.Tints[1].G = C.G;
+	DigitsNumLeftInClip.Tints[1].B = C.B;
+}
+
+simulated function AddPointsPop( int Amount )
+{
+	PopAmount[PopNext] = Amount;
+	PopStart[PopNext] = Level.TimeSeconds;
+	PopSide[PopNext] = FRand();
+	PopNext = (PopNext + 1) % ArrayCount(PopAmount);
+}
+
+// Zombies: each award of points flies off the score on its own, up and out to the right, fading (a kill's bigger award
+// in a bigger hand)
+simulated function DrawPointsPops( Canvas C )
+{
+	local int i;
+	local float T, A, XL, YL, S, X, Y;
+	local string Txt;
+
+	S = DigitsCash.TextureScale*HudCanvasScale*ResScaleX*HudScale;
+	for ( i = 0; i < ArrayCount(PopAmount); i++ )
+	{
+		if ( PopAmount[i] <= 0 )
+			continue;
+		T = (Level.TimeSeconds - PopStart[i]) / PopLife;
+		if ( T >= 1.0 || T < 0.0 )
+		{
+			PopAmount[i] = 0;
+			continue;
+		}
+		A = FMin(1.0, (1.0 - T) / 0.45);
+		Txt = "+" $ PopAmount[i];
+		if ( PopAmount[i] >= 50 )
+			C.Font = GetFontSizeIndex(C, -1);
+		else
+			C.Font = GetFontSizeIndex(C, -2);
+		C.TextSize(Txt, XL, YL);
+		X = DigitsCash.OffsetX*S + (110.0 + 160.0 * T + 40.0 * PopSide[i]) * S;
+		Y = C.ClipY - (70.0 + 30.0 * PopSide[i] + 70.0 * T) * S;
+		C.SetDrawColor(0, 0, 0, int(150 * A));
+		C.SetPos(X - XL*0.5 + 1, Y + 1);
+		C.DrawText(Txt, false);
+		C.SetDrawColor(255, 215, 0, int(255 * A));
+		C.SetPos(X - XL*0.5, Y);
+		C.DrawText(Txt, false);
+	}
 }
 
 simulated function DrawScorePopup(Canvas C)
@@ -2060,6 +2232,63 @@ simulated function DisplayHit(vector HitDir, int Damage, class<DamageType> damag
 	DamageHUDTimer = Level.TimeSeconds+DamageStartTime;
 }
 
+// Blood on the screen from a body blown apart close in front (KFBloodBlast), as much as Amount (1 is a clot's at arm's
+// length): splats that run slowly down and fade
+simulated function AddScreenBlood( float Amount )
+{
+	local int i, n;
+	local ScreenBlot B;
+
+	n = Clamp(int(3.0 + Amount * 8.0 + FRand()), 3, 10);
+	for ( i = 0; i < n && Blots.Length < MaxBlots; i++ )
+	{
+		B.X = 0.05 + 0.9 * FRand();
+		B.Y = 0.08 + 0.8 * FRand();
+		B.Size = (0.10 + 0.22 * FRand()) * FClamp(Amount + 0.3, 0.7, 1.6);
+		B.Born = Level.TimeSeconds;
+		B.Life = 1.8 + 1.8 * FRand();
+		B.Run = 0.015 + 0.045 * FRand();
+		// (sixteen drops, or now and then one of sixteen sprays, bigger)
+		B.Sub = Rand(16);
+		if ( FRand() < 0.4 )
+		{
+			B.Sub += 16;
+			B.Size *= 1.4;
+		}
+		B.Alpha = 150 + Rand(90);
+		Blots[Blots.Length] = B;
+	}
+}
+
+simulated function DrawScreenBlood( Canvas C )
+{
+	local int i;
+	local float Age, A, W, Y;
+
+	C.Style = ERenderStyle.STY_Alpha;
+	for ( i = Blots.Length - 1; i >= 0; i-- )
+	{
+		Age = Level.TimeSeconds - Blots[i].Born;
+		if ( Age > Blots[i].Life || Age < 0.0 )
+		{
+			Blots.Remove(i, 1);
+			continue;
+		}
+		// (full for the first two thirds of its time, then gone)
+		A = Blots[i].Alpha * FMin(1.0, 3.0 * (1.0 - Age / Blots[i].Life));
+		W = Blots[i].Size * C.SizeX;
+		Y = (Blots[i].Y + Blots[i].Run * Age) * C.SizeY;
+		C.SetDrawColor(255, 255, 255, byte(A));
+		C.SetPos(Blots[i].X * C.SizeX - 0.5 * W, Y - 0.5 * W);
+		if ( Blots[i].Sub >= 16 )
+			C.DrawTile(Texture'KFX.BloodySpray', W, W, (Blots[i].Sub & 3) * 128, ((Blots[i].Sub - 16) >> 2) * 128, 128, 128);
+		else
+			C.DrawTile(Texture'KFX.BloodSplash', W, W, (Blots[i].Sub & 3) * 64, (Blots[i].Sub >> 2) * 64, 64, 64);
+	}
+	C.Style = ERenderStyle.STY_Normal;
+	C.SetDrawColor(255, 255, 255, 255);
+}
+
 simulated function DrawDamageIndicators(Canvas C)
 {
 	local class<DamTypeZombieAttack> ZHUDDam;
@@ -2370,7 +2599,9 @@ simulated function DrawEndGameHUD( Canvas C, bool bVictory )
 
 defaultproperties
 {
+     MaxBlots=14
      ScorePopupDuration=2.5
+     PopLife=0.900000
      ScorePopupRiseDistance=45.000000
      ScorePopupRiseTime=0.800000
      KFHUDAlpha=200

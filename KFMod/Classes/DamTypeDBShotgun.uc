@@ -15,4 +15,5 @@ defaultproperties
      KDeathVel=600.000000
      KDeathUpKick=300.000000
      VehicleDamageScaling=0.700000
+     bKUseOwnDeathVel=True
 }

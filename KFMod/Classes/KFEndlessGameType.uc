@@ -81,6 +81,23 @@ var() int DamageClimbWaves;        // damage climbs for this many waves, then ho
 var bool bForceNextType;           // the next wave is of ForcedNextType (cheats Holdout, NextWave)
 var EEndlessWaveType ForcedNextType;
 
+// Power-ups, as in Zombies: now and then a kill by a player or bot leaves one floating where the specimen fell, for anyone
+// to walk into, and it works for the whole team (Max Ammo, Insta-Kill, Double Dosh, Nuke; Zombies adds Carpenter)
+var() bool bPowerUps;
+var() float PowerUpDropChance;     // share of kills that leave one
+var() int MaxPowerUpsPerRound;     // left by kills in one wave at most (the loot specimen's comes on top)
+var() float PowerUpDuration;       // seconds Insta-Kill and Double Dosh last
+var() array<class<KFZombiesPowerUp> > PowerUpClasses;
+var int PowerUpsThisRound;
+var float InstaKillEndTime, DoublePointsEndTime;
+var bool bNuking;
+// The loot specimen: in some waves one specimen glows (KFLootGlow) and always drops a power-up where it dies
+var() float LootWaveChance;        // share of waves with one (never the Patriarch's)
+var() float LootFromShare, LootToShare;   // it is picked once this share of the wave has come (of 80 at most)
+var() string LootMessage;
+var int LootAt;                    // specimens of the wave come before it is picked (0: none to pick)
+var KFMonster LootZed;
+
 event InitGame( string Options, out string Error )
 {
     Super.InitGame(Options, Error);
@@ -472,7 +489,7 @@ function HandleWaveMonsterPoolExhausted()
     if (NumMonsters <= 5)
     {
         for (C = Level.ControllerList; C != None; C = C.NextController)
-            if (MonsterController(C) != None && !C.Pawn.PlayerCanSeeMe())
+            if (MonsterController(C) != None && C.Pawn != LootZed && !C.Pawn.PlayerCanSeeMe())
             {
                 C.Pawn.KilledBy(C.Pawn);
                 break;
@@ -504,6 +521,12 @@ State MatchInProgress
         local KFTraderDoor TDoor;
 
         Global.Timer();
+
+        if (bPowerUps)
+        {
+            UpdatePowerUpTimers();
+            LootCheck();
+        }
 
         if (!bFinalStartup)
         {
@@ -679,6 +702,7 @@ State MatchInProgress
                 KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = true;
 
                 SetupWave();
+                PlanLoot();
 
                 // Re-enable pawn collision
                 for (C = Level.ControllerList; C != None; C = C.NextController)
@@ -1344,6 +1368,13 @@ function bool RecycleMonster(KFMonster M)
     RecycledSquad[RecycledSquad.Length] = M.Class;
     TotalMaxMonsters++;
     LastZVol = None;
+    if (M == LootZed)
+    {
+        // another one gets its power-up (it would be dropped where this one was stuck)
+        M.bLootCarrier = false;
+        LootZed = None;
+        LootAt = 1;
+    }
     M.KilledBy(M);
     return true;
 }
@@ -1400,8 +1431,174 @@ function BoostHoldoutZeds()
     }
 }
 
+// ---- Power-ups -------------------------------------------------------------------------------------------------------
+
+function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<DamageType> damageType)
+{
+    local KFMonster M;
+
+    M = KFMonster(KilledPawn);
+    Super.Killed(Killer, Killed, KilledPawn, damageType);
+    if (!bPowerUps || M == None)
+        return;
+    if (M == LootZed)
+    {
+        LootZed = None;
+        DropPowerUp(M.Location);
+    }
+    else if (!bNuking && Killer != None && Killer.bIsPlayer)
+        TryDropPowerUp(M.Location);
+}
+
+// Insta-Kill: every hit on a specimen by a player or bot kills it (not the Patriarch)
+function int ReduceDamage(int Damage, pawn injured, pawn instigatedBy, vector HitLocation, out vector Momentum, class<DamageType> DamageType)
+{
+    Damage = Super.ReduceDamage(Damage, injured, instigatedBy, HitLocation, Momentum, DamageType);
+    if (Damage > 0 && Level.TimeSeconds < InstaKillEndTime && KFMonster(injured) != None && !KFMonster(injured).bBoss
+        && KFHumanPawn(instigatedBy) != None)
+        Damage = Max(Damage, injured.Health);
+    return Damage;
+}
+
+// Double Dosh
+function float KillCashScale()
+{
+    if (Level.TimeSeconds < DoublePointsEndTime)
+        return 2.0;
+    return 1.0;
+}
+
+function TryDropPowerUp(vector DropLocation)
+{
+    if (PowerUpClasses.Length == 0 || PowerUpsThisRound >= MaxPowerUpsPerRound || FRand() > PowerUpDropChance)
+        return;
+    if (DropPowerUp(DropLocation))
+        PowerUpsThisRound++;
+}
+
+function bool DropPowerUp(vector DropLocation)
+{
+    if (PowerUpClasses.Length == 0)
+        return false;
+    return Spawn(PowerUpClasses[Rand(PowerUpClasses.Length)],,, DropLocation) != None;
+}
+
+function PowerUpMessage(string S)
+{
+    local Controller C;
+
+    if (S == "")
+        return;
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+        if (PlayerController(C) != None)
+            PlayerController(C).ClientMessage(S, 'CriticalEvent');
+}
+
+function UpdatePowerUpTimers()
+{
+    local KFGameReplicationInfo KFGRI;
+
+    KFGRI = KFGameReplicationInfo(GameReplicationInfo);
+    if (KFGRI == None)
+        return;
+    KFGRI.InstaKillTime = Clamp(int(InstaKillEndTime - Level.TimeSeconds + 0.5), 0, 255);
+    KFGRI.DoublePointsTime = Clamp(int(DoublePointsEndTime - Level.TimeSeconds + 0.5), 0, 255);
+}
+
+function StartInstaKill()
+{
+    InstaKillEndTime = Level.TimeSeconds + PowerUpDuration;
+    UpdatePowerUpTimers();
+}
+
+function StartDoublePoints()
+{
+    DoublePointsEndTime = Level.TimeSeconds + PowerUpDuration;
+    UpdatePowerUpTimers();
+}
+
+// Every player's and bot's guns full, grenades and the syringe's charge too
+function GiveMaxAmmo()
+{
+    local Controller C;
+    local Inventory Inv;
+
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+    {
+        if (!C.bIsPlayer || KFHumanPawn(C.Pawn) == None || C.Pawn.Health <= 0)
+            continue;
+        for (Inv = C.Pawn.Inventory; Inv != None; Inv = Inv.Inventory)
+            if (KFWeapon(Inv) != None && KFMeleeGun(Inv) == None)
+                KFWeapon(Inv).MaxOutAmmo();
+    }
+}
+
+// Every specimen alive dies (not the Patriarch); those still to come in the wave come
+function Nuke()
+{
+    local Controller C, Next;
+
+    bNuking = true;
+    for (C = Level.ControllerList; C != None; C = Next)
+    {
+        Next = C.NextController;
+        if (MonsterController(C) != None && KFMonster(C.Pawn) != None && C.Pawn.Health > 0 && !KFMonster(C.Pawn).bBoss)
+            C.Pawn.KilledBy(C.Pawn);
+    }
+    bNuking = false;
+}
+
+// At a wave's start: whether it has a loot specimen, and after how many of the wave's specimens it is picked
+function PlanLoot()
+{
+    PowerUpsThisRound = 0;
+    LootZed = None;
+    LootAt = 0;
+    if (bPowerUps && !bWaveBossInProgress && CurrentWaveType != EWT_Boss && FRand() < LootWaveChance)
+        LootAt = Max(2, int((LootFromShare + FRand() * (LootToShare - LootFromShare)) * float(Min(TotalMaxMonsters, 80))));
+}
+
+// Once that many have come: one of those alive that no player sees (it would light up before their eyes), at random
+function LootCheck()
+{
+    local Controller C;
+    local KFMonster M, Pick;
+    local int n;
+
+    if (LootAt <= 0 || LootZed != None || !bEndlessWaveActive || bWaveBossInProgress || ZombiesKilled + NumMonsters < LootAt)
+        return;
+    for (C = Level.ControllerList; C != None; C = C.NextController)
+    {
+        M = KFMonster(C.Pawn);
+        if (MonsterController(C) == None || M == None || M.Health <= 0 || M.bBoss || M.PlayerCanSeeMe())
+            continue;
+        n++;
+        if (Rand(n) == 0)
+            Pick = M;
+    }
+    if (Pick == None)
+        return;
+    LootAt = 0;
+    LootZed = Pick;
+    Pick.bLootCarrier = true;
+    Pick.NetUpdateTime = Level.TimeSeconds - 1;
+    PowerUpMessage(LootMessage);
+}
+
 defaultproperties
 {
+    bPowerUps=True
+    PowerUpDropChance=0.025000
+    MaxPowerUpsPerRound=3
+    PowerUpDuration=30.000000
+    PowerUpClasses(0)=Class'KFMod.KFPowerUpMaxAmmo'
+    PowerUpClasses(1)=Class'KFMod.KFPowerUpInstaKill'
+    PowerUpClasses(2)=Class'KFMod.KFPowerUpDoublePoints'
+    PowerUpClasses(3)=Class'KFMod.KFPowerUpNuke'
+    LootWaveChance=0.500000
+    LootFromShare=0.200000
+    LootToShare=0.700000
+    LootMessage="Something out there is glowing... it carries a power-up!"
     WaveHealthClimb=0.015000
     WaveDamageClimb=0.030000
     DamageClimbWaves=10

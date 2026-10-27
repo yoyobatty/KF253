@@ -62,10 +62,11 @@ simulated function vector GetTracerStart()
 
     p = Pawn(Owner);
 
+    // (the muzzle of whichever of the pair fired, as the shooter sees it)
+    if ( (p != None) && p.IsFirstPerson() && KFWeapon(p.Weapon) != None )
+        return KFWeapon(p.Weapon).ShotMuzzle();
     if ( (p != None) && p.IsFirstPerson() && p.Weapon != None )
-    {
         return p.Weapon.GetEffectStart();
-    }
 
     // 3rd person
     if ( mMuzFlash3rd != None && bMyFlashTurn)
@@ -168,12 +169,13 @@ defaultproperties
 {
      bMyFlashTurn=True
      BrotherMesh=SkeletalMesh'KFWeaponModels.9mm3P'
-     mMuzFlashClass=Class'KFMod.KFNormal3PMuzzFlash'
-     mTracerClass=Class'KFMod.KFNewTracer'
+     mMuzFlashClass=Class'KFMod.KFFlashPistol'
+     mTracerClass=Class'KFMod.KFRoundPistol'
      mShellCaseEmitterClass=Class'KFMod.KFShellSpewer'
      TPAnims(0)="DualiesAttackRight"
      TPAnims(1)="DualiesAttackLeft"
      WeaponIdleMovementAnim="IdleDualies"
      SecondaryWeaponIdleMovementAnim="DoubleTacLightHold"
      Mesh=SkeletalMesh'KFWeaponModels.Single3P'
+     SmokeHeat=0.060000
 }

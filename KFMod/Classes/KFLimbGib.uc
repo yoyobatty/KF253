@@ -34,7 +34,7 @@ simulated function bool TakeLimb( KFMonster M, name Joint, name Tip, name Below,
 		if ( i < ArrayCount(M.CharSkins) && M.CharSkins[i] != None && M.Skins[i] == M.CharSkins[i] )
 			Piece.Skins[i] = M.CharSkins[i].Material2;
 		else
-			Piece.Skins[i] = M.Skins[i];
+			Piece.Skins[i] = M.LimbSkin(i);
 	}
 	CharPiece(M);
 

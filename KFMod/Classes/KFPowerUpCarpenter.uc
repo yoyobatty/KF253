@@ -1,8 +1,9 @@
 class KFPowerUpCarpenter extends KFZombiesPowerUp;
 
-function Activate( KFHumanPawn P, KFZombiesGameType G )
+function Activate( KFHumanPawn P, KFEndlessGameType G )
 {
-	G.Carpenter();
+	if( KFZombiesGameType(G) != None )
+		KFZombiesGameType(G).Carpenter();
 }
 
 defaultproperties

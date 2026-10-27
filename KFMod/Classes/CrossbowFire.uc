@@ -10,8 +10,24 @@ function float MaxRange()
     return 10000;
 }
 
+// An upgraded crossbow's bolts stick and blow up (the flamethrower's fire is this class's too)
+function DoFireEffect()
+{
+	if ( Crossbow(Weapon) != None )
+	{
+		if ( Upgraded() )
+			ProjectileClass = class'CrossbowArrowStinger';
+		else
+			ProjectileClass = default.ProjectileClass;
+	}
+	Super.DoFireEffect();
+}
+
 defaultproperties
 {
+	MechSound=Sound'KFWeaponSound.XbowString'
+	MechVolume=0.250000
+	MechPitch=1.300000
      bRandomPitchFireSound=False
      ProjPerFire=1
      ProjSpawnOffset=(Y=0.000000,Z=0.000000)

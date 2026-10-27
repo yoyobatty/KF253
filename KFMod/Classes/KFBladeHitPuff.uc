@@ -6,6 +6,7 @@ class KFBladeHitPuff extends KFBloodPuff;
 
 defaultproperties
 {
+	FXSize=0.000000
      mMaxParticles=3
      mLifeRange(0)=0.350000
      mLifeRange(1)=0.500000

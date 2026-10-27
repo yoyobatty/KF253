@@ -43,6 +43,10 @@ function StartSuperBerserk()
 
 defaultproperties
 {
+	MechSound=Sound'KFWeaponSound.Berettaslideforward'
+	MechVolume=0.280000
+	MechPitch=1.400000
+     FlashFXClass=Class'KFMod.KFFlashPistol'
      DamageType=Class'KFMod.DamTypeDualies'
      DamageMin=30
      DamageMax=40
@@ -64,7 +68,7 @@ defaultproperties
      ShakeOffsetRate=(X=1000.000000,Y=1000.000000,Z=1000.000000)
      ShakeOffsetTime=2.000000
      BotRefireRate=0.750000
-     FlashEmitterClass=Class'KFMod.KFMuzzleFlash1PGeneric'
+     FlashEmitterClass=None
      aimerror=25.000000
      Spread=0.007500
      SpreadStyle=SS_Random

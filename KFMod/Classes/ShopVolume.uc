@@ -27,13 +27,14 @@ function Touch( Actor Other )
 {
 	if( Pawn(Other)!=None && PlayerController(Pawn(Other).Controller)!=None && KFGameType(Level.Game)!=None && !KFGameType(Level.Game).bWaveInProgress )
 	{
-		MyTrader.SetOpen(true);
+		if ( MyTrader != None )
+			MyTrader.SetOpen(true);
 		PlayerController(Pawn(Other).Controller).ReceiveLocalizedMessage(Class'KFMainMessages',3);
 	}
 }
 function UnTouch( Actor Other )
 {
-	if( Pawn(Other)!=None && PlayerController(Pawn(Other).Controller)!=None && KFGameType(Level.Game)!=None )
+	if( Pawn(Other)!=None && PlayerController(Pawn(Other).Controller)!=None && KFGameType(Level.Game)!=None && MyTrader!=None )
 		MyTrader.SetOpen(false);
 }
 function UsedBy( Pawn user )
@@ -43,7 +44,7 @@ function UsedBy( Pawn user )
 }
 
 // A path node inside the shop, the one nearest the trader; with none inside, the nearest outside that has a clear line
-// to him. Looked for once.
+// to him; with none of those either, the nearest spot players are put out at. Looked for once.
 function NavigationPoint EntryPoint()
 {
 	local NavigationPoint N, BestIn, BestOut;
@@ -79,7 +80,23 @@ function NavigationPoint EntryPoint()
 	if ( BestIn != None )
 		EntrySpot = BestIn;
 	else EntrySpot = BestOut;
+	// a shop with no path node in it or in sight of it, and no trader (KF-WickedCity's): the nearest of the spots players
+	// are put out of it at, just outside
+	if ( EntrySpot == None )
+		EntrySpot = ExitSpot(T.Location);
 	return EntrySpot;
+}
+
+// The spot players are put out of this shop at (its teleporters, tagged with its URL) nearest Spot
+function NavigationPoint ExitSpot( vector Spot )
+{
+	local NavigationPoint N, Best;
+
+	for ( N=Level.NavigationPointList; N!=None; N=N.nextNavigationPoint )
+		if ( Teleporter(N) != None && string(N.Tag) ~= URL && !N.bBlocked
+			&& (Best == None || VSize(N.Location - Spot) < VSize(Best.Location - Spot)) )
+			Best = N;
+	return Best;
 }
 
 function InitTeleports()

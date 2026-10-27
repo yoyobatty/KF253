@@ -40,6 +40,14 @@ function bool RecommendRangedAttack()
 
 defaultproperties
 {
+	MeshMats(0)=Texture'KillingFloorWeapons.Deagle.HandSkinNew'
+	MeshMats(1)=Texture'KillingFloorWeapons.Deagle.ArmSkinNew'
+	BrassClass=Class'KFMod.KFBrass'
+	BrassBone=CasingBone
+	BrassSize=1.500000
+	BrassDelay=0.420000
+     Element=5
+	FarKind(0)=FAR_Rifle
      ClipCount=10
      ReloadRate=0.900000
      ReloadAnim="Reload"
@@ -80,4 +88,13 @@ defaultproperties
      Mesh=SkeletalMesh'KFWeaponModels.Winchester'
      DrawScale=0.900000
      TransientSoundVolume=50.000000
+     UpgradeName="Deadeye"
+     UpgradeMagScale=2.000000
+     UpgradePenetrations=95
+     UpgradePenDamageScale=0.850000
+     bUpgradeHeadShock=True
+     SheenSlots(0)=2
+     SheenMats(0)=Shader'KillingFloorWeapons.Winchester.LawShineShader'
+     SheenSlots(1)=3
+     SheenMats(1)=Shader'KillingFloorWeapons.Winchester.LawShineShader'
 }

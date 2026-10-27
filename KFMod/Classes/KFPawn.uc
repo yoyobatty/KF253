@@ -2221,6 +2221,7 @@ function bool PurchaseAmmo( Class<Ammunition> AClass, bool bOnlyClip )
     {
         AM.MaxAmmo = int(float(AM.MaxAmmo) * KFPlayerReplicationInfo(PlayerReplicationInfo).ClientVeteranSkill.static.AddExtraAmmoFor(AClass));
     }
+	AM.MaxAmmo = int(float(AM.MaxAmmo) * KW.UpgradeAmmo());
 	if( AM.AmmoAmount>=AM.MaxAmmo )
 		Return False;
 	if (KW.AmmoClass[1] == AClass && Class<KFWeaponPickup>(KW.PickupClass).Default.SecondaryAmmoCost > 0)
@@ -2331,7 +2332,7 @@ simulated exec function QuickHeal()
     local Inventory I;
     local byte C;
 
-    if ( bIsQuickHealing>0 || Health>=HealthMax )
+    if ( Health>=HealthMax )
         return;
     for( I=Inventory; (I!=None && C++<250); I=I.Inventory )
     {
@@ -2340,6 +2341,10 @@ simulated exec function QuickHeal()
             break;
     }
     if ( S == none )
+        return;
+    // one under way runs on; one whose syringe never came out (another weapon drawn while a reload held the gun) used to
+    // stay "under way", and every press after it did nothing
+    if ( bIsQuickHealing>0 && Weapon==S )
         return;
 
     if ( S.ChargeBar() < 0.95 )
@@ -2354,6 +2359,10 @@ simulated exec function QuickHeal()
     else if ( Weapon!=S )
     {
         PendingWeapon = S;
+        // a magazine going in is given up for it (it goes in only at the end, so only the time is lost); a double barrel's
+        // reload runs on and the syringe comes out after it (ClientFinishReloading)
+        if ( KFWeapon(Weapon) != None )
+            KFWeapon(Weapon).CancelReload();
         Weapon.PutDown();
     }
     else // Syringe already selected, just start healing.
@@ -2375,6 +2384,7 @@ function string GetPlayerName()
 
 defaultproperties
 {
+	SoundOcclusion=OCCLUSION_StaticMeshes
 	BileFrequency=0.500000
 	BurnEffect=Class'KFMod.KFMonsterFlame'
 	//StunnedTime=7.000000
