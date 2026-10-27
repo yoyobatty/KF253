@@ -45,6 +45,8 @@ function bool Holding( Pawn P, out int Have, out int Most, out int Clip )
 	Most = AM.default.MaxAmmo;
 	if( KFPawn(P)!=None )
 		Most = int(float(Most) * KFPawn(P).GetVeteran().Static.AddExtraAmmoFor(ammoType));
+	// (an upgraded gun holds more: as KFPawn.PurchaseAmmo counts it. The row showed 480/240 and would not fill.)
+	Most = int(float(Most) * KW.UpgradeAmmo());
 	Clip = KW.default.ClipCount;
 	PC = class<KFWeaponPickup>(KW.PickupClass);
 	if( KW.AmmoClass[1]==ammoType && PC!=None && PC.default.SecondaryAmmoCost>0 && PC.default.SecondaryClipCount>0 )

@@ -15,6 +15,11 @@ struct HitBox
 };
 var array<HitBox> Hits;	// the buttons as last drawn
 
+var GUIBuyable ClickedItem;					// the row the last click on a row (not its buttons) was on, when and where:
+var float ClickedAt, ClickedX, ClickedY;	// a second click on it soon and near is a double-click
+var() float DblClickTime;					// (in seconds)
+var() float DblClickSlop;					// (how far the mouse may have moved, a share of the screen's height)
+
 const ACT_BUY=10;
 
 
@@ -126,14 +131,63 @@ function int HitAt(float MX, float MY)
 	return -1;
 }
 
-// (the list's own click chooses the row first)
+// Whether this click, on a row, is the second of a double-click: on the same row within DblClickTime of the first, the
+// mouse within DblClickSlop of where it was. (The engine's own double-click wanted the very pixel of the first click,
+// and missed whenever the mouse moved at all.)
+function bool SecondClick()
+{
+	local int Row;
+	local float Slop;
+
+	if ( ClickedItem == None || !IsInClientBounds() || ItemsPerPage == 0 )
+		return false;
+	Row = CalculateIndex(true);
+	Slop = Controller.ResY * DblClickSlop;
+	return Row >= 0 && Row < Elements.Length && Elements[Row] == ClickedItem
+		&& PlayerOwner().Level.TimeSeconds - ClickedAt <= DblClickTime * PlayerOwner().Level.TimeDilation
+		&& Abs(Controller.MouseX - ClickedX) <= Slop && Abs(Controller.MouseY - ClickedY) <= Slop;
+}
+
+// A click on a row itself: true when it is the second of a double-click (and a third starts anew), else noted as a first
+function bool DoubleClicked()
+{
+	local int Row;
+
+	if ( SecondClick() )
+	{
+		ClickedItem = None;
+		return true;
+	}
+	ClickedItem = None;
+	if ( IsInClientBounds() && ItemsPerPage > 0 )
+	{
+		Row = CalculateIndex(true);
+		if ( Row >= 0 && Row < Elements.Length )
+			ClickedItem = Elements[Row];
+	}
+	ClickedAt = PlayerOwner().Level.TimeSeconds;
+	ClickedX = Controller.MouseX;
+	ClickedY = Controller.MouseY;
+	return false;
+}
+
+// (the list's own click chooses the row first; a row's name double-clicked is bought, as its BUY)
 function bool BuyClick(GUIComponent Sender)
 {
 	local int i;
 
 	InternalOnClick(Sender);
 	i = HitAt(Controller.MouseX, Controller.MouseY);
-	if ( i < 0 || GUIBuyMenu(PageOwner) == None || Hits[i].Item >= Elements.Length )
+	if ( GUIBuyMenu(PageOwner) == None )
+		return false;
+	if ( i < 0 )
+	{
+		if ( DoubleClicked() )
+			GUIBuyMenu(PageOwner).BuyCurrent();
+		return false;
+	}
+	ClickedItem = None;
+	if ( Hits[i].Item >= Elements.Length )
 		return false;
 	GUIBuyMenu(PageOwner).BuyGun(Elements[Hits[i].Item]);
 	return true;
@@ -222,6 +276,8 @@ function float BuyItemHeight(Canvas c)
 defaultproperties
 {
      RowShare=0.083000
+     DblClickTime=0.500000
+     DblClickSlop=0.008000
      Unbuyable=(R=255,G=70,B=60,A=255)
      GetItemHeight=GUIBuyItemsList.BuyItemHeight
      StyleName="ItemBoxInfo"
@@ -230,6 +286,5 @@ defaultproperties
      OnDrawItem=GUIBuyItemsList.DrawBuyItem
      OnPreDraw=GUIBuyItemsList.HitsPreDraw
      OnClick=GUIBuyItemsList.BuyClick
-     OnDblClick=GUIBuyItemsList.OnDblClick
      OnChange=GUIBuyItemsList.SelectNewItem
 }

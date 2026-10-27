@@ -1,9 +1,10 @@
 //=============================================================================
 // BFGBall
 // The BFG 9000's shot: a slow ball of green plasma. In flight it lashes the specimens near its path with green bolts
-// (ZapAround, ZapTarget[] drawn by each machine). Where it bursts it tears everything round it apart (Blast), and then,
-// as Doom's does, its tracers go out from the shooter in a fan the way they fired it and strike every specimen they
-// meet (Tracers, KFBFGSpray). Players and their bots are never hurt by it.
+// (ZapAround, ZapTarget[] drawn by each machine), and goes through the specimens in its way, tearing at each (Pierce),
+// until it bursts in the PierceCount-th (or on a wall, or at the end of its flight). Where it bursts it tears everything
+// round it apart (Blast), and then, as Doom's does, its tracers go out from the shooter in a fan the way they fired it
+// and strike every specimen they meet (Tracers, KFBFGSpray). Players and their bots are never hurt by it.
 //=============================================================================
 class BFGBall extends Projectile;
 
@@ -26,6 +27,10 @@ var() float	CarryReach;		// bodies this near are dragged after it...
 var() float	CarryPull, CarryLift;	// ...this hard toward it and up, each second (Karma's impulse)
 var() float	ShredReach;		// they are torn apart once this near it and held HoldMin, or held HoldMax wherever they are
 var() float	HoldMin, HoldMax;
+var() int		PierceCount;	// it bursts in the specimen that makes this many it has met...
+var() int		PierceDamage;	// ...and tears this much from each it goes through before
+var() float		PierceMomentum;
+var array<KFMonster> Pierced;	// (each machine) the specimens it has met
 
 replication
 {
@@ -169,13 +174,68 @@ simulated function Timer()
 
 simulated function ProcessTouch( Actor Other, vector HitLocation )
 {
+	local KFMonster M;
+
 	if ( Other == None || Other == Instigator || Other == Owner || Other.bDeleteMe || bBlown )
 		return;
 	if ( KFHumanPawn(Other) != None || Projectile(Other) != None )
 		return;
 	if ( Other.Base != None && KFHumanPawn(Other.Base) != None )
 		return;
+	M = KFMonster(Other);
+	if ( M == None && ExtendedZCollision(Other) != None )
+	{
+		M = KFMonster(Other.Owner);
+		if ( M == None )
+			M = KFMonster(Other.Base);
+	}
+	if ( M != None )
+	{
+		Pierce(M, HitLocation);
+		return;
+	}
 	Explode(HitLocation, Normal(HitLocation - Other.Location));
+}
+
+// A specimen in its way: it goes on through, tearing at it, and bursts in the PierceCount-th; a body it passes. (Each
+// machine sees the blood and the flash; only the server counts and bursts, and a client's ball bursts where the server
+// took it away: Destroyed.)
+simulated function Pierce( KFMonster M, vector HitLocation )
+{
+	local int i;
+
+	if ( M.Health <= 0 || M.bPlayedDeath || M.bDeleteMe )
+		return;
+	for ( i = 0; i < Pierced.Length; i++ )
+		if ( Pierced[i] == M )
+			return;
+	Pierced[Pierced.Length] = M;
+	if ( Level.NetMode != NM_DedicatedServer )
+		PierceFX(M, HitLocation);
+	if ( Role < ROLE_Authority )
+		return;
+	if ( Pierced.Length >= PierceCount )
+	{
+		Explode(HitLocation, -Normal(Velocity));
+		return;
+	}
+	M.TakeDamage(PierceDamage, Instigator, HitLocation, Normal(Velocity) * PierceMomentum, MyDamageType);
+}
+
+simulated function PierceFX( KFMonster M, vector HitLocation )
+{
+	local KFBloodFX B;
+
+	Spawn(class'KFBFGHitFX',,, HitLocation);
+	if ( M.bFrozen )
+		return;
+	B = Spawn(class'KFBloodFX',,, HitLocation, rotator(Velocity));
+	if ( B != None )
+	{
+		B.Dir = Normal(Velocity);
+		B.Size = 1.6;
+		B.bHeavy = true;
+	}
 }
 
 simulated function HitWall( vector HitNormal, Actor Wall )
@@ -330,6 +390,9 @@ defaultproperties
      ShredReach=140.000000
      HoldMin=0.400000
      HoldMax=0.800000
+     PierceCount=3
+     PierceDamage=600
+     PierceMomentum=40000.000000
      ZapEvery=0.150000
      ZapRange=600.000000
      ZapDamage=45

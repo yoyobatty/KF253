@@ -11,7 +11,9 @@ struct UpgradeLine
 {
 	var() class<KFWeapon>	Base;		// the gun owned
 	var() class<KFWeapon>	Variant;	// what it becomes; None: its own upgrade
-	var() string			Info;		// (its own upgrade) what it does; a variant's pickup says it
+	var() string			Info;		// (its own upgrade) what it does; a variant's pickup says it (the numbers: NumbersOf)
+	var() string			MagWord;	// (its own upgrade) what its magazine is called in the numbers; "": Magazine
+	var() string			AmmoWord;	// (its own upgrade) what its ammo is called; "": Ammo
 	var() int				Price;		// (its own upgrade) what it costs; 0: UpgradeBase and UpgradeShare of the gun's price
 };
 var() array<UpgradeLine> Lines;
@@ -72,22 +74,74 @@ static function string InfoOf( int i )
 	return default.Lines[i].Info;
 }
 
+// What a gun's own upgrade does to its magazine and its ammo, in numbers ("Magazine 15 to 30. Ammo 240 to 480."): for
+// the player's own gun W, with what their perk adds; for a gun they have not, as sold (with the perk's extra ammo).
+// Nothing for a variant, or where neither changes. (Worked out as KFWeapon.UpdateMagCapacity and MaxAmmo do.)
+static function string NumbersOf( int i, KFWeapon W, PlayerReplicationInfo PRI )
+{
+	local class<KFWeapon> C;
+	local class<Ammunition> A;
+	local class<KFVeterancyTypes> Vet;
+	local float F, Perk;
+	local int Now, After;
+	local string S, Word;
+
+	if ( i < 0 || i >= default.Lines.Length || default.Lines[i].Variant != None || default.Lines[i].Base == None )
+		return "";
+	C = default.Lines[i].Base;
+	if ( KFPlayerReplicationInfo(PRI) != None )
+		Vet = KFPlayerReplicationInfo(PRI).ClientVeteranSkill;
+	if ( C.default.ClipCount > 1 && C.default.UpgradeMagScale != 1.0 )
+	{
+		Perk = 1.0;
+		if ( Vet != None && W != None )
+			Perk = Vet.static.GetMagCapacityMod(W);
+		F = C.default.ClipCount * Perk;
+		Now = F;
+		F *= C.default.UpgradeMagScale;
+		After = F;
+		Word = default.Lines[i].MagWord;
+		if ( Word == "" )
+			Word = "Magazine";
+		S = Word @ Now @ "to" @ After $ ".";
+	}
+	if ( C.default.FireModeClass[0] != None )
+		A = C.default.FireModeClass[0].default.AmmoClass;
+	if ( A != None && A.default.MaxAmmo > 0 && C.default.UpgradeAmmoScale != 1.0 )
+	{
+		Perk = 1.0;
+		if ( Vet != None )
+			Perk = Vet.static.AddExtraAmmoFor(A);
+		F = A.default.MaxAmmo * Perk;
+		Now = F;
+		F *= C.default.UpgradeAmmoScale;
+		After = F;
+		Word = default.Lines[i].AmmoWord;
+		if ( Word == "" )
+			Word = "Ammo";
+		if ( S != "" )
+			S = S $ " ";
+		S = S $ Word @ Now @ "to" @ After $ ".";
+	}
+	return S;
+}
+
 defaultproperties
 {
 	UpgradeBase=1500
 	UpgradeShare=2.000000
-	Lines(0)=(Base=Class'KFMod.Single',Info="Three-round bursts, twice the magazine, a quicker trigger, and every round goes through one specimen into the next. Twice the ammo.")
-	Lines(1)=(Base=Class'KFMod.Dualies',Info="Incendiary rounds that set specimens alight, and half again the magazine. Twice the ammo.")
-	Lines(2)=(Base=Class'KFMod.MachinePistol',Info="Twice the magazine, and a shot that hits a wall ricochets into the nearest specimen. Twice the ammo.")
-	Lines(3)=(Base=Class'KFMod.DualMachinePistols',Info="Twice the magazines, a quicker trigger, and shots that hit a wall ricochet into the nearest specimen. Twice the ammo.")
-	Lines(4)=(Base=Class'KFMod.Deagle',Info="Goes through everything in its way and staggers what it hits. Half again the magazine and twice the ammo.")
-	Lines(5)=(Base=Class'KFMod.Winchester',Info="Goes through bodies, and a headshot stuns the specimens round the one hit. Twice the magazine and twice the ammo.")
-	Lines(6)=(Base=Class'KFMod.Shotgun',Info="Burning pellets that set specimens alight and leave fires on the floor. Twice the magazine and twice the ammo.")
-	Lines(7)=(Base=Class'KFMod.BoomStick',Info="Blasts that knock specimens back, and a faster reload. Twice the ammo.")
-	Lines(8)=(Base=Class'KFMod.Bullpup',Info="A quicker trigger, half again the magazine, and rounds that go through two specimens. Twice the ammo.")
-	Lines(9)=(Base=Class'KFMod.Crossbow',Info="A bolt that explodes a second after it lands. Twice the ammo.")
-	Lines(10)=(Base=Class'KFMod.LAW',Info="Rockets that leave a ring of burning napalm. Twice the ammo.")
-	Lines(11)=(Base=Class'KFMod.FlameThrower',Info="Blue flames that burn longer and creep across any floor, and lightning that jumps between the burning. Half again the tank and twice the fuel.")
+	Lines(0)=(Base=Class'KFMod.Single',Info="Three-round bursts, a quicker trigger, and every round goes through one specimen into the next.")
+	Lines(1)=(Base=Class'KFMod.Dualies',Info="Incendiary rounds that set specimens alight.")
+	Lines(2)=(Base=Class'KFMod.MachinePistol',Info="A shot that hits a wall ricochets into the nearest specimen.")
+	Lines(3)=(Base=Class'KFMod.DualMachinePistols',Info="A quicker trigger, and shots that hit a wall ricochet into the nearest specimen.")
+	Lines(4)=(Base=Class'KFMod.Deagle',Info="Goes through everything in its way and staggers what it hits.")
+	Lines(5)=(Base=Class'KFMod.Winchester',Info="Goes through bodies, and a headshot stuns the specimens round the one hit.")
+	Lines(6)=(Base=Class'KFMod.Shotgun',Info="Burning pellets that set specimens alight and leave fires on the floor.")
+	Lines(7)=(Base=Class'KFMod.BoomStick',Info="Blasts that knock specimens back, and a faster reload.")
+	Lines(8)=(Base=Class'KFMod.Bullpup',Info="A quicker trigger, and rounds that go through two specimens.")
+	Lines(9)=(Base=Class'KFMod.Crossbow',Info="A bolt that explodes a second after it lands.")
+	Lines(10)=(Base=Class'KFMod.LAW',Info="Rockets that leave a ring of burning napalm.")
+	Lines(11)=(Base=Class'KFMod.FlameThrower',Info="Blue flames that burn longer and creep across any floor, and lightning that jumps between the burning.",MagWord="Tank",AmmoWord="Fuel")
 	Lines(12)=(Base=Class'KFMod.Knife',Info="Heals you 10 for every kill.")
 	Lines(13)=(Base=Class'KFMod.Axe',Info="Full damage to everyone in a swing, and every swing throws a cut through the air: primary down, alt fire across.")
 	Lines(14)=(Base=Class'KFMod.LAW',Variant=Class'KFMod.BFG')

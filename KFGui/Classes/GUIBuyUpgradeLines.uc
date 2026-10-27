@@ -10,12 +10,13 @@ struct ShownLine
 {
 	var BuyableUpgrade U;
 	var bool bOpen;					// the player has the gun: it can be bought here
+	var string Nums;				// its numbers for this player's gun (KFTraderUpgrades.NumbersOf), under what it does
 	var float BX1, BY1, BX2, BY2;	// (its button, as last drawn)
 };
 var array<ShownLine> Lines;
 var string Heading;
 var() string FontName;
-var() color HeadColor, LineColor, InfoColor;
+var() color HeadColor, LineColor, InfoColor, NumColor;
 var() float LineSpace;				// a line's height, times the font's
 
 function Fill( GUIBuyMenu M, GUIBuyable b )
@@ -44,6 +45,7 @@ function Fill( GUIBuyMenu M, GUIBuyable b )
 		Lines.Length = n + 1;
 		Lines[n].U = U;
 		Lines[n].bOpen = W != None;
+		Lines[n].Nums = class'KFTraderUpgrades'.static.NumbersOf(U.Line, W, M.PlayerOwner().PlayerReplicationInfo);
 	}
 	if ( Lines.Length == 0 )
 		return;
@@ -206,7 +208,14 @@ function bool InternalOnDraw( Canvas C )
 	{
 		C.Style = 1;
 		C.DrawColor = InfoColor;
-		Wrapped(C, Lines[Shown].U.Description, ActualLeft() + ActualWidth() * 0.03, Y + YL * 0.4, ActualWidth() * 0.94);
+		Y += YL * 0.4;
+		Y += Wrapped(C, Lines[Shown].U.Description, ActualLeft() + ActualWidth() * 0.03, Y, ActualWidth() * 0.94);
+		// (the numbers on a line of their own, brighter, as Killing Floor 2 lists them apart)
+		if ( Lines[Shown].Nums != "" && Y + YL * 1.3 < ActualTop() + ActualHeight() )
+		{
+			C.DrawColor = NumColor;
+			Wrapped(C, Lines[Shown].Nums, ActualLeft() + ActualWidth() * 0.03, Y + YL * 0.3, ActualWidth() * 0.94);
+		}
 	}
 	return true;
 }
@@ -238,6 +247,7 @@ defaultproperties
 	HeadColor=(R=255,G=50,B=50,A=255)
 	LineColor=(R=150,G=150,B=150,A=255)
 	InfoColor=(R=190,G=190,B=190,A=255)
+	NumColor=(R=240,G=240,B=240,A=255)
 	LineSpace=1.350000
 	bAcceptsInput=True
 	bCaptureMouse=True

@@ -1,9 +1,10 @@
 class GUIBuyMenu extends UT2k4MainPage;
 
 // The trader, laid out as Killing Floor 2's is: what the player has down the left (GUITraderInvList: each gun with its
-// ammo, the armour, the grenades, and buttons on each row), what is for sale down the right (filtered by the tabs above
-// it, a BUY or UPGRADE button on each row), and the card of the row chosen on either side in the middle. The footer
-// keeps the cash, the weight, Refill all, a button for the row chosen (Buy, Upgrade or Sell) and Complete.
+// ammo, the armour, the grenades, and buttons on each row; Refill all above it), what is for sale down the right
+// (filtered by the tabs above it, a BUY or UPGRADE button on each row), and the card of the row chosen on either side in
+// the middle. A row's name double-clicked does what its button does (BuyCurrent). The footer keeps the cash, the weight
+// and Complete.
 
 const BUYLIST_CATS=7;
 const CAT_ALL=0;		// (the first tab: every gun for sale)
@@ -13,6 +14,7 @@ var automated GUIListBox CategoryBox;		// the shop's tabs: not shown, the tabs c
 var automated GUIBuyTabs SaleTabs;			// the shop's tabs, above its list
 var automated GUIBuyItemsBox ItemsBox;		// what is for sale
 var automated GUITraderInvBox InvBox;		// what the player has
+var automated GUITraderRefill RefillBtn;	// Refill all, above it
 var automated GUISectionBackground ItemBG,InfoBG,InvBG;
 var GUIList myCategories;
 var GUITraderInvList myInv;
@@ -288,23 +290,9 @@ function NewInfo(GUIBuyable b)
 		p_Info = None;
 	}
 	if(b != None)
-	{
 		p_Info = new b.GetPanelType(eSaleCat(myCategories.Index));
-		// (on the armour's and the kit's rows the footer's button mends and heals, as their own buttons)
-		if( bOwnChosen && BuyableVest(b)!=None )
-			GUIBuyMenuFooter(t_Footer).SetBuyMode("Fill armour",VestCost()>0 && playerscore>0,false,false);
-		else if( bOwnChosen && BuyableFirstAidKit(b)!=None )
-			GUIBuyMenuFooter(t_Footer).SetBuyMode("Heal",HealCost()>0 && playerscore>0,false,false);
-		else if( bOwnChosen )
-			GUIBuyMenuFooter(t_Footer).SetBuyMode("Sell",CanSell(b),FillShown(b),FillAllowed(b),FillCaption(b));
-		else
-			GUIBuyMenuFooter(t_Footer).SetBuyMode(b.GetBuyCaption(eSaleCat(Max(myCategories.Index,1))),CanAfford(b)&&b.CanButtonMe(PlayerOwner(),true),FillShown(b),FillAllowed(b),FillCaption(b));
-	}
 	else
-	{
 		p_Info = new class'GUIBuyInfoPanel';
-		GUIBuyMenuFooter(t_Footer).SetBuyMode("Buy",false,false,false);
-	}
 	p_Info.WinLeft=0;
 	p_Info.WinTop=0;
 	p_Info.WinWidth=1;
@@ -517,7 +505,7 @@ function BuyableAmmo AmmoFor(BuyableWeapon W)
 	}
 	return None;
 }
-// What the footer's fill button fills: the ammo of the row chosen on the player's own list
+// What a row of the player's own list fills: its ammo
 function BuyableAmmo FillTarget(GUIBuyable b)
 {
 	local int i;
@@ -532,41 +520,14 @@ function BuyableAmmo FillTarget(GUIBuyable b)
 	return None;
 }
 
-function bool FillShown(GUIBuyable b)
-{
-	local BuyableAmmo A;
-
-	A = FillTarget(b);
-	if( A==None )
-		return false;
-	// (only while that gun has room for more)
-	return A.FillCost(PlayerOwner().Pawn)>0;
-}
-// (with less cash than a fill costs, as much is bought as the cash pays for)
-function bool FillAllowed(GUIBuyable b)
-{
-	local BuyableAmmo A;
-
-	A = FillTarget(b);
-	return A!=None && A.FillCost(PlayerOwner().Pawn)>0 && playerscore>0;
-}
-function string FillCaption(GUIBuyable b)
-{
-	local BuyableAmmo A;
-
-	A = FillTarget(b);
-	if( A==None )
-		return "Fill Up";
-	return "Fill ammo:"@A.FillCost(PlayerOwner().Pawn);
-}
-
-// Another tab: its list, its first row chosen
+// Another tab: its list from its top, its first row chosen
 function CategoryChange(GUIComponent Sender)
 {
 	if( !bKeepUpgradesOf )
 		UpgradesOf = None;
 	Chosen = None;
 	bOwnChosen = false;
+	myItems.SetTopItem(0);
 	Relist();
 }
 
@@ -712,12 +673,17 @@ function Paid(float Was, float Ask)
 // and not on the player's yet) the shop's first row
 function Relist()
 {
-	local int i;
+	local int i, ShopTop, InvTop;
 	local bool bFound;
 
+	// (each list kept where it was scrolled to: made anew it showed its top again, after every purchase)
+	ShopTop = myItems.Top;
+	InvTop = myInv.Top;
 	bListing = true;
 	FillShop();
 	FillInv();
+	myItems.SetTopItem(ShopTop);
+	myInv.SetTopItem(InvTop);
 	if( Chosen!=None && bOwnChosen )
 	{
 		for(i=0;i<myInv.Elements.Length;i++)
@@ -819,7 +785,8 @@ function string RefillCaption()
 		Return "Refill all:"@int(FMin(C,playerscore));
 	Return "Refill ammo:"@int(FMin(C,playerscore));
 }
-// The footer's button: the row chosen bought (or upgraded), or on the player's own list sold
+// A row's name double-clicked (GUIBuyItemsList.DoubleClicked): on the shop's list bought (or upgraded); on the player's
+// own the armour mended, the health made whole, the ammo filled. (Never a sale: that is its SELL only.)
 function BuyCurrent()
 {
 	if( Chosen==None )
@@ -829,7 +796,7 @@ function BuyCurrent()
 	else if( bOwnChosen && BuyableFirstAidKit(Chosen)!=None )
 		Heal(Chosen);
 	else if( bOwnChosen )
-		SellGun(Chosen);
+		BuyFill();
 	else
 		BuyGun(Chosen);
 }
@@ -959,6 +926,13 @@ function Heal(GUIBuyable b)
 // under it (Price -1: none). Look 0 is the trader's red, 1 green (selling). Where it was drawn is noted on the list.
 function DrawButton(Canvas C, GUIBuyItemsList L, float X, float Y, float W, float H, string Cap, int Price, bool bOn, byte Look, int Item, byte Act)
 {
+	DrawBox(C,L.SectionStyle,X,Y,W,H,Cap,Price,bOn,Look,FNS_Small);
+	if( bOn )
+		L.AddHit(Item,Act,X,Y,W,H);
+}
+// (the box and its words, in the style St: Refill all above the player's list is drawn so too)
+function DrawBox(Canvas C, GUIStyles St, float X, float Y, float W, float H, string Cap, int Price, bool bOn, byte Look, eFontScale FS)
+{
 	local bool bOver;
 	local eMenuState S;
 
@@ -994,18 +968,16 @@ function DrawButton(Canvas C, GUIBuyItemsList L, float X, float Y, float W, floa
 	S = MSAT_Blurry;
 	if( !bOn )
 		S = MSAT_Disabled;
-	if( L.SectionStyle!=None )
+	if( St!=None )
 	{
 		if( Price>=0 )
 		{
-			L.SectionStyle.DrawText(C,S,X,Y+H*0.04,W,H*0.5,TXTA_Center,Cap,FNS_Small);
-			L.SectionStyle.DrawText(C,S,X,Y+H*0.46,W,H*0.5,TXTA_Center,string(Price),FNS_Small);
+			St.DrawText(C,S,X,Y+H*0.04,W,H*0.5,TXTA_Center,Cap,FS);
+			St.DrawText(C,S,X,Y+H*0.46,W,H*0.5,TXTA_Center,string(Price),FS);
 		}
 		else
-			L.SectionStyle.DrawText(C,S,X,Y,W,H,TXTA_Center,Cap,FNS_Small);
+			St.DrawText(C,S,X,Y,W,H,TXTA_Center,Cap,FS);
 	}
-	if( bOn )
-		L.AddHit(Item,Act,X,Y,W,H);
 }
 
 function BuyFill()
@@ -1218,13 +1190,23 @@ defaultproperties
 
      Begin Object Class=AltSectionBackground Name=ownbg
          Caption="Inventory"
-         WinTop=0.060000
+         WinTop=0.112000
          WinLeft=0.010000
          WinWidth=0.300000
-         WinHeight=0.880000
+         WinHeight=0.828000
          OnPreDraw=ownbg.InternalPreDraw
      End Object
      InvBG=AltSectionBackground'KFGui.GUIBuyMenu.ownbg'
+
+     Begin Object Class=GUITraderRefill Name=refillall
+         WinTop=0.060000
+         WinLeft=0.010000
+         WinWidth=0.300000
+         WinHeight=0.046000
+         bBoundToParent=True
+         bScaleToParent=True
+     End Object
+     RefillBtn=GUITraderRefill'KFGui.GUIBuyMenu.refillall'
 
      Begin Object Class=GUIBuyItemsBox Name=itmbox
          bVisibleWhenEmpty=True

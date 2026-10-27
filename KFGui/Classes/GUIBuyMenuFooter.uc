@@ -1,14 +1,13 @@
 class GUIBuyMenuFooter extends ButtonFooter;
 
-var automated GUIButton b_Buy,b_Cancel,b_Complete,b_AutoAll,b_Fill;
+var automated GUIButton b_Cancel,b_Complete;
 var automated GUIButton spacer1,spacer2;
 var automated GUILabel l_score,l_weight;
 var automated GUIImage i_cash;	// the HUD's pound sign: the menu's font has none
 var() string MinCaption;		// a button with a shorter caption is sized as if it had this one
-var() string BuyMinCaption;		// the same for Buy (Sell, Clip), the button used most
 
-// Laid out again each frame from the buttons shown: they fit their captions, which change (the refill's price),
-// and the fill button comes and goes. (They were laid out once, in fixed slots, the hidden ones keeping theirs empty.)
+// The cash and the weight at the left, Complete at the right. (Refill all and the buttons for the row chosen were here:
+// Refill all is above the player's list now, and each row has its own.) Laid out again each frame from the buttons shown.
 function bool InternalOnPreDraw(Canvas C)
 {
 	if ( bBoundToParent && MenuOwner != None )
@@ -59,38 +58,6 @@ function SetPlayerStats(int score, float weight)
 		Most = GUIBuyMenu(PageOwner).maxweight;
 	if( l_weight!=None )
 		l_weight.Caption = "Weight:"@int(weight+0.5)$"/"$int(Most+0.5);
-}
-
-function SetBuyMode(string buyCaption,bool buyEnabled,bool fillVisible,bool fillEnabled,optional string FillCaption)
-{
-	local bool AutoAmmoEnabled;
-	AutoAmmoEnabled = GUIBuyMenu(PageOwner).CanAutoAmmo();
-	// (the refill button says what it will spend)
-	b_AutoAll.Caption = GUIBuyMenu(PageOwner).RefillCaption();
-	b_buy.Caption = buyCaption;
-	if(buyEnabled && b_buy.MenuState == MSAT_Disabled)
-	{
-		b_buy.MenuState = MSAT_Blurry;              //    GUIBuyMenu(PageOwner).ItemsBox.List.Elements[GUIBuyMenu(PageOwner).ItemsBox.List.Index]                                   // 
-             //   GUIBuyMenu(PageOwner).ItemsBox.List.MenuState = MSAT_Blurry;
-        }
-        else if(!buyEnabled)
-	{
-        	b_buy.MenuState = MSAT_Disabled;
-             //   GUIBuyMenu(PageOwner).ItemsBox.List.MenuState = MSAT_Disabled;
-        }
-
-	if(fillEnabled && b_fill.MenuState == MSAT_Disabled)
-		b_fill.MenuState = MSAT_Blurry;
-	else if(!fillEnabled)
-		b_fill.MenuState = MSAT_Disabled;
-	b_fill.bVisible = fillVisible;
-	if( FillCaption!="" )
-		b_fill.Caption = FillCaption;
-
-	if(AutoAmmoEnabled && b_AutoAll.MenuState == MSAT_Disabled)
-		b_AutoAll.MenuState = MSAT_Blurry;
-	else if(!AutoAmmoEnabled)
-	   b_AutoAll.MenuState = MSAT_Disabled;
 }
 
 function bool ButtonsSized(Canvas C)
@@ -183,15 +150,13 @@ function float GetButtonLeft()
 	return AL + (FooterMargin / 2);
 }
 
-// (short captions are sized as a longer one, so that Buy, Sell or Fill Up are not slivers beside the refill)
+// (a short caption is sized as a longer one, so that its button is not a sliver)
 function string SizeAs( Canvas C, GUIButton B )
 {
 	local string Least;
 	local float XL, LL, YL;
 
 	Least = MinCaption;
-	if( B==b_Buy )
-		Least = BuyMinCaption;
 	if( C==None || B.Style==None || Least=="" )
 		return "";
 	B.Style.TextSize(C, B.MenuState, B.Caption, XL, YL, B.FontScale);
@@ -240,38 +205,12 @@ function bool OnFooterClick(GUIComponent Sender)
 	} else if(Sender == b_Cancel)
 	{
 		GUIBuyMenu(PageOwner).CloseSale(false);
-	} else if(Sender == b_Buy)
-	{
-		GUIBuyMenu(PageOwner).BuyCurrent();
-	} else if(Sender == b_Fill)
-	{
-		GUIBuyMenu(PageOwner).BuyFill();
-	} else if(Sender == b_AutoAll)
-	{
-		GUIBuyMenu(PageOwner).DoAutoAmmo();
 	}
 	return false;
 }
 
 defaultproperties
 {
-     Begin Object Class=GUIButton Name=Purchase
-         Caption="Buy"
-         StyleName="FooterButton"
-         Hint="Buy currently selected weapon"
-         WinTop=-0.001953
-         WinLeft=0.236407
-         WinWidth=0.112219
-         WinHeight=0.057242
-         RenderWeight=2.000000
-         TabOrder=3
-         bBoundToParent=True
-         OnClick=GUIBuyMenuFooter.OnFooterClick
-         OnKeyEvent=Purchase.InternalOnKeyEvent
-     End Object
-     b_Buy=GUIButton'KFGui.GUIBuyMenuFooter.Purchase'
-
-
      Begin Object Class=GUIButton Name=Complete
          Caption="Complete"
          StyleName="FooterButton"
@@ -287,38 +226,6 @@ defaultproperties
          OnKeyEvent=Complete.InternalOnKeyEvent
      End Object
      b_Complete=GUIButton'KFGui.GUIBuyMenuFooter.Complete'
-
-     Begin Object Class=GUIButton Name=AutoAmmo
-         Caption="Refill all"
-         StyleName="FooterButton"
-         Hint="Fill every weapon's ammo (with too little cash, a share for each), and mend your armour if you have the cash for both."
-         WinTop=-0.014645
-         WinLeft=0.006149
-         WinWidth=0.112219
-         WinHeight=0.058023
-         RenderWeight=2.000000
-         TabOrder=0
-         bBoundToParent=True
-         OnClick=GUIBuyMenuFooter.OnFooterClick
-         OnKeyEvent=AutoAmmo.InternalOnKeyEvent
-     End Object
-     b_AutoAll=GUIButton'KFGui.GUIBuyMenuFooter.AutoAmmo'
-
-     Begin Object Class=GUIButton Name=Fill
-         Caption="Fill Up"
-         StyleName="FooterButton"
-         Hint="Fill up on currently selected ammo."
-         WinTop=0.966146
-         WinLeft=0.250000
-         WinWidth=0.120000
-         RenderWeight=2.000000
-         TabOrder=2
-         bBoundToParent=True
-         bVisible=False
-         OnClick=GUIBuyMenuFooter.OnFooterClick
-         OnKeyEvent=Fill.InternalOnKeyEvent
-     End Object
-     b_Fill=GUIButton'KFGui.GUIBuyMenuFooter.Fill'
 
      Begin Object Class=GUIButton Name=sp
          StyleName="Footerbutton"
@@ -388,7 +295,6 @@ defaultproperties
      l_weight=GUILabel'KFGui.GUIBuyMenuFooter.WeightLabel'
 
      MinCaption="Complete"
-     BuyMinCaption="Refill ammo"
      bFixedWidth=False
      Padding=0.070000
      Spacer=0.008000

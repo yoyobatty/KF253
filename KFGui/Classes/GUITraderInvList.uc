@@ -112,7 +112,9 @@ function DrawInvRow( Canvas c, int Item, float X, float Y, float W, float HT, bo
 		SectionStyle.DrawText(c, MSAT_Blurry, L + W * 0.03, Y + HT * 0.5, R - L - W * 0.05, HT * 0.4, TXTA_Left, Count, FNS_Small);
 }
 
-// A press: the button under it does its job (the list's own click chooses the row first)
+// A press: the button under it does its job (the list's own click chooses the row first). A row's name double-clicked
+// does what its FILL (HEAL) does; and as SELL appears beside a gun once it is chosen, the second click of a double-click
+// that lands on it is not a sale.
 function bool InvClick( GUIComponent Sender )
 {
 	local GUIBuyMenu M;
@@ -123,15 +125,17 @@ function bool InvClick( GUIComponent Sender )
 		return false;
 	InternalOnClick(Sender);
 	i = HitAt(Controller.MouseX, Controller.MouseY);
+	if ( i >= 0 && Hits[i].Act == ACT_SELL && SecondClick() )
+		i = -1;
 	if ( i < 0 )
+	{
+		if ( DoubleClicked() )
+			M.BuyCurrent();
 		return false;
+	}
+	ClickedItem = None;
 	M.InvAction(Hits[i].Item, Hits[i].Act);
 	return true;
-}
-
-function bool InvDblClick( GUIComponent Sender )
-{
-	return false;
 }
 
 function SelectNewItem( GUIComponent Sender )
@@ -145,6 +149,5 @@ defaultproperties
 	RowShare=0.110000
 	OnDrawItem=GUITraderInvList.DrawInvRow
 	OnClick=GUITraderInvList.InvClick
-	OnDblClick=GUITraderInvList.InvDblClick
 	OnChange=GUITraderInvList.SelectNewItem
 }
