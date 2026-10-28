@@ -111,7 +111,7 @@ var() float GloryLockdownScale;    // ...all of it this much more in a lockdown
 
 // Lockdowns (Doom style, KFLockdown): the players are shut in a ring of energy where they stand and fight stages of
 // specimens teleporting in round them
-var() float LockdownChance;        // share of waves from LockdownFrom on that are lockdowns
+var() float LockdownChance;        // share of waves from LockdownFrom on that are lockdowns (0, off at the user's word 10-28; ForceNextWave("Lockdown") still makes one)
 var() int LockdownFrom;
 var KFLockdown Lockdown;
 
@@ -1840,7 +1840,7 @@ defaultproperties
      BossPool(0)="KFChar.ZombieBoss"
      BossPool(1)="KFChar.ZombieKingFleshpound"
      BossPool(2)="KFChar.ZombieAbomination"
-     LockdownChance=0.250000
+     LockdownChance=0.000000
      LockdownFrom=3
      bGloryKills=True
      GloryShare=0.250000

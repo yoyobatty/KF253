@@ -38,6 +38,7 @@ var() float HoldEarlyTime;	// trader time: at the spot with this many seconds le
 var() float HoldGlanceShare;	// at the post: share of looks down another way in
 var() bool bPostNades;			// at the post: the grenade decision of any other fight (TryNade)
 var() float HoldNoWayRest;	// no path to the post: this long doing other things before trying it again
+var() float HoldGiveWayRest;	// gave way to a player on the post: this long off it
 var float HoldOffUntil;
 var NavigationPoint HoldNoWayNode;	// the post we last found no way to
 var() bool bHumanOrdersFirst;	// a player's order beats the team's hold (Hold: his spot; Freelance, Attack: none)
@@ -223,12 +224,15 @@ var float NextDangerCheckTime;
 // Stuck in mid-air on one spot ("falling", not moving).
 var vector WedgeSpot;
 var float WedgeTime, NextWedgeCheckTime;
+var float GiveWayStart;					// when a team-mate began pressing into us (CheckGiveWay)
 var int WedgeTries;
 
 // Off the path network (no anchor found): since when and where. After AnchorLostLimit seconds there, unseen, it is
 // put back on its last anchor (TeleportBackIn).
 var() bool bLedgeJump;			// walked into a ledge under a low opening (a window sill): hop into the opening (LedgeJump)
 var float NextLedgeJump;
+var() bool bDoorDetour;			// walked into an open door's leaf on the way: round its free end (DoorDetour)
+var float NextDoorDetour;
 var float AnchorLostTime;
 var vector AnchorLostSpot;
 var() float AnchorLostLimit;
@@ -338,8 +342,10 @@ function bool FireWeaponAt(Actor A)
 {
 	local Actor InWay;
 
-	if ( A == None )
+	if ( A == None || DeadPawn(A) )
 		A = Enemy;
+	if ( DeadPawn(A) )
+		return false;
 	// the shots land on a specimen standing in the way: make that one the target
 	InWay = SpecimenInLine(A);
 	if ( InWay != A )
@@ -828,6 +834,11 @@ final function string GetPerkName()
 // How close a specimen may get before a bot with a gun stops standing still and backs away from it.
 final function float KiteDistanceFor(KFMonster M)
 {
+	// (the bosses first: they are a Fleshpound's and a Bloat's kind, and reach a good deal further)
+	if ( M.IsA('ZombieKingFleshpound') )
+		return 900.f;	// his ground pound reaches 420, his beam far further, and he comes on fast
+	if ( M.IsA('ZombieAbomination') )
+		return 650.f;	// its belch and the gas it leaves
 	if ( M.IsA('ZombieBloat') )
 		return 400.f;	// its bile reaches about 250
 	if ( M.IsA('ZombieFleshPound') || M.IsA('ZombieScrake') || M.IsA('ZombieBoss') || M.IsA('ZombieSiren') )
@@ -843,7 +854,7 @@ final function KFMonster FindNearestThreat(out float Dist, out float Margin)
 {
 	local Controller C;
 	local KFMonster M, Best;
-	local float D, Mg;
+	local float D, Mg, K;
 
 	Margin = 100000.f;
 	Dist = 100000.f;
@@ -853,9 +864,10 @@ final function KFMonster FindNearestThreat(out float Dist, out float Margin)
 		if ( M == None || M.Health <= 0 || Abs(M.Location.Z - Pawn.Location.Z) > 250.f )
 			continue;
 		D = VSize(M.Location - Pawn.Location);
-		if ( D > 900.f )
+		K = KiteDistanceFor(M);
+		if ( D > FMax(900.f, K + 100.f) )
 			continue;
-		Mg = D - KiteDistanceFor(M);
+		Mg = D - K;
 		if ( Mg < Margin && (D < 200.f || FastTrace(M.Location, Pawn.Location)) )
 		{
 			Best = M;
@@ -983,7 +995,11 @@ final function float ThreatReach( KFMonster M )
 	local float R;
 
 	R = M.MeleeRange * 1.4 + M.CollisionRadius + Pawn.CollisionRadius;
-	if ( M.IsA('ZombieBloat') )
+	if ( M.IsA('ZombieAbomination') )
+		R = FMax(R, 400.f);
+	else if ( M.IsA('ZombieKingFleshpound') )
+		R = FMax(R, 450.f);
+	else if ( M.IsA('ZombieBloat') )
 		R = FMax(R, 280.f);
 	else if ( M.IsA('ZombieSiren') )
 		R = FMax(R, 450.f);
@@ -2129,6 +2145,7 @@ function Tick(float DeltaTime)
 		CheckOwnNade();
 		CheckBile();
 		CheckSurprise();
+		CheckGiveWay();
 		CheckLift();
 		CheckLandedIdle();
 	}
@@ -2339,6 +2356,88 @@ final function bool PickPathAwayFromThreats()
 	return PickPathAway(GetThreatAwayDir());
 }
 
+// A player walking into us: after a moment, out of his way. A push is bumped once, and not at all while he is pressed
+// flat against us, so bumps left bots standing in doorways.
+final function CheckGiveWay()
+{
+	local Controller C;
+	local Pawn P;
+	local vector ToMe, Push;
+	local float D;
+
+	if ( Pawn == None || Pawn.Health <= 0 || Pawn.Physics != PHYS_Walking || Pawn.bStationary || IsInState('GiveWay')
+		|| IsInState('Dead') || IsInState('GameEnded') || IsInState('RoundEnded') )
+	{
+		GiveWayStart = 0;
+		return;
+	}
+	for ( C=Level.ControllerList; C!=None; C=C.nextController )
+	{
+		P = C.Pawn;
+		// (players walk through us between waves)
+		if ( PlayerController(C) == None || P == None || P.Health <= 0 || !P.bBlockActors || !SameTeamAs(C) )
+			continue;
+		ToMe = Pawn.Location - P.Location;
+		ToMe.Z = 0;
+		D = VSize(ToMe);
+		Push = P.Acceleration;
+		Push.Z = 0;
+		if ( D > Pawn.CollisionRadius + P.CollisionRadius + 16.f || Abs(Pawn.Location.Z - P.Location.Z) > 60.f
+			|| VSize(Push) < 1.f || (Normal(Push) dot (ToMe / FMax(D, 1.f))) < 0.5 )
+			continue;
+		if ( GiveWayStart == 0 )
+			GiveWayStart = Level.TimeSeconds;
+		else if ( Level.TimeSeconds - GiveWayStart >= 0.2 && PickGiveWaySpot(P, Normal(Push)) )
+		{
+			GiveWayStart = 0;
+			// (and off a hold post a while: else the next decision walks straight back on to it, often a doorway)
+			if ( HoldNode != None )
+				HoldOffUntil = FMax(HoldOffUntil, Level.TimeSeconds + HoldGiveWayRest);
+			GoalString = "Give way to "$C.PlayerReplicationInfo.PlayerName;
+			GotoState('GiveWay');
+		}
+		return;
+	}
+	GiveWayStart = 0;
+}
+
+// Where to be out of the way of a player pushing along PushDir: to one side (the side we already lean to first), or,
+// in a passage too narrow for that, on ahead of him. Sets Destination, or MoveTarget for a path node.
+final function bool PickGiveWaySpot(Pawn P, vector PushDir)
+{
+	local vector Side, Ext, Spot, HitLocation, HitNormal;
+	local int i;
+
+	MoveTarget = None;
+	Ext = Pawn.GetCollisionExtent();
+	Ext.Z = FMax(6, Pawn.CollisionHeight - MAXSTEPHEIGHT);
+	Side = PushDir Cross vect(0,0,1);
+	if ( ((Pawn.Location - P.Location) dot Side) < 0 )
+		Side *= -1;
+	for ( i=0; i<6; i++ )
+	{
+		if ( i % 3 == 0 )
+			Spot = Pawn.Location + Side * 110.f + PushDir * 30.f;
+		else if ( i % 3 == 1 )
+			Spot = Pawn.Location - Side * 110.f + PushDir * 30.f;
+		else
+			Spot = Pawn.Location + PushDir * 260.f;
+		// (the second round: shorter steps)
+		if ( i >= 3 )
+			Spot = Pawn.Location + (Spot - Pawn.Location) * 0.6;
+		// clear to it, with floor under it (a drop off a ledge is fine)
+		if ( Trace(HitLocation, HitNormal, Spot, Pawn.Location, false, Ext) != None
+			|| FastTrace(Spot - vect(0,0,1) * (Pawn.CollisionHeight + 150.f), Spot) )
+			continue;
+		Destination = Spot;
+		return true;
+	}
+	if ( PickPathAway(PushDir) )
+		return true;
+	GoalString = "Give way: no room";
+	return false;
+}
+
 // Inside this distance a dying Bloat's bile reaches us.
 final function float BloatSafeDist()
 {
@@ -2414,6 +2513,17 @@ function EnemyChanged(bool bNewEnemyVisible)
 {
     Super.EnemyChanged(bNewEnemyVisible);
     LastEnemyEncounter = Level.TimeSeconds;
+	// (the one before has died: off its body, on to the new one)
+	if ( DeadPawn(Target) )
+		Target = Enemy;
+	if ( DeadPawn(Focus) )
+		Focus = Enemy;
+}
+
+// A body: a pawn that has died (a specimen's lies about for a while)
+final function bool DeadPawn( Actor A )
+{
+	return Pawn(A) != None && Pawn(A).Health <= 0;
 }
 
 // More tailored to KF
@@ -4923,9 +5033,57 @@ event bool NotifyHitWall(vector HitNormal, actor Wall)
 		AddSealPath(CurrentPath,KFDoorMover(Wall));
 		MoveTarget = Pawn.Anchor;
 	}
+	if( DoorDetour(HitNormal, KFDoorMover(Wall)) )
+		return true;
 	if( LedgeJump(HitNormal) )
 		return true;
 	return Super.NotifyHitWall(HitNormal, Wall);
+}
+
+// (bDoorDetour) An open door's leaf can stand across a path built with it shut, as the gate by the trader in
+// KF-BurialGrounds-r3 (PlayerStart1 to PathNode8): walking square into its back the bot does not slide off, and the
+// engine steers round only world geometry (AdjustFromWall), so it stood there until the move timed out. Find the
+// nearest spot to one side, past the leaf's free end, from which the way on is clear of it, and go round by it.
+final function bool DoorDetour(vector HitNormal, KFDoorMover Door)
+{
+	local vector Dir, Side, Ext, Spot, HL, HN;
+	local float K;
+	local int i;
+
+	if( !bDoorDetour || Door==None || Door.bSealed || Door.bHidden || Pawn==None || Pawn.Physics!=PHYS_Walking
+		|| Level.TimeSeconds<NextDoorDetour )
+		return false;
+	Dir = Destination - Pawn.Location;
+	Dir.Z = 0;
+	HitNormal.Z = 0;
+	if( VSize(Dir)<1.f || VSize(HitNormal)<0.1 )
+		return false;
+	Dir = Normal(Dir);
+	HitNormal = Normal(HitNormal);
+	if( (HitNormal dot Dir)>-0.5 )
+		return false;
+	NextDoorDetour = Level.TimeSeconds + 0.5;
+	Ext = Pawn.GetCollisionExtent();
+	Ext.Z = FMax(6, Pawn.CollisionHeight - MAXSTEPHEIGHT);
+	Side = HitNormal Cross vect(0,0,1);
+	// (the side the way on leans to first)
+	if( (Side dot Dir)<0 )
+		Side *= -1;
+	for( K=40.f; K<=200.f; K+=40.f )
+		for( i=0; i<2; i++ )
+		{
+			Spot = Pawn.Location + HitNormal * 8.f + Side * K;
+			if( i==1 )
+				Spot = Pawn.Location + HitNormal * 8.f - Side * K;
+			if( Trace(HL, HN, Spot, Pawn.Location, true, Ext)!=None
+				|| FastTrace(Spot - vect(0,0,1) * (Pawn.CollisionHeight + MAXSTEPHEIGHT + 8.f), Spot)
+				|| !Door.TraceThisActor(HL, HN, Destination, Spot, Ext) )
+				continue;
+			bAdjusting = true;
+			AdjustLoc = Spot;
+			return true;
+		}
+	return false;
 }
 
 // (bLedgeJump) A ledge in a low opening, as KF-Offices' window sills (PathNode84, PathNode111): the engine's step up
@@ -5247,12 +5405,16 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 		projspeed = FiredAmmunition.ProjectileClass.default.speed;
 	}
 
-	// make sure bot has a valid target
-	if ( Target == None )
+	// make sure bot has a valid target (not a body: a burst under way went on into it)
+	if ( Target == None || DeadPawn(Target) )
 	{
 		Target = Enemy;
-		if ( Target == None )
+		if ( Target == None || DeadPawn(Target) )
+		{
+			Target = None;
+			StopFiring();
 			return Rotation;
+		}
 	}
 
 	if ( Pawn(Target) != None )
@@ -5911,6 +6073,13 @@ function FightEnemy(bool bCanCharge, float EnemyStrength)
 		else if ( (((Aggression < 1) && !LostContact(3+2*FRand())) || IsSniping()) && CanStakeOut() )
 		{
 			GoalString = "Stake Out2";
+			DoStakeOut();
+		}
+		// (one of those we keep our distance from, out of sight: wait for him to show, guns on where he was, rather than
+		// go round the corner to him; a medic walked up to the King Fleshpound so)
+		else if ( KFMonster(Enemy) != None && KiteDistanceFor(KFMonster(Enemy)) >= 500.f )
+		{
+			GoalString = "Stake Out - not going after the big one";
 			DoStakeOut();
 		}
 		else
@@ -6704,6 +6873,32 @@ Waiting:
 }
 
 // Moving out of reach of a Bloat without shooting it (see FightEnemy).
+// Out of a team-mate's way (CheckGiveWay), shooting as we go
+state GiveWay
+{
+	ignores SeePlayer, HearNoise;
+
+	function BeginState()
+	{
+		Pawn.bWantsToCrouch = false;
+	}
+	function Timer()
+	{
+		enable('NotifyBump');
+		Target = Enemy;
+		TimedFireWeaponAtEnemy();
+	}
+Begin:
+	WaitForLanding();
+	if ( MoveTarget != None )
+		MoveToward(MoveTarget, Enemy,, true);
+	else if ( Enemy != None )
+		MoveTo(Destination, Enemy);
+	else
+		MoveTo(Destination);
+	WhatToDoNext(199);
+}
+
 state BackFromBloat
 {
 	ignores SeePlayer, HearNoise;
@@ -7369,8 +7564,14 @@ state StakeOut
 function bool WeaponFireAgain(float RefireRate, bool bFinishedFire)
 {
 	LastFireAttempt = Level.TimeSeconds;
-	if ( Target == None )
+	// a specimen that has died is no target, though its body lies about for a while: the enemy now, or nothing (a gun
+	// went on firing into the body, and the bot looking at it, until it next decided what to do)
+	if ( Target == None || DeadPawn(Target) )
 		Target = Enemy;
+	if ( DeadPawn(Target) )
+		Target = None;
+	if ( Target != None && DeadPawn(Focus) )
+		Focus = Target;
 	if ( Target != None )
 	{
 		if( !bFinishedFire && Pawn.Weapon.GetFireMode(0).bIsFiring && Pawn.Weapon.GetFireMode(0).bWaitForRelease )
@@ -9022,8 +9223,10 @@ defaultproperties
 	EscapeMaxNodes=64
 	AnchorLostLimit=10.000000
 	HoldReach=120.000000
+	HoldGiveWayRest=4.000000
 	bHoldSpots=True
 	bLedgeJump=True
+	bDoorDetour=True
 	HoldNoWayRest=5.000000
 	bHumanOrdersFirst=True
 	HoldQuietTime=15.000000
