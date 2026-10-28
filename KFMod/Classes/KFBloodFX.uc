@@ -17,6 +17,17 @@ var() float	Speeds[4];		// ...how fast each flies along Dir
 var() float	Spreads[4];		// ...and how far off it
 var() float	UpLift;			// blood comes off a body a little upwards
 
+// (thrown from many places, the BFG's and the Gore Cannon's too: none of it with the gore turned down, KFGoreLevel)
+simulated function PreBeginPlay()
+{
+	if ( class'KFGoreLevel'.static.Level() < 2 )
+	{
+		Destroy();
+		return;
+	}
+	Super.PreBeginPlay();
+}
+
 simulated function Tick( float DT )
 {
 	local int i, j, n;
@@ -35,7 +46,7 @@ simulated function Tick( float DT )
 	K = Sqrt(FMax(Size, 0.1));
 	for ( i = 0; i < Emitters.Length && i < ArrayCount(Counts); i++ )
 	{
-		n = int(Counts[i] * Size + FRand());
+		n = int(Counts[i] * Size * class'KFGoreLevel'.static.Blood() + FRand());
 		if ( (i == 3 && !bHeavy) || (i == 0 && bNoMist) )
 			n = 0;
 		if ( n > 1 && (Level.bDropDetail || Level.DetailMode == DM_Low) )

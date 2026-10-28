@@ -448,7 +448,7 @@ function TryDropPowerUp(vector DropLocation)
     if (PowerUpClasses.Length == 0 || PowerUpsThisRound >= MaxPowerUpsPerRound || FRand() > PowerUpDropChance)
         return;
 
-    if (Spawn(PowerUpClasses[Rand(PowerUpClasses.Length)],,, DropLocation) != None)
+    if (DropPowerUp(DropLocation))
         PowerUpsThisRound++;
 }
 

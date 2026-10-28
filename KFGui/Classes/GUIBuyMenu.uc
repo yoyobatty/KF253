@@ -258,9 +258,27 @@ function KFBuyMenuClosed(optional Bool bCanceled)
 	PlayerOwner().SetRotation(NewRot);
 
 	Super.OnClose(bCanceled);
+	ForgetGuns();
 
 	//Indicate that we're not buying things.
 	KFPlayerReplicationInfo(PlayerOwner().PlayerReplicationInfo).bStartingEquipmentChosen = true;
+}
+
+// None of the player's guns held while it is closed: the menu lives on from map to map in the persistent stack, and a
+// gun gone with its map, still in the list, crashed the clean-up of the next level change. It is made anew when the
+// menu opens again (UpdateCosts: the cash seen is not the cash there is).
+function ForgetGuns()
+{
+	if( myInv!=None )
+		myInv.Clear();
+	playerscore = -1;
+	PendingChecks = 0;
+}
+
+function LevelChanged()
+{
+	Super.LevelChanged();
+	ForgetGuns();
 }
 
 event Opened(GUIComponent Sender)

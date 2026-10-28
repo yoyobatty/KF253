@@ -13,7 +13,6 @@ simulated function PostBeginPlay()
 simulated function Timer()
 {
 	Spawn(class'KFTeleportFlash',,, Location);
-	class'KFScreenFX'.static.Wave(Level, Location + vect(0,0,40), 0.9);
 	PlaySound(Sound'ONSBPSounds.ShockTank.ShockBallExplosion', SLOT_None, 1.8,, 2000.0, 0.9);
 	Kill();
 }

@@ -131,6 +131,14 @@ simulated function CharPiece( KFMonster M )
 	}
 }
 
+// (this giblet is not drawn: its piece is)
+simulated function float SeenAt()
+{
+	if ( Piece != None )
+		return Piece.LastRenderTime;
+	return LastRenderTime;
+}
+
 simulated function HitWall( vector HitNormal, Actor Wall )
 {
 	Super.HitWall(HitNormal, Wall);

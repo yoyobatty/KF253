@@ -97,6 +97,17 @@ var int						SoftW[3], SoftH[3], SoftTaps;
 var int						SoftForX, SoftForY;	// the screen size and the shrink the soft pictures were made for
 var float					SoftForShrink;
 
+// Giblets lit by the frame (KFGib.TakeFrameLight). Lying still, a giblet is drawn without the engine's light (which
+// gathered the lights for each of hundreds of giblets every frame: most of what they cost) and takes the light round
+// it from the softest of the hit blur's pictures of the last frame, looked up where it is on the screen: the floor's
+// light, a torch's pool, a fire's glow. The soft pictures are made while there are such giblets about.
+var() globalconfig bool		bGibLight;
+var TexMatrix				GibCoords;			// world to where on the last frame's soft picture
+var array<Texture>			GibFrom;			// each giblet skin...
+var array<Material>			GibLit;				// ...and it lit from the frame
+var array<Object>			GibMade;
+var float					GibUntil;			// the soft pictures are made until then (the giblets lit so are gone)
+
 // From the settings menu: kept, and taken up by the game in progress
 static function Configure(PlayerController P, bool bNewBloom, bool bNewHitBlur, bool bNewVivid)
 {
@@ -152,7 +163,7 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 	local array<CameraOverlay> Want;
 	local float DT;
 	local int i, V;
-	local bool bGlow;
+	local bool bGlow, bGib;
 
 	Tap = T;
 	PC = P;
@@ -166,9 +177,10 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 	if (bVivid)
 		VividNow = Clamp(VividMuch, 0, 100 + int(2.0 * VividPerRich));
 	bGlow = bBloom && !bMenu;
+	bGib = bGibLight && !bMenu && Level.TimeSeconds < GibUntil;
 
 	// (until the frame's picture has been found once the blur stays on, effect or no effect: see KFFrameTap)
-	if (!bGlow && VividNow == 100 && BlurLevel <= 0.0 && Tap.Frame != None)
+	if (!bGlow && VividNow == 100 && BlurLevel <= 0.0 && !bGib && Tap.Frame != None)
 	{
 		Hang(Want);
 		Tap.Unfit(PC);
@@ -198,12 +210,14 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 		Want[Want.Length] = VividReady;
 		Want[Want.Length] = VividLay;
 	}
-	if (BlurLevel > 0.0)
+	if (BlurLevel > 0.0 || bGib)
 	{
 		if (bSoftMade && (SoftForX != C.SizeX || SoftForY != C.SizeY || SoftForShrink != BlurShrink))
 			DropSoft();
 		if (!bSoftMade)
 			BuildSoft(C.SizeX, C.SizeY);
+		if (bGib)
+			AimGibLight(C);
 		Want[Want.Length] = SoftReady;
 		// the first third of the blur brings in the sharpest of the three, the last third the softest
 		for (i = 0; i < 3; i++)
@@ -232,6 +246,83 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 		Glow.Revision++;
 	}
 	Hang(Want);
+}
+
+// A giblet come to rest (KFGib.TakeFrameLight): what its Skin is to be to take its light from the frame; None while the
+// soft pictures are not yet being made (it is lit by the engine, and asks for them)
+static function Material GibSkin(Actor G, Texture Skin)
+{
+	local PlayerController P;
+	local KFScreenFX F;
+
+	if (G == None || Skin == None || !default.bGibLight || G.Level.NetMode == NM_DedicatedServer)
+		return None;
+	P = G.Level.GetLocalPlayerController();
+	if (P == None)
+		return None;
+	F = class'KFFrameTap'.static.GetFX(P);
+	if (F == None || !F.bGibLight)
+		return None;
+	F.GibUntil = FMax(F.GibUntil, G.Level.TimeSeconds + G.LifeSpan + 1.0);
+	return F.LitGibSkin(Skin);
+}
+
+simulated function Material LitGibSkin(Texture Skin)
+{
+	local Combiner M;
+	local int i;
+
+	if (!bSoftMade || GibCoords == None || GibCoords.Material != Soft[2])
+		return None;
+	for (i = 0; i < GibFrom.Length; i++)
+		if (GibFrom[i] == Skin)
+			return GibLit[i];
+	// (the skin times the light, doubled as the engine lights a thing: what is round a giblet is lit so too)
+	M = class'KFFXMat'.static.Mix(GibMade, Level, Skin, GibCoords, 0);
+	M.Modulate2X = true;
+	M.AlphaOperation = AO_Use_Alpha_From_Material1;
+	GibFrom[i] = Skin;
+	GibLit[i] = M;
+	return M;
+}
+
+// Where each point of the world is on the last frame's soft picture: as the camera saw it, the whole frame across it
+simulated function AimGibLight(Canvas C)
+{
+	local Actor CamActor;
+	local vector Eye, X, Y, Z, U, V;
+	local rotator R;
+	local float TanH, TanV;
+	local Matrix M;
+
+	if (GibCoords == None)
+	{
+		GibCoords = TexMatrix(Level.ObjectPool.AllocateObject(class'TexMatrix'));
+		GibCoords.TexCoordSource = TCS_WorldCoords;
+		GibCoords.TexCoordCount = TCN_3DCoords;
+		GibCoords.TexCoordProjected = true;
+	}
+	GibCoords.Material = Soft[2];
+	PC.PlayerCalcView(CamActor, Eye, R);
+	GetAxes(R, X, Y, Z);
+	TanH = Tan(FClamp(PC.FOVAngle, 1.0, 170.0) * Pi / 360.0);
+	TanV = TanH * float(C.SizeY) / float(Max(C.SizeX, 1));
+	U = X * 0.5 + Y * (0.5 / TanH);
+	V = X * 0.5 - Z * (0.5 / TanV);
+	M.XPlane.X = U.X;
+	M.XPlane.Y = V.X;
+	M.XPlane.Z = X.X;
+	M.YPlane.X = U.Y;
+	M.YPlane.Y = V.Y;
+	M.YPlane.Z = X.Y;
+	M.ZPlane.X = U.Z;
+	M.ZPlane.Y = V.Z;
+	M.ZPlane.Z = X.Z;
+	M.WPlane.X = -(Eye dot U);
+	M.WPlane.Y = -(Eye dot V);
+	M.WPlane.Z = -(Eye dot X);
+	M.WPlane.W = 1.0;
+	GibCoords.Matrix = M;
 }
 
 // A blast's wave (KFBlast), for the player at this machine if it is near enough
@@ -538,6 +629,15 @@ simulated function Destroyed()
 	class'KFFXMat'.static.FreeAll(SoftMade, Level);
 	bBloomMade = false;
 	bSoftMade = false;
+	class'KFFXMat'.static.FreeAll(GibMade, Level);
+	GibFrom.Length = 0;
+	GibLit.Length = 0;
+	if (GibCoords != None)
+	{
+		GibCoords.Material = None;
+		Level.ObjectPool.FreeObject(GibCoords);
+		GibCoords = None;
+	}
 	Super.Destroyed();
 }
 
@@ -647,6 +747,7 @@ defaultproperties
 {
 	bShockWaves=True
 	MaxWaves=3
+	bGibLight=True
      bBloom=True
      bHitBlur=True
      bVivid=True

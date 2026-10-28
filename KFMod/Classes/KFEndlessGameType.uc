@@ -90,6 +90,9 @@ var() int MaxPowerUpsPerRound;     // left by kills in one wave at most (the loo
 var() float PowerUpDuration;       // seconds Insta-Kill and Double Dosh last
 var() array<class<KFZombiesPowerUp> > PowerUpClasses;
 var int PowerUpsThisRound;
+var array<NavigationPoint> DropNodes;  // the path nodes players can walk to (FindDropNodes, at the first drop)
+var bool bDropNodesFound;
+var array<BlockingVolume> PlayerBlockers;  // (FindDropNodes) volumes that block players and not specimens
 var float InstaKillEndTime, DoublePointsEndTime;
 var bool bNuking;
 // The loot specimen: in some waves one specimen glows (KFLootGlow) and always drops a power-up where it dies
@@ -138,6 +141,8 @@ event InitGame( string Options, out string Error )
     HoldoutMonsterClasses[2] = class<KFMonster>(DynamicLoadObject("KFChar.ZombieGoreFast", class'Class'));
     HoldoutMonsterClasses[3] = class<KFMonster>(DynamicLoadObject("KFChar.ZombieStalker", class'Class'));
     HoldoutMonsterClasses[4] = class<KFMonster>(DynamicLoadObject("KFChar.ZombieWretch", class'Class'));
+    // (where power-ups may be put: worked out now, not as the first one drops in a fight)
+    FindDropNodes();
 }
 
 static function FillPlayInfo(PlayInfo PlayInfo)
@@ -1587,9 +1592,145 @@ function TryDropPowerUp(vector DropLocation)
 
 function bool DropPowerUp(vector DropLocation)
 {
+    local class<KFZombiesPowerUp> C;
+
     if (PowerUpClasses.Length == 0)
         return false;
-    return Spawn(PowerUpClasses[Rand(PowerUpClasses.Length)],,, DropLocation) != None;
+    C = PowerUpClasses[Rand(PowerUpClasses.Length)];
+    return Spawn(C,,, DropSpot(DropLocation)) != None || Spawn(C,,, DropLocation) != None;
+}
+
+// Where a power-up dropped at From goes: on the floor there when that is open ground beside a path node players can
+// walk to, at about its height; else on the nearest such node. (A specimen dies on a ledge, up a wall, on a shelf,
+// or in its own zone behind the fence.)
+function vector DropSpot(vector From)
+{
+    local vector HL, HN, Spot;
+    local NavigationPoint N, Best;
+    local float D, BestD;
+    local int i;
+
+    if (!bDropNodesFound)
+        FindDropNodes();
+    if (DropNodes.Length == 0)
+        return From;
+    if (Trace(HL, HN, From - vect(0,0,300), From, false, vect(16,16,16)) != None && HN.Z > 0.7)
+    {
+        Spot = HL + vect(0,0,24);
+        for (i = 0; i < DropNodes.Length; i++)
+        {
+            N = DropNodes[i];
+            if (N == None || Abs(N.Location.Z - Spot.Z) > 45.0 || VSize((N.Location - Spot) * vect(1,1,0)) > 500.0)
+                continue;
+            // (traced in from the node, which is outside any blocker: a spot inside one is caught as the line goes in)
+            if (Trace(HL, HN, N.Location, Spot, false, vect(10,10,10)) == None && !CrossesPlayerBlocker(N.Location, Spot))
+                return Spot;
+        }
+    }
+    BestD = 1000000.0;
+    for (i = 0; i < DropNodes.Length; i++)
+    {
+        if (DropNodes[i] == None)
+            continue;
+        D = VSize(DropNodes[i].Location - From);
+        if (D < BestD)
+        {
+            BestD = D;
+            Best = DropNodes[i];
+        }
+    }
+    if (Best == None)
+        return From;
+    return Best.Location;
+}
+
+// The path nodes players can walk to: from the player starts along the links a person fits (no flying; the builder
+// records UT's 26 by 44 as its smallest size, which KF's players use) that neither cross nor end in a volume that
+// blocks only players (KF's zombie zones). Lifts, doors and jump spots are left out as places to put one.
+function FindDropNodes()
+{
+    local NavigationPoint N, E;
+    local ReachSpec Spec;
+    local BlockingVolume V;
+    local array<NavigationPoint> Queue;
+    local int i, k;
+
+    bDropNodesFound = true;
+    DropNodes.Length = 0;
+    PlayerBlockers.Length = 0;
+    foreach AllActors(class'BlockingVolume', V)
+        if (PlayerBlocker(V))
+            PlayerBlockers[PlayerBlockers.Length] = V;
+    // (visitedWeight marks those found: a path search sets it afresh for every node when it starts)
+    for (N = Level.NavigationPointList; N != None; N = N.nextNavigationPoint)
+    {
+        N.visitedWeight = 0;
+        if (PlayerStart(N) != None && !InPlayerBlocker(N))
+        {
+            N.visitedWeight = 1;
+            Queue[Queue.Length] = N;
+        }
+    }
+    for (i = 0; i < Queue.Length; i++)
+    {
+        N = Queue[i];
+        for (k = 0; k < N.PathList.Length; k++)
+        {
+            Spec = N.PathList[k];
+            if (Spec == None || Spec.End == None)
+                continue;
+            E = Spec.End;
+            if (E.visitedWeight == 1 || Spec.CollisionRadius < 20 || Spec.CollisionHeight < 40 || (Spec.reachFlags & (2 | 128)) != 0
+                || InPlayerBlocker(E) || CrossesPlayerBlocker(N.Location, E.Location))
+                continue;
+            E.visitedWeight = 1;
+            Queue[Queue.Length] = E;
+        }
+    }
+    for (i = 0; i < Queue.Length; i++)
+        if (LiftCenter(Queue[i]) == None && LiftExit(Queue[i]) == None && Door(Queue[i]) == None && JumpSpot(Queue[i]) == None)
+            DropNodes[DropNodes.Length] = Queue[i];
+    for (N = Level.NavigationPointList; N != None; N = N.nextNavigationPoint)
+        N.visitedWeight = 0;
+    log("Power-up drop nodes:" @ DropNodes.Length @ "of" @ Queue.Length @ "reached from the player starts");
+}
+
+// A volume that blocks players and not specimens (KFInvasionBot.VerifyBlockingVolume)
+function bool PlayerBlocker(BlockingVolume V)
+{
+    local bool bPlayers, bMonsters;
+    local int i;
+
+    if (V == None || !V.bClassBlocker)
+        return false;
+    for (i = 0; i < V.BlockedClasses.Length; i++)
+    {
+        bPlayers = bPlayers || ClassIsChildOf(V.BlockedClasses[i], class'KFHumanPawn');
+        bMonsters = bMonsters || ClassIsChildOf(V.BlockedClasses[i], class'KFMonster');
+    }
+    return bPlayers && !bMonsters;
+}
+
+function bool InPlayerBlocker(Actor A)
+{
+    local int i;
+
+    for (i = 0; i < PlayerBlockers.Length; i++)
+        if (PlayerBlockers[i] != None && PlayerBlockers[i].Encompasses(A))
+            return true;
+    return false;
+}
+
+// (going in from A: a line that starts inside a brush is not seen to leave it)
+function bool CrossesPlayerBlocker(vector A, vector B)
+{
+    local vector HL, HN;
+    local int i;
+
+    for (i = 0; i < PlayerBlockers.Length; i++)
+        if (PlayerBlockers[i] != None && !PlayerBlockers[i].TraceThisActor(HL, HN, B, A))
+            return true;
+    return false;
 }
 
 function PowerUpMessage(string S)

@@ -112,8 +112,6 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 // changes colors on Device (notified in anim)
 simulated function DeviceGoRed()
 {
-	if ( Level.NetMode != NM_DedicatedServer )
-		class'KFScreenFX'.static.Wave(Level, Location + vect(0,0,30), 1.3);
 	Skins[2]=FinalBlend'KFCharacters.RedPoundMeter';
 	Skins[3]=Shader'KFCharacters.FPRedBloomShader';
 }

@@ -25,7 +25,6 @@ simulated function Timer()
 	local PlayerController PC;
 
 	Spawn(class'KFGloryFlash',,, Location);
-	class'KFScreenFX'.static.Wave(Level, Location, 0.7);
 	// the one who made the kill feels it: the view kicks wide and shakes
 	PC = Level.GetLocalPlayerController();
 	if ( PC != None && PC.Pawn != None && PC.Pawn == Instigator )

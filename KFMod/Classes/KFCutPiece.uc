@@ -181,7 +181,7 @@ simulated function Cut( vector Spot, vector Normal, vector Along, float Width, M
 	{
 		T = class'KFTrauma'.static.CutSource(Piece.Skins[i]);
 		if ( T == None )
-			T = Texture'KFCutMeat';
+			T = class'KFTrauma'.default.StumpSkin;
 		Piece.Skins[i] = class'KFTrauma'.static.CutSkin(Made, Level, T, CutCoords);
 	}
 	if ( !bNoShell )
@@ -214,7 +214,7 @@ simulated function MakeShell()
 	}
 	for ( i=0; i<ScaledBones.Length; i++ )
 		Shell.SetBoneScale(i, ScaledBy[i], ScaledBones[i]);
-	Meat = class'KFTrauma'.static.CutSkin(Made, Level, Texture'KFCutMeat', CutCoords);
+	Meat = class'KFTrauma'.static.CutSkin(Made, Level, class'KFTrauma'.default.StumpSkin, CutCoords);
 	Shell.Skins.Length = Piece.Skins.Length;
 	for ( i=0; i<Shell.Skins.Length; i++ )
 		Shell.Skins[i] = Meat;

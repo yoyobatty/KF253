@@ -8,8 +8,8 @@
   ../Textures/KFWoundFade.tga     the wounds' depth gradient: full from just in front of the projector, gone past the end
   ../Textures/KFCutEdge.tga       where a cut body is kept (alpha), along U: kept below the middle, with a torn line
   ../Textures/KFCutMeat.tga       raw meat, tiling: what a cut body shows inside
-  ../Textures/KFCutSkull.tga      a head cut down the middle: skull, brain, the lot (alpha: the head's outline)
-  ../Textures/KFCutTorso.tga      a body cut across: spine, ribs, gut, fat under the skin (alpha: the outline)
+  ../Textures/KFCutSkull.tga      a head cut down the middle (alpha: the head's outline, torn)
+  ../Textures/KFCutTorso.tga      a body cut across (alpha: the outline, torn)
   ../Textures/KFCutRing.tga       a torso cylinder seen end on (alpha 0 inside the ellipse, 255 out): limits a cut
   ../Models/KFCutCap.ase          a flat square, two units across, facing +X: the cut faces wear it
 
@@ -278,6 +278,14 @@ def meat(n=128):
     tga('KFCutMeat.tga', n, n, rows)
 
 
+def torn(nz, ang, seed):
+    # a torn edge: small ragged bites and tags along the outline (the face's colour is KF's severed-stump skin, set in
+    # KFTrauma.FaceSkin; only these outlines are used)
+    a = nz.at(math.cos(ang) * 9 + 3 * seed, math.sin(ang) * 9 + 5 * seed) - 0.5
+    b = nz.at(math.cos(ang) * 23 + 7 * seed, math.sin(ang) * 23 + 2 * seed) - 0.5
+    return 0.07 * a + 0.05 * b
+
+
 def skull(n=256):
     # a head cut through: the outline an oval, skin and scalp, the skull's bone, then brain; the face side (U < 0)
     # has the jaw and the hollows
@@ -291,7 +299,7 @@ def skull(n=256):
             ang = math.atan2(v, u)
             wob = 0.035 * (nz.at(math.cos(ang) * 2 + 5, math.sin(ang) * 2 + 5) - 0.5) * 2
             r = math.hypot(u / 0.98, v / 0.92)
-            out = 0.94 + wob
+            out = min(0.99, 0.91 + wob + torn(nz2, ang, 1))
             if r > out:
                 row.append((0, 0, 0, 0))
                 continue
@@ -331,7 +339,7 @@ def torso(n=256):
             ang = math.atan2(v, u)
             wob = 0.04 * (nz.at(math.cos(ang) * 2.5 + 3, math.sin(ang) * 2.5 + 3) - 0.5) * 2
             r = math.hypot(u / 0.98, v / 0.80)
-            out = 0.95 + wob
+            out = min(0.99, 0.92 + wob + torn(nz2, ang, 2))
             if r > out:
                 row.append((0, 0, 0, 0))
                 continue
@@ -375,7 +383,7 @@ def sagittal(w=128, h=256):
             ang = math.atan2(v, u)
             wob = 0.05 * (nz.at(math.cos(ang) * 2 + 3, math.sin(ang) * 2 + 3) - 0.5) * 2
             r = math.hypot(u / 0.97, v / 0.97)
-            out = 0.95 + wob
+            out = min(0.99, 0.92 + wob + torn(nz2, ang, 3))
             if r > out:
                 row.append((0, 0, 0, 0))
                 continue

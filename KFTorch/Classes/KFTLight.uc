@@ -73,7 +73,10 @@
 //   lit by cones of their own, as bodies are, by how solid they are: in their
 //   own colours (Sheen) or, where that cannot be done, in the light's
 //   (SheenX). What is cut out and not seen through, a wire fence, stays in
-//   the pictures and throws the shadow of its wires.
+//   the pictures and throws the shadow of its wires. Where the cut is one
+//   the renderer cannot follow when it lays a cone on the thing (a bush of
+//   cards cut out by a FinalBlend), the cones are kept off it: it throws its
+//   shadow and is not lit.
 //
 // Where the light is: on the weapon. After each frame the screen hook
 // (KFTHud) notes where the weapon's light bone was from the eye, and which
@@ -224,7 +227,7 @@ var ScriptedTexture	Faint;				// the light's pattern, that much of it
 var ConstantColor	FaintK;
 var Material		FaintOver, FaintSeen, LitFaint;
 var array<Actor>	AllSheer;			// every model in the level that can be seen through
-var array<byte>		AllSheerKind;		// (1 lit in its own colours, 2 lit in the light's colour, 3 not lit, 4 solid with parts seen through, lit in its own colours)
+var array<byte>		AllSheerKind;		// (1 lit in its own colours, 2 lit in the light's colour, 3 not lit, 4 solid with parts seen through, lit in its own colours, 5 cut out where the cones cannot follow: in the pictures, not lit)
 var bool			bSheerFound;
 var array<Actor>	Sheer;				// those of them within the light's reach
 var array<byte>		SheerKind;
@@ -702,11 +705,15 @@ simulated function bool OwnColours(Actor A)
 //   1  seen through, and lit in its own colours: one texture that says how solid it is too
 //   2  seen through, and lit in the light's colour: its colours are several textures, how solid it is is one
 //   3  seen through and not lit: what darkens, brightens or glows over what is behind it
+//   5  cut out where the light's cones cannot follow the cut: by a FinalBlend's alpha test, or a cut-out texture under
+//      a modifier. (A projector finds how solid a surface is only in its own texture or Shader; on anything else it lays
+//      itself whole. On KF-WickedCity's bushes the light lay on the whole of each card, a sheet of the street behind.)
+//      In the pictures as cut out, so it throws its shadow, and kept clear of the cones: not lit.
 simulated function int MatKind(Material M)
 {
 	local Shader Sh;
 	local int n;
-	local bool bMoving;
+	local bool bMoving, bUnder;
 
 	for (n = 0; n < 6 && M != None; n++)
 	{
@@ -731,13 +738,17 @@ simulated function int MatKind(Material M)
 		if (FinalBlend(M) != None)
 		{
 			if (FinalBlend(M).AlphaTest)
-				return 0;
+				return 5;
 			if (FinalBlend(M).FrameBufferBlending != FB_Overwrite && FinalBlend(M).FrameBufferBlending != FB_Invisible)
 				return 3;
+			// (drawn solid whatever is under it)
+			bUnder = false;
 			M = FinalBlend(M).Material;
 		}
 		else if (Texture(M) != None)
 		{
+			if (Texture(M).bMasked && bUnder)
+				return 5;
 			if (Texture(M).bMasked || !Texture(M).bAlphaTexture)
 				return 0;
 			if (bMoving)
@@ -748,6 +759,7 @@ simulated function int MatKind(Material M)
 		{
 			if (Moves(M))
 				bMoving = true;
+			bUnder = true;
 			M = Modifier(M).Material;
 		}
 		else
@@ -800,7 +812,7 @@ simulated function string OmitAhead()
 	Best = 0.94;
 	for (i = 0; i < Sheer.Length; i++)
 	{
-		if (Sheer[i] == None || Sheer[i].StaticMesh == None || SheerKind[i] == 3)
+		if (Sheer[i] == None || Sheer[i].StaticMesh == None || SheerKind[i] == 3 || SheerKind[i] == 5)
 			continue;
 		To = Sheer[i].Location - Apex;
 		Near = Normal(To) dot Aim;
@@ -869,7 +881,7 @@ simulated function KeepSheerMat(Material M)
 {
 	local int i, n;
 
-	if (M == None || MatKind(M) == 0)
+	if (M == None || MatKind(M) == 0 || MatKind(M) == 5)
 		return;
 	for (n = 0; n < 6 && M != None; n++)
 	{
@@ -971,7 +983,7 @@ simulated function bool SeeThroughBody(Actor A)
 	if (A.Skins.Length == 0)
 		return false;
 	for (i = 0; i < A.Skins.Length; i++)
-		if (A.Skins[i] == None || MatKind(A.Skins[i]) == 0)
+		if (A.Skins[i] == None || MatKind(A.Skins[i]) == 0 || MatKind(A.Skins[i]) == 5)
 			return false;
 	return true;
 }
@@ -1074,7 +1086,7 @@ simulated function int SheerKindOf(Actor A)
 {
 	local string Kinds;
 	local int i, n, K, Most;
-	local bool bSolid;
+	local bool bSolid, bCut;
 
 	if (A.StaticMesh == None)
 		return 0;
@@ -1090,9 +1102,22 @@ simulated function int SheerKindOf(Actor A)
 			K = int(Mid(Kinds, i, 1));
 		else
 			continue;
+		if (K == 5)
+		{
+			bCut = true;
+			continue;
+		}
 		if (K == 0)
 			bSolid = true;
 		Most = Max(Most, K);
+	}
+	// (A part cut out where the cones cannot follow the cut keeps them off the whole of it, solid parts too; with no
+	// solid part and see-through ones, it is left out of the pictures and unlit as well.)
+	if (bCut)
+	{
+		if (!bSolid && Most != 0)
+			return 3;
+		return 5;
 	}
 	// (A solid model with parts seen through and lit in their own colours, a door with a pane of glass, is kind 4
 	// if all of it can be lit so. Lit from the light's pictures, the pane had the room behind it laid on it a second
@@ -1242,7 +1267,9 @@ simulated function FindSheer()
 simulated function Shun(bool bOn)
 {
 	local Actor A;
-	local int i, n;
+	local int i, n, Lo, Hi, m;
+	local float D;
+	local array<float> Near;
 
 	HideSheer(false);
 	if (bShunned)
@@ -1261,16 +1288,38 @@ simulated function Shun(bool bOn)
 		NextSheer = Level.TimeSeconds + 0.25;
 		Sheer.Length = 0;
 		SheerKind.Length = 0;
-		for (i = 0; i < AllSheer.Length && n < 128; i++)
+		for (i = 0; i < AllSheer.Length; i++)
 		{
 			A = AllSheer[i];
 			// (every one within reach, whichever way the light points: one that came into this as the light turned
 			// would change from the one way of being lit to the other in full view)
-			if (A == None || A.bDeleteMe || A.bHidden || VSize(A.Location - Apex) > MaxRange)
+			if (A == None || A.bDeleteMe || A.bHidden)
 				continue;
-			Sheer[n] = A;
-			SheerKind[n] = AllSheerKind[i];
-			n++;
+			D = VSize(A.Location - Apex);
+			if (D > MaxRange || (n >= 128 && D >= Near[n - 1]))
+				continue;
+			// (the 128 nearest, in order: in a city every puddle and stain is one, and taken as the level lists them
+			// those by the light were left out)
+			Lo = 0;
+			Hi = n;
+			while (Lo < Hi)
+			{
+				m = (Lo + Hi) / 2;
+				if (Near[m] < D)
+					Lo = m + 1;
+				else
+					Hi = m;
+			}
+			Sheer.Insert(Lo, 1);
+			SheerKind.Insert(Lo, 1);
+			Near.Insert(Lo, 1);
+			Sheer[Lo] = A;
+			SheerKind[Lo] = AllSheerKind[i];
+			Near[Lo] = D;
+			n = Min(n + 1, 128);
+			Sheer.Length = n;
+			SheerKind.Length = n;
+			Near.Length = n;
 		}
 	}
 	for (i = 0; i < Sheer.Length; i++)
@@ -1521,6 +1570,12 @@ simulated function HideSheer(bool bOn)
 	{
 		if (Sheer[i] == None || Sheer[i].bDeleteMe)
 			continue;
+		// (cut out as the cones cannot follow: in the pictures whole)
+		if (SheerKind[i] == 5)
+		{
+			SheerHid[i] = 0;
+			continue;
+		}
 		// (a solid model with see-through parts stays in the pictures, but for those parts where it can be so)
 		if (SheerKind[i] == 4)
 		{

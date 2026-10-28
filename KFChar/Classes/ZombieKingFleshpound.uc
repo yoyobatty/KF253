@@ -4,7 +4,7 @@
 //  - a chest beam: it plants itself, its chest glows, and a red-hot beam sweeps after its target, burning what it
 //    crosses (BeamPhase, replicated: every machine draws it, KFKingBeamFX);
 //  - a ground pound when players crowd it: the floor blasts up round it, throwing them back (KFKingPound);
-//  - shields: at three quarters, half and a quarter of its health it shuts itself in a ball of red glass that takes
+//  - shields: at three quarters, half and a quarter of its health it shuts itself in a ball of red energy that lets
 //    almost nothing through it (KFShieldBubble on each machine), and Quarter Pounds teleport in to fight for it;
 //    the ball breaks when it has soaked enough or its time is up;
 //  - and below RageAtShare of its health it never stops raging.
@@ -321,7 +321,6 @@ simulated function KingLook()
 	else if ( !bShielded && Bubble != None )
 	{
 		Spawn(class'KFTeleportFlash',,, Location);
-		class'KFScreenFX'.static.Wave(Level, Location, 2.0);
 		Bubble.Destroy();
 		Bubble = None;
 	}

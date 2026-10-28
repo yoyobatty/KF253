@@ -16,6 +16,6 @@ defaultproperties
      LowGoreBloodGibClass=Class'KFMod.KFBloodPuff'
      LowGoreBloodEmitClass=Class'KFMod.KFBloodPuff'
      BloodEmitClass=Class'KFMod.KFBloodPuff'
-     NoBloodEmitClass=Class'KFMod.KFBloodPuff'
-     NoBloodHitClass=Class'KFMod.KFBloodPuff'
+     NoBloodEmitClass=Class'KFMod.KFNoBloodHit'
+     NoBloodHitClass=Class'KFMod.KFNoBloodHit'
 }

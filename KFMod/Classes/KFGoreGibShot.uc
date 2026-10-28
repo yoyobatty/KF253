@@ -64,7 +64,7 @@ simulated function Dress()
 	RotationRate.Pitch = Rand(120000) - 60000;
 	RotationRate.Yaw = Rand(120000) - 60000;
 	RotationRate.Roll = Rand(120000) - 60000;
-	if ( FRand() < 0.6 )
+	if ( FRand() < 0.6 && class'KFGoreLevel'.static.Level() >= 2 )
 	{
 		Trail = Spawn(class'KFGibJet', self,, Location, Rotation);
 		if ( Trail != None )
@@ -109,7 +109,8 @@ simulated function Lay( vector HitNormal )
 	if ( bDone )
 		return;
 	bDone = true;
-	if ( Level.NetMode != NM_DedicatedServer )
+	// (with the gore turned down it is gone where it lands: KFGoreLevel)
+	if ( Level.NetMode != NM_DedicatedServer && class'KFGoreLevel'.static.Level() >= 2 )
 	{
 		Spawn(class'KFBloodSplat',,, Location + HitNormal * 20.0, rotator(-HitNormal));
 		G = Spawn(GibClass(),,, Location + HitNormal * 6.0, Rotation);

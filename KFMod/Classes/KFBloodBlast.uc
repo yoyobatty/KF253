@@ -125,7 +125,7 @@ simulated function Throw()
 		Emitters[i].StartVelocityRange.Y.Max += Dir.Y * 220.0 * K;
 		Emitters[i].StartVelocityRange.Z.Min += Dir.Z * 220.0 * K;
 		Emitters[i].StartVelocityRange.Z.Max += Dir.Z * 220.0 * K;
-		n = Min(int(Counts[i] * Size + FRand()), Emitters[i].MaxParticles);
+		n = Min(int(Counts[i] * Size * class'KFGoreLevel'.static.Blood() + FRand()), Emitters[i].MaxParticles);
 		if ( i == 1 || i == 5 )
 			n = int(n * CloseK + FRand());
 		if ( n > 0 )
@@ -135,7 +135,7 @@ simulated function Throw()
 	// where it lands: a splash for each line out that meets a wall or the floor near enough, the near ones bigger,
 	// and always one under it
 	R = StainReach * K;
-	n = Clamp(int(Stains * Size + 0.5), 2, 18);
+	n = Clamp(int(Stains * Size * class'KFGoreLevel'.static.Blood() + 0.5), 2, 18);
 	for ( i = 0; i < n; i++ )
 	{
 		if ( i == 0 )

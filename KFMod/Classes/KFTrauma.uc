@@ -18,7 +18,9 @@ class KFTrauma extends Object
 #exec TEXTURE IMPORT NAME=KFCutTorso FILE=..\KFMod254\KFMod\Textures\KFCutTorso.tga ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 #exec TEXTURE IMPORT NAME=KFCutSagittal FILE=..\KFMod254\KFMod\Textures\KFCutSagittal.tga ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 
-var() bool		bTrauma;			// splits, tops and cuts in two at all
+var() bool		bTrauma;			// the masked cuts at all: heads split, skull tops, cleaves, the masked waist cut (off: the user
+								// wanted two bodies instead, 10-28; a waist cut is KFMonster.CutInTwo)
+var() Texture	StumpSkin;			// what a cut's face is made of: the severed stumps' skin (the face pictures give the outlines)
 var() float		HeadFace;			// the cut face of a head split down the middle, against the head's hit radius
 var() float		TopFace;			// ...of the top of a skull taken off across the brow
 var() int		HeadTopDamage;		// a round that takes the head off with this much damage or more...
@@ -38,7 +40,7 @@ var bool		bDeviceRead, bDeviceCuts;	// (DeviceCuts)
 var name		WoundBones[14], WoundEnds[14];
 var float		WoundRadii[14];
 var int			WoundJoints[14];	// the sever slot whose loss takes a wound on that bone
-var() bool		bWounds;
+var() bool		bWounds;			// wound marks where hits land, and holes right through (off: the user did not like them, 10-28)
 var() float		WoundStandOff;		// a wound is cast from this far out of the body
 var() int		ExitDamage;			// a single round of this much damage or more tears its way out of the far side
 var() float		HoleSize, HeavyHoleSize, ExitSize, CavitySize, GashSize;	// across the projector, in units
@@ -142,9 +144,21 @@ static function FinalBlend CutSkin( out array<Object> Made, LevelInfo L, Materia
 static function FinalBlend FaceSkin( out array<Object> Made, LevelInfo L, Material Pic )
 {
 	local FinalBlend F;
+	local Combiner C;
 
+	// (the meat is the severed stumps' own, as on a limb torn off; the picture gives only the outline)
+	C = Combiner(L.ObjectPool.AllocateObject(class'Combiner'));
+	C.Material1 = default.StumpSkin;
+	C.Material2 = Pic;
+	C.CombineOperation = CO_Use_Color_From_Material1;
+	C.AlphaOperation = AO_Use_Alpha_From_Material2;
+	C.Modulate2X = false;
+	C.Modulate4X = false;
+	C.InvertMask = false;
+	C.Mask = None;
+	Made[Made.Length] = C;
 	F = FinalBlend(L.ObjectPool.AllocateObject(class'FinalBlend'));
-	F.Material = Pic;
+	F.Material = C;
 	F.FrameBufferBlending = FB_Overwrite;
 	F.ZWrite = true;
 	F.ZTest = true;
@@ -654,7 +668,8 @@ static function bool CutWaist( KFMonster M, rotator Dir, class<DamageType> Damag
 
 defaultproperties
 {
-     bTrauma=True
+     bTrauma=False
+     StumpSkin=Texture'22CharTex.SeveredSkin'
      HeadFace=0.780000
      TopFace=0.480000
      HeadTopDamage=90
@@ -724,7 +739,7 @@ defaultproperties
      WoundJoints(11)=6
      WoundJoints(12)=1
      WoundJoints(13)=7
-     bWounds=True
+     bWounds=False
      WoundStandOff=6.000000
      ExitDamage=55
      HoleSize=17.000000

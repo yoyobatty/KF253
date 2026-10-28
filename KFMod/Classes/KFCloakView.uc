@@ -17,6 +17,7 @@ var() float Back;				// how far behind the body's middle the plane it is pulled 
 var() float Breath, BreathRate;	// the pull swells and sinks by this share, this fast (radians a second)
 var() float Reach;				// seen from farther than this, the old cloak
 var() int MaxCloaks;			// at most this many at once
+var() bool bGlassCloak;			// at all (off: the user did not like it, 10-28; the old cloak)
 var ConstantColor Tint;
 var Combiner Tinted;
 var FinalBlend Glass;
@@ -32,7 +33,7 @@ static function Take( KFMonster M )
 	local KFCloakView V;
 	local int i, n;
 
-	if ( M == None || M.Level.NetMode == NM_DedicatedServer )
+	if ( !default.bGlassCloak || M == None || M.Level.NetMode == NM_DedicatedServer )
 		return;
 	P = M.Level.GetLocalPlayerController();
 	if ( P == None )

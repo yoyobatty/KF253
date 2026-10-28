@@ -77,8 +77,8 @@ var(AI) float MinTimeBetweenPainAnims;
 var bool playedHit;
 var vector KickLocation, ImpactVector;
 var actor KickTarget;
-var bool bPlayBrainSplash;
-var vector TraumaRay;
+var bool bPlayBrainSplash;		// every machine has been told the head is gone
+var vector TraumaRay;			// (server) the line of the hit being dealt, for what it does to the head (HeadLossKind)
 var bool bCutBody;				// (each machine that draws it) cut through by KFTrauma: its skins are KFCutBody's (or KFHoleBody's)
 var KFHoleBody HoleBody;		// (each machine that draws it) the holes right through it
 
@@ -103,7 +103,7 @@ var bool bGloryDone;
 var float GloryUntil;
 var byte GloryFinish;					// how it comes apart (GloryGore)
 var vector GloryFrom;					// where the one finishing it stood
-var KFGloryGlow GloryGlow;			// (server) the line of the hit being dealt, for what it does to the head (HeadLossKind)		// every machine has been told the head is gone
+var KFGloryGlow GloryGlow;			// (each machine) its glow while bGloryReady
 var bool bPlayGoreSplash;		// blown to pieces: the body is removed instead of falling
 var float FeedThreshold; // OBSOLOTE.
 
@@ -332,6 +332,9 @@ var int SettleChecks;					// body timer checks in a row it has been slower than 
 var float SettleSpeed;					// a body this slow at SettleChecksNeeded checks a second apart settles (0: never)
 var int SettleChecksNeeded;
 var float SettledLinDamp, SettledAngDamp;	// its damping before it settled
+var float DiedAt;						// (each machine) when it died, for which body is oldest
+var bool bSinking;						// (each machine) over the bodies the gore level keeps: sinking into the floor (SinkBody)
+var() float SinkGrav, SinkTime;			// ...how strongly it falls through, and how long until it is gone
 
 var() Sound DecapSound;
 
@@ -2137,7 +2140,7 @@ function PostTrauma( name Kind, rotator Dir, class<DamageType> DamageType )
 // What a head shot that takes the head off does to it: a heavy round now and then takes the top of the skull off
 function name HeadLossKind( int Damage, class<DamageType> DamageType )
 {
-	if ( class<KFWeaponDamageType>(DamageType) == None || !DamageType.default.bLocationalHit || IsPowerHit(DamageType)
+	if ( !class'KFTrauma'.default.bTrauma || class<KFWeaponDamageType>(DamageType) == None || !DamageType.default.bLocationalHit || IsPowerHit(DamageType)
 		|| class<DamTypeMelee>(DamageType) != None || Damage < class'KFTrauma'.default.HeadTopDamage || TraumaRay == vect(0,0,0)
 		|| FRand() >= class'KFTrauma'.default.HeadTopChance )
 		return HeadBone;
@@ -2271,13 +2274,13 @@ function name BladeCut( class<DamTypeMelee> DamageType )
 			BestAcross = Across;
 		}
 	}
-	// (KFTrauma) a chopping blade through the trunk, killing, goes on through it: across it, in two at the waist; down
-	// along it, often cleaving the body in two
-	if ( Cut == 'None' && Best < 100000.0 && DamageType.default.bChops && class'KFTrauma'.default.bTrauma )
+	// a chopping blade through the trunk, killing, goes on through it: across it, in two at the waist (CutInTwo); down
+	// along it, with KFTrauma's masked cuts on, often cleaving the body in two
+	if ( Cut == 'None' && Best < 100000.0 && DamageType.default.bChops )
 	{
 		if ( TrunkAcross != 0 )
 			return 'Bip01 Spine1';
-		if ( FRand() < class'KFTrauma'.default.CleaveChance )
+		if ( class'KFTrauma'.default.bTrauma && FRand() < class'KFTrauma'.default.CleaveChance )
 			return 'cleave';
 	}
 	if ( BestAcross == 0 )
@@ -2660,6 +2663,8 @@ simulated function PlayDying(class<DamageType> DamageType, vector HitLoc)
 	FireState = FS_None;
 
 	LifeSpan = RagdollLifeSpan;
+	DiedAt = Level.TimeSeconds;
+	MakeRoomForBody();
 
 	GotoState('ZombieDying');
 	if ( BE != None )
@@ -3155,8 +3160,8 @@ simulated function Sever( name Bone, rotator Dir, float Spread, optional class<D
 		class'KFBloodBlast'.static.Make(self, GetBoneCoords('Bip01 Spine2').Origin, 0.6 * BloodBlastSize(), 0.5 * vector(Dir));
 		return;
 	}
-	// (the Executioner's flying cut) the top half off whole
-	if ( Slot == 5 && class<DamTypeAxeSlash>(DamageType) != None && CutInTwo(Dir) )
+	// in two at the waist: the top half off as a body of its own, the legs left with a stump (a blade's or a blast's)
+	if ( Slot == 5 && CutInTwo(Dir) )
 		bWhole = true;
 	// the limb itself when it can be shown, and what still hangs from it goes with it;
 	// otherwise a clot's giblets stand in for it
@@ -3351,6 +3356,7 @@ simulated function name LimbBelow( name Joint )
 simulated function GibBody( rotator Dir, float Spread )
 {
 	local int i, Extra;
+	local float Keep;
 
 	if ( bGibbed || Level.NetMode == NM_DedicatedServer || class'GameInfo'.static.UseLowGore() )
 		return;
@@ -3369,30 +3375,32 @@ simulated function GibBody( rotator Dir, float Spread )
 		class'KFBloodBlast'.static.Make(self, Location, BloodBlastSize(), 0.5 * vector(Dir));
 	}
 
+	// (the head and trunk always; at Normal gore only some of the limbs, KFGoreLevel)
+	Keep = class'KFGoreLevel'.static.Gibs();
 	if ( Severed[5] == 0 )
 	{
 		if ( Severed[4] == 0 )
 			GibAt(MonsterHeadGiblet, HeadBone, Dir, Spread);
-		if ( Severed[3] == 0 )
+		if ( Severed[3] == 0 && FRand() < Keep )
 			GibAt(MonsterArmGiblet, 'Bip01 L Forearm', Dir, Spread);
-		if ( Severed[2] == 0 )
+		if ( Severed[2] == 0 && FRand() < Keep )
 			GibAt(MonsterArmGiblet, 'Bip01 R Forearm', Dir, Spread);
 		GibAt(MonsterTorsoGiblet, 'Bip01 Spine2', Dir, Spread);
 	}
 	GibAt(MonsterLowerTorsoGiblet, 'Bip01 Pelvis', Dir, Spread);
-	if ( Severed[0] == 0 )
+	if ( Severed[0] == 0 && FRand() < Keep )
 		GibAt(MonsterThighGiblet, 'Bip01 L Thigh', Dir, Spread);
-	if ( Severed[1] == 0 )
+	if ( Severed[1] == 0 && FRand() < Keep )
 		GibAt(MonsterThighGiblet, 'Bip01 R Thigh', Dir, Spread);
-	if ( Severed[6] == 0 )
+	if ( Severed[6] == 0 && FRand() < Keep )
 		GibAt(MonsterLegGiblet, 'Bip01 L Calf', Dir, Spread);
-	if ( Severed[7] == 0 )
+	if ( Severed[7] == 0 && FRand() < Keep )
 		GibAt(MonsterLegGiblet, 'Bip01 R Calf', Dir, Spread);
 
 	// and a few loose scraps
 	if ( !Level.bDropDetail && Level.DetailMode != DM_Low )
 	{
-		Extra = 2 + Rand(4);
+		Extra = class'KFGoreLevel'.static.SomeGibs(2 + Rand(4));
 		for ( i = 0; i < Extra; i++ )
 		{
 			if ( Rand(2) == 0 )
@@ -3586,6 +3594,57 @@ simulated function WakeBodiesNear()
 	foreach CollidingActors(class'KFMonster', M, 200)
 		if ( M != self && M.bSettledBody )
 			M.WakeBody();
+}
+
+// More bodies about than the gore level keeps (KFGoreLevel.MaxBodies, at Normal): the oldest sink into the floor. (The
+// unseen are taken away anyway: these are bodies in sight, and dozens of fresh ones cost a great deal.)
+simulated function MakeRoomForBody()
+{
+	local KFMonster M, Oldest;
+	local int n, Most;
+
+	Most = class'KFGoreLevel'.static.MaxBodies();
+	if ( Most <= 0 || Level.NetMode == NM_DedicatedServer )
+		return;
+	n = 1;
+	foreach DynamicActors(class'KFMonster', M)
+		if ( M != self && M.KeptBody() )
+			n++;
+	while ( n > Most )
+	{
+		Oldest = None;
+		foreach DynamicActors(class'KFMonster', M)
+			if ( M != self && M.KeptBody() && (Oldest == None || M.DiedAt < Oldest.DiedAt) )
+				Oldest = M;
+		if ( Oldest == None )
+			break;
+		Oldest.SinkBody();
+		n--;
+	}
+}
+
+// A body lying about that counts against the gore level's limit
+simulated function bool KeptBody()
+{
+	return bPlayedDeath && !bSinking && !bGibbed && !bDeleteMe && Physics == PHYS_KarmaRagdoll;
+}
+
+// Over the limit: out of the world's contacts as a settled body is, shots going through it, it sinks into the floor and
+// is gone
+simulated function SinkBody()
+{
+	local KarmaParamsSkel Skel;
+
+	Skel = KarmaParamsSkel(KParams);
+	if ( bSinking || Skel == None || Physics != PHYS_KarmaRagdoll )
+		return;
+	if ( !bSettledBody )
+		SettleBody();
+	bSinking = true;
+	StartDeRes();
+	Skel.KActorGravScale = SinkGrav;
+	KWake();
+	LifeSpan = FMin(LifeSpan, SinkTime);
 }
 
 simulated function StartDeRes()
@@ -4106,11 +4165,12 @@ function GloryKill( Pawn Killer )
 	TakeDamage(Health + 1000, Killer, Location, Normal(Location - Killer.Location) * 30000.0, class'DamTypeGlory');
 }
 
-// How a glory kill tears it apart: split, cleaved, cut in two, the top of the skull off, or the arms torn off and the
-// head split
+// How a glory kill tears it apart: the head off; in two at the waist; in two and the head off; the arms and the head
+// off; or the legs and the head off
 function GloryGore( class<DamageType> DamageType )
 {
 	local vector Toward, Side, Away;
+	local rotator Up;
 
 	Toward = Location - GloryFrom;
 	Toward.Z = 0;
@@ -4119,28 +4179,29 @@ function GloryGore( class<DamageType> DamageType )
 	Toward = Normal(Toward);
 	Side = Normal(Toward cross vect(0,0,1));
 	Away = Normal(Toward + vect(0,0,1.2));
-	bDecapitated = true;
-	bPlayBrainSplash = true;
+	// (a part flies along the up axis of the rotation it is given)
+	Up = rotator(Away) - rot(16384,0,0);
+	// the head first: cut in two after, the top half goes without it
+	if ( GloryFinish != 1 )
+	{
+		bDecapitated = true;
+		bPlayBrainSplash = true;
+		PostHitFX(HeadBone, DamageType, Up, CanSever(HeadBone, 1000, DamageType));
+	}
 	switch ( GloryFinish )
 	{
-		case 0:
-			PostHitFX('headsplit', DamageType, rotator(Side), true);
-			break;
 		case 1:
-			PostHitFX('cleave', DamageType, rotator(Side), true);
-			break;
 		case 2:
-			// (a part flies along the up axis of the rotation it is given)
-			PostHitFX('headtop', DamageType, rotator(Away), true);
-			DoDamageFX('Bip01 Spine1', 1000, DamageType, rotator(Away) - rot(16384,0,0));
+			DoDamageFX('Bip01 Spine1', 1000, DamageType, Up);
 			break;
 		case 3:
-			PostHitFX('headtop', DamageType, rotator(Away), true);
-			break;
-		default:
 			DoDamageFX('Bip01 L UpperArm', 1000, DamageType, rotator(Normal(Away - Side)) - rot(16384,0,0));
 			DoDamageFX('Bip01 R UpperArm', 1000, DamageType, rotator(Normal(Away + Side)) - rot(16384,0,0));
-			PostHitFX('headsplit', DamageType, rotator(Side), true);
+			break;
+		case 4:
+			DoDamageFX('Bip01 L Thigh', 1000, DamageType, rotator(Normal(Toward - Side)) - rot(16384,0,0));
+			DoDamageFX('Bip01 R Thigh', 1000, DamageType, rotator(Normal(Toward + Side)) - rot(16384,0,0));
+			break;
 	}
 }
 
@@ -4990,6 +5051,9 @@ simulated function Destroyed()
 		if ( Wounds[i] != None )
 			Wounds[i].Destroy();
 	Wounds.Length = 0;
+	// (one removed in the frame it died, as one blown to pieces, never ticks again to put its glory glow out)
+	if ( GloryGlow != None )
+		GloryGlow.Destroy();
 	RemoveFlamingEffects();
 	// (what smoke there is hangs a moment where the body was)
 	if ( CorpseSmoke != None )
@@ -5384,6 +5448,8 @@ defaultproperties
      RagdollLifeSpan=30.000000
      SettleSpeed=5.000000
      SettleChecksNeeded=2
+     SinkGrav=0.350000
+     SinkTime=3.000000
      RagDeathVel=150.000000
      RagShootStrength=6000.000000
      RagDeathUpKick=170.000000

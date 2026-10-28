@@ -147,7 +147,8 @@ simulated function Splatter( vector At, vector Facing, class<KFMonster> B )
 	Fling(B.default.MonsterThighGiblet, At, Facing);
 	Fling(B.default.MonsterLegGiblet, At, Facing);
 	Fling(B.default.MonsterLegGiblet, At, Facing);
-	Spawn(class'KFBloodSplatterBig',,, At + Facing * 20.0, rotator(-Facing));
+	if ( class'KFGoreLevel'.static.Level() >= 2 )
+		Spawn(class'KFBloodSplatterBig',,, At + Facing * 20.0, rotator(-Facing));
 	PlaySound(Sound'PlayerSounds.NewGibs.NewGib4', SLOT_None, class'KFBloodBlast'.static.GoreVol(2.5),, class'KFBloodBlast'.static.GoreRadius(2.5, 2000), 0.9);
 }
 

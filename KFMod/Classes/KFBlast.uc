@@ -8,8 +8,9 @@
 class KFBlast extends Actor
 	abstract;
 
-// A blast of Size (a rocket's is 1) at Spot, off the surface facing Normal
-static function Go( Actor Maker, vector Spot, vector Normal, float Size )
+// A blast of Size (a rocket's is 1) at Spot, off the surface facing Normal; bNoWave for one that is not a weapon's (the
+// air bends round the weapons' blasts alone: a wave is dear, a picture of the scene each)
+static function Go( Actor Maker, vector Spot, vector Normal, float Size, optional bool bNoWave )
 {
 	local vector HitLoc, HitNorm, Down;
 	local Material Mat;
@@ -53,7 +54,8 @@ static function Go( Actor Maker, vector Spot, vector Normal, float Size )
 	Light = Maker.Spawn(class'KFBlastLight',,, Spot + Normal * 40);
 	if ( Light != None )
 		Light.Size = Size;
-	class'KFScreenFX'.static.Wave(Maker.Level, Spot + Normal * 20, Size);
+	if ( !bNoWave )
+		class'KFScreenFX'.static.Wave(Maker.Level, Spot + Normal * 20, Size);
 	Ceiling(Maker, Spot + Normal * 20, Size);
 }
 

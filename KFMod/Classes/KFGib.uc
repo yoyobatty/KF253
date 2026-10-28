@@ -15,6 +15,8 @@ var bool bBurst;						// (torn apart)
 var bool bPulled;						// (caught by a BFG ball's pull)
 var float Charred;						// (how far CharTo has charred it)
 var float EatAfter;						// (a bit just thrown off is not torn apart again at once)
+var bool bFrameLit;						// at rest, lit from the frame round it and not by the engine (TakeFrameLight)
+var Material FrameBase;					// ...and the skin it had
 
 // What it does when things go on round it (each machine that draws it has its own giblets)
 var() float BlastReach, BurstReach;		// a rocket's blast (Size 1): how far off giblets are thrown, and how close torn apart
@@ -24,6 +26,14 @@ var() float PullSpeed;					// ...how fast they fly in to it
 var() float PullSwirl;					// ...how fast they go round its path
 var() float EatRate;					// ...how many a second, of those that have reached it, it tears apart
 var() int MaxGibs;						// no new bits are made while this many giblets are about
+var() float UnseenLife;					// one at rest that has not been drawn for this long goes, as an unseen corpse does
+
+// (fewer lying about at Normal gore: each lies a shorter while, KFGoreLevel)
+simulated function PostBeginPlay()
+{
+	Super.PostBeginPlay();
+	LifeSpan *= class'KFGoreLevel'.static.Life();
+}
 
 simulated function HitWall( Vector HitNormal, Actor Wall )
 {
@@ -62,8 +72,9 @@ simulated function HitWall( Vector HitNormal, Actor Wall )
             Spawn( GibGroupClass.default.BloodHitClass,,, Location, Rotator(-HitNormal) );
         bBounce = False;
         SetPhysics(PHYS_None);
-        // (at rest: whoever walks through it kicks it along)
-        if ( !Level.bDropDetail && !bBurst )
+        TakeFrameLight();
+        // (at rest: whoever walks through it kicks it along, and out of sight it goes)
+        if ( !bBurst )
             SetTimer(0.2 + 0.1 * FRand(), true);
     }
 }
@@ -145,7 +156,7 @@ simulated function int Burst( vector Dir, float Speed, int Room )
 				n += 2;
 			if ( Level.bDropDetail || Level.DetailMode == DM_Low )
 				n = (n + 1) / 2;
-			n = Min(n, Room);
+			n = Min(class'KFGoreLevel'.static.SomeGibs(n), Room);
 			for ( i = 0; i < n; i++ )
 			{
 				if ( (i & 1) == 0 )
@@ -181,6 +192,17 @@ simulated function Timer()
 		SetTimer(0.0, false);
 		return;
 	}
+	// (giblets out of sight cost as much as those in it: hundreds lay about after a big fight)
+	if ( Level.TimeSeconds - SeenAt() > UnseenLife )
+	{
+		Destroy();
+		return;
+	}
+	// (the first to come to rest asked for the frame's soft picture, which is made from the next frame on)
+	if ( !bFrameLit )
+		TakeFrameLight();
+	if ( Level.bDropDetail )
+		return;
 	foreach CollidingActors(class'Pawn', P, 80.0, Location)
 	{
 		Speed = VSize(P.Velocity);
@@ -203,6 +225,44 @@ simulated function Timer()
 	}
 }
 
+// At rest it takes its light from the frame round it, not from the engine, whose gathering of the lights for each of
+// hundreds of giblets every frame was most of what they cost (KFScreenFX.GibSkin). A charred, frozen or ashen one, or
+// one whose skin is cut out or seen through, is lit as it was.
+simulated function TakeFrameLight()
+{
+	local Texture T;
+	local Material M;
+
+	if ( bFrameLit || bUnlit || bAsh || bIce || CharSkin != None || DrawType != DT_StaticMesh || Skins.Length == 0 )
+		return;
+	T = Texture(Skins[0]);
+	if ( T == None || T.bMasked || T.bAlphaTexture )
+		return;
+	M = class'KFScreenFX'.static.GibSkin(self, T);
+	if ( M == None )
+		return;
+	FrameBase = T;
+	Skins[0] = M;
+	bUnlit = true;
+	bFrameLit = true;
+}
+
+// Lit by the engine again, in its own skin
+simulated function DropFrameLight()
+{
+	if ( !bFrameLit )
+		return;
+	bFrameLit = false;
+	bUnlit = false;
+	Skins[0] = FrameBase;
+}
+
+// When it was last drawn
+simulated function float SeenAt()
+{
+	return LastRenderTime;
+}
+
 // How many bits may still be made
 static function int RoomFor( Actor A )
 {
@@ -211,7 +271,13 @@ static function int RoomFor( Actor A )
 
 	foreach A.DynamicActors(class'KFGib', G)
 		n++;
-	return Max(default.MaxGibs - n, 0);
+	return Max(MaxNow() - n, 0);
+}
+
+// How many giblets there may be about before no new bits are made (fewer at Normal gore, KFGoreLevel)
+static function int MaxNow()
+{
+	return int(default.MaxGibs * class'KFGoreLevel'.static.Gibs());
 }
 
 // A blast of Size (a rocket's 1) at Spot: the giblets close by are torn apart, those further off thrown away from it.
@@ -233,7 +299,7 @@ static function Blast( Actor Maker, vector Spot, float Size, optional float Char
 		if ( !G.bBurst && VSize(G.Location - Spot) < Reach )
 			Near[Near.Length] = G;
 	}
-	Room = Max(default.MaxGibs - Room, 0);
+	Room = Max(MaxNow() - Room, 0);
 	for ( i = 0; i < Near.Length; i++ )
 	{
 		G = Near[i];
@@ -269,7 +335,7 @@ static function Pull( Actor Ball, float DT )
 		if ( !G.bBurst && VSize(G.Location - Ball.Location) < default.PullReach )
 			Near[Near.Length] = G;
 	}
-	Room = Max(default.MaxGibs - Room, 0);
+	Room = Max(MaxNow() - Room, 0);
 	for ( i = 0; i < Near.Length; i++ )
 	{
 		G = Near[i];
@@ -328,7 +394,7 @@ static function Line( Actor Maker, vector A, vector B, float Width )
 		if ( VSize(G.Location - (A + Dir * T)) < Width + G.CollisionRadius )
 			Near[Near.Length] = G;
 	}
-	Room = Max(default.MaxGibs - Room, 0);
+	Room = Max(MaxNow() - Room, 0);
 	for ( i = 0; i < Near.Length; i++ )
 		if ( Near[i] != None && !Near[i].bBurst )
 			Room -= Near[i].Burst(Dir + vect(0,0,0.3), 700.0, Room);
@@ -356,7 +422,7 @@ static function Chop( Actor Maker, vector Eye, vector Aim, float Range, byte Kin
 		if ( T > 0.0 && T < Range && VSize(V - Aim * T) < 18.0 + 0.35 * T )
 			Near[Near.Length] = G;
 	}
-	Room = Max(default.MaxGibs - Room, 0);
+	Room = Max(MaxNow() - Room, 0);
 	for ( i = 0; i < Near.Length; i++ )
 	{
 		G = Near[i];
@@ -390,7 +456,7 @@ static function Struck( Actor Maker, vector Spot, float Power )
 	}
 	if ( Near.Length == 0 )
 		return;
-	Room = Max(default.MaxGibs - Room, 0);
+	Room = Max(MaxNow() - Room, 0);
 	for ( i = 0; i < Near.Length; i++ )
 	{
 		G = Near[i];
@@ -485,6 +551,7 @@ simulated function CharTo( float Amount )
 	if ( Amount <= Charred || Level.NetMode == NM_DedicatedServer )
 		return;
 	Charred = Amount;
+	DropFrameLight();
 	if ( CharSkin == None )
 	{
 		if ( Skins.Length == 0 )
@@ -523,4 +590,5 @@ defaultproperties
     PullSwirl=350.000000
     EatRate=8.000000
     MaxGibs=160
+    UnseenLife=3.000000
 }

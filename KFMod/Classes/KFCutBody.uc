@@ -48,7 +48,7 @@ simulated function Take( KFMonster M, name OnBone, vector Spot, vector CutN, vec
 	{
 		T = class'KFTrauma'.static.CutSource(M.Skins[i]);
 		if ( T == None )
-			T = Texture'KFCutMeat';
+			T = class'KFTrauma'.default.StumpSkin;
 		M.Skins[i] = class'KFTrauma'.static.CutSkin(Made, Level, T, Either);
 	}
 	M.bCutBody = true;
