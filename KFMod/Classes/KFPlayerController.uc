@@ -9,7 +9,8 @@ const LIBLIST_CATS=3;
 //TODO: Kill these last remenants of the old buy system
 var string BuyListHeaders[BUYLIST_CATS];
 var float WarpStart, WarpApplied, WarpedFOV;	// the Void Executioner's blink widening the view (StartWarp)
-var() float WarpKick, WarpRise, WarpFall;		// ...how many degrees, how soon, and back over how long
+var() float WarpKick, WarpRise, WarpFall;
+var float WarpKickNow;							// (this blink's: StartWarp)		// ...how many degrees, how soon, and back over how long
 var string LibraryListHeaders[LIBLIST_CATS];
 
 var bool bChoseStarting, bClassChosen;
@@ -295,9 +296,12 @@ function AdjustView(float DeltaTime )
 }
 
 // The Void Executioner's blink: the view flares wide and eases back (KFVoidArrival)
-simulated function StartWarp()
+simulated function StartWarp( optional float Kick )
 {
 	WarpStart = Level.TimeSeconds;
+	WarpKickNow = WarpKick;
+	if ( Kick > 0.0 )
+		WarpKickNow = Kick;
 }
 
 simulated final function UnWarpFOV()
@@ -328,7 +332,7 @@ simulated final function WarpFOV()
 		K = (T - WarpRise) / WarpFall;
 		K = 1.0 - K * K * (3.0 - 2.0 * K);
 	}
-	WarpApplied = FMin(WarpKick * K, 165.0 - FOVAngle);
+	WarpApplied = FMin(WarpKickNow * K, 165.0 - FOVAngle);
 	FOVAngle += WarpApplied;
 	WarpedFOV = FOVAngle;
 }
@@ -2399,6 +2403,40 @@ exec function CheatHelp( optional string Topic )
 		ClientMessage("Online they are for the server's admin (AdminLogin <password>) or the player hosting.");
 	// (the screen keeps the last few lines only)
 	ClientMessage("The whole list is in the console (~). CheatHelp <name>: what one does.");
+}
+
+// (Endless, Doom style) The use key finishes a specimen open to a glory kill that is in front of the player and in reach
+function ServerUse()
+{
+	local KFMonster M, Best;
+	local vector X, D;
+	local float Score, BestScore;
+
+	if ( Pawn != None && Pawn.Health > 0 && KFEndlessGameType(Level.Game) != None && KFEndlessGameType(Level.Game).bGloryKills )
+	{
+		X = vector(Rotation);
+		BestScore = -1.0;
+		foreach Pawn.VisibleCollidingActors(class'KFMonster', M, 260.0)
+		{
+			if ( !M.bGloryReady || M.Health <= 0 )
+				continue;
+			D = M.Location - Pawn.Location;
+			if ( VSize(D) > M.GloryReach() + 40.0 )
+				continue;
+			Score = Normal(D) dot X;
+			if ( Score > 0.4 && Score > BestScore )
+			{
+				BestScore = Score;
+				Best = M;
+			}
+		}
+		if ( Best != None )
+		{
+			Best.GloryKill(Pawn);
+			return;
+		}
+	}
+	Super.ServerUse();
 }
 
 defaultproperties

@@ -12,6 +12,12 @@ class HUDKillingFloor extends HudBase
 #exec TEXTURE IMPORT NAME=KFWarpVignette FILE=..\KFMod254\KFMod\Textures\KFWarpVignette.tga MIPS=ON ALPHA=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 
 var int KFHUDAlpha;
+
+var KFMonster GloryTarget;				// (Endless) one open to a glory kill in reach (DrawGloryPrompt)
+var float NextGloryLook;
+var KFLockdown Lockdown, LockdownSeen;	// (Endless) the lockdown going on, looked for twice a second (DrawLockdown)
+var float NextLockdownLook, LockdownSince;
+var byte LockdownPhaseSeen, LockdownStageSeen;
 var int GrainAlpha;
 
 var float HealthBarFullVisDist, HealthBarCutoffDist;
@@ -734,6 +740,8 @@ simulated function DrawHud( Canvas C )
 		DrawScreenBlood(C);
 	if ( VoidWarpTime > 0 )
 		DrawVoidWarp(C);
+	DrawLockdown(C);
+	DrawGloryPrompt(C);
 
 	if (!KFPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo).bViewingMatineeCinematic)
 	{
@@ -2296,6 +2304,119 @@ simulated function AddScreenBlood( float Amount )
 simulated function AddVoidWarp()
 {
 	VoidWarpTime = Level.TimeSeconds;
+}
+
+// (Endless) A specimen open to a glory kill in front of the player and within reach: the prompt under the crosshair
+simulated function DrawGloryPrompt( Canvas C )
+{
+	local KFMonster M;
+	local Pawn P;
+	local vector X;
+	local float XL, YL, Pulse;
+	local string S;
+
+	P = PlayerOwner.Pawn;
+	if ( P == None || P.Health <= 0 )
+		return;
+	if ( Level.TimeSeconds > NextGloryLook )
+	{
+		NextGloryLook = Level.TimeSeconds + 0.15;
+		GloryTarget = None;
+		X = vector(PlayerOwner.Rotation);
+		foreach VisibleCollidingActors(class'KFMonster', M, 260.0, P.Location)
+			if ( M.bGloryReady && M.Health > 0 && M.GloryNearLocal() && (Normal(M.Location - P.Location) dot X) > 0.4 )
+			{
+				GloryTarget = M;
+				break;
+			}
+	}
+	if ( GloryTarget == None || GloryTarget.bDeleteMe || !GloryTarget.bGloryReady )
+		return;
+	Pulse = 0.7 + 0.3 * Sin(Level.TimeSeconds * 10.0);
+	S = "USE OR MELEE  -  GLORY KILL";
+	C.Font = HeightFont(C, 5);
+	C.StrLen(S, XL, YL);
+	C.Style = ERenderStyle.STY_Alpha;
+	C.SetDrawColor(255, 150 * Pulse + 50, 30, 235);
+	C.SetPos(0.5 * (C.ClipX - XL), 0.58 * C.ClipY);
+	C.DrawText(S, false);
+}
+
+// (Endless) a lockdown's word on the screen (KFLockdown): LOCKDOWN as it closes, its stage and what is left of it while it
+// lasts, LOCKDOWN CLEARED at the end
+simulated function DrawLockdown( Canvas C )
+{
+	local KFLockdown L;
+	local string Big, Small;
+	local float XL, YL, Fade, Pulse;
+
+	if ( Level.TimeSeconds > NextLockdownLook )
+	{
+		NextLockdownLook = Level.TimeSeconds + 0.5;
+		Lockdown = None;
+		foreach DynamicActors(class'KFLockdown', L)
+			Lockdown = L;
+	}
+	if ( Lockdown == None || Lockdown.bDeleteMe || Lockdown.Radius <= 0 )
+		return;
+	if ( Lockdown != LockdownSeen || Lockdown.Phase != LockdownPhaseSeen || Lockdown.Stage != LockdownStageSeen )
+	{
+		LockdownSeen = Lockdown;
+		LockdownPhaseSeen = Lockdown.Phase;
+		LockdownStageSeen = Lockdown.Stage;
+		LockdownSince = Level.TimeSeconds;
+	}
+	Fade = FClamp(3.0 - (Level.TimeSeconds - LockdownSince), 0.0, 1.0);
+	Pulse = 0.75 + 0.25 * Sin(Level.TimeSeconds * 8.0);
+	switch ( Lockdown.Phase )
+	{
+		case 0:
+			Big = "LOCKDOWN";
+			Small = "Kill them all to get out";
+			break;
+		case 3:
+			Big = "STAGE" @ (Lockdown.Stage + 1) @ "OF" @ Lockdown.Stages;
+			Small = "Here they come";
+			Fade = 1.0;
+			break;
+		case 2:
+			Big = "LOCKDOWN CLEARED";
+			Small = "";
+			break;
+		default:
+			if ( Lockdown.Stage == 1 && Level.TimeSeconds - LockdownSince < 2.0 )
+				Big = "STAGE 1 OF" @ Lockdown.Stages;
+	}
+	C.Style = ERenderStyle.STY_Alpha;
+	if ( Big != "" && Fade > 0.0 )
+	{
+		C.Font = HeightFont(C, 0);
+		C.StrLen(Big, XL, YL);
+		if ( Lockdown.Phase == 2 )
+			C.SetDrawColor(255, 200, 60, 255 * Fade);
+		else
+			C.SetDrawColor(255, 40 * Pulse, 20, 255 * Fade);
+		C.SetPos(0.5 * (C.ClipX - XL), 0.22 * C.ClipY);
+		C.DrawText(Big, false);
+		if ( Small != "" )
+		{
+			C.Font = HeightFont(C, 4);
+			C.StrLen(Small, XL, YL);
+			C.SetDrawColor(230, 190, 170, 220 * Fade);
+			C.SetPos(0.5 * (C.ClipX - XL), 0.22 * C.ClipY + 1.6 * YL + 0.04 * C.ClipY);
+			C.DrawText(Small, false);
+		}
+	}
+	// while it lasts: the stage and what is left, at the top
+	if ( Lockdown.Phase == 1 || Lockdown.Phase == 3 )
+	{
+		Small = "LOCKDOWN  STAGE" @ Lockdown.Stage $ "/" $ Lockdown.Stages $ "   " $ Lockdown.Remaining @ "LEFT";
+		C.Font = HeightFont(C, 5);
+		C.StrLen(Small, XL, YL);
+		C.SetDrawColor(255, 70 * Pulse, 40, 230);
+		C.SetPos(0.5 * (C.ClipX - XL), 0.085 * C.ClipY);
+		C.DrawText(Small, false);
+	}
 }
 
 simulated function DrawVoidWarp( Canvas C )

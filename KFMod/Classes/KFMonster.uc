@@ -77,7 +77,33 @@ var(AI) float MinTimeBetweenPainAnims;
 var bool playedHit;
 var vector KickLocation, ImpactVector;
 var actor KickTarget;
-var bool bPlayBrainSplash;		// every machine has been told the head is gone
+var bool bPlayBrainSplash;
+var vector TraumaRay;
+var bool bCutBody;				// (each machine that draws it) cut through by KFTrauma: its skins are KFCutBody's (or KFHoleBody's)
+var KFHoleBody HoleBody;		// (each machine that draws it) the holes right through it
+
+// (KFTrauma.NoteWound, KFWound) The wounds hits leave, as the server tells every machine: the bone (of KFTrauma's
+// fourteen), the kind, where the wound is cast from against the bone's axes, which way and its picture's top (both a
+// hundred times over: a vector goes over the net in whole numbers), its size
+struct WoundNote
+{
+	var byte Bone, Kind, Size;
+	var vector Spot, Dir, Up;
+};
+var WoundNote WoundNotes[8];
+var byte WoundTick, SimWoundTick;
+var array<KFWound> Wounds;			// (each machine that draws it) the wounds on it, oldest first
+var() int MaxWounds;				// ...no more than this many; the oldest goes
+var float LastCavityTime, LastPelletWound;
+
+// (Endless, Doom style) Knocked low, it staggers and glows, open for a few seconds to a glory kill: a blow by hand or the
+// use key within reach tears it apart and gives the one who did it health, ammunition and armour (StartGlory, GloryKill)
+var bool bGloryReady;
+var bool bGloryDone;
+var float GloryUntil;
+var byte GloryFinish;					// how it comes apart (GloryGore)
+var vector GloryFrom;					// where the one finishing it stood
+var KFGloryGlow GloryGlow;			// (server) the line of the hit being dealt, for what it does to the head (HeadLossKind)		// every machine has been told the head is gone
 var bool bPlayGoreSplash;		// blown to pieces: the body is removed instead of falling
 var float FeedThreshold; // OBSOLOTE.
 
@@ -315,6 +341,8 @@ replication
 {
 	reliable if(Role == ROLE_Authority)
 		bDecapitated,Gored,bBurnified,bAshen,FeedThreshold,bCannibal,bDiffAdjusted,bCloaked,DeathElement,bLootCarrier,bZapped,bZapDeath,bBlueFire,bSoaked,bFrozen;
+	reliable if(Role == ROLE_Authority)
+		WoundNotes, WoundTick, bGloryReady;
 }
 
 function bool MakeGrandEntry()
@@ -783,6 +811,28 @@ simulated function Tick(float DeltaTime)
 		if( !bCharDone && (CharLevel > 0.0 || bBurnified || bAshen || CorpseBurnEnd > 0.0) )
 			TickChar(DeltaTime);
 
+		// (Endless) the glow of one open to a glory kill: orange when the one watching is in reach
+		if( bGloryReady && !bPlayedDeath && !bDeleteMe && Health > 0 )
+		{
+			if( GloryGlow == None )
+			{
+				GloryGlow = Spawn(class'KFGloryGlow');
+				if( GloryGlow != None )
+					GloryGlow.SetBase(Self);
+			}
+			if( GloryGlow != None && Level.TimeSeconds - LastRenderTime < 1.0 )
+			{
+				OverBody(GloryGlow);
+				GloryGlow.Near(GloryNearLocal());
+			}
+		}
+		else if( GloryGlow != None )
+		{
+			GloryGlow.Kill();
+			GloryGlow.LifeSpan = 1.0;
+			GloryGlow = None;
+		}
+
 		// (Endless) the glow of one carrying a power-up, while it lives
 		if( bLootCarrier && !bPlayedDeath && !bDeleteMe )
 		{
@@ -839,6 +889,8 @@ simulated function Tick(float DeltaTime)
 		if( Level.TimeSeconds - LastRenderTime < 1.0 )
 		{
 			TickFX(DeltaTime);
+			if ( WoundTick != SimWoundTick && Role < ROLE_Authority )
+				ReadWounds();
 
 			// the head is gone, however late the news got here
 			if ( bDecapitated && Severed[4] == 0 )
@@ -884,6 +936,8 @@ simulated function Tick(float DeltaTime)
 			MonsterController(Controller).ExecuteWhatToDoNext();
 		}
 	}
+	if( bGloryReady && Role == ROLE_Authority && Level.TimeSeconds > GloryUntil )
+		bGloryReady = false;
 	if( BileCount>0 && NextBileTime<level.TimeSeconds )
 	{
 		--BileCount;
@@ -1293,7 +1347,7 @@ simulated function TickChar( float DeltaTime )
 		CharDone();
 		return;
 	}
-	if ( CharLevel <= 0.0 || bCloaked || Level.TimeSeconds - LastRenderTime > 1.0 )
+	if ( CharLevel <= 0.0 || bCloaked || bCutBody || Level.TimeSeconds - LastRenderTime > 1.0 )
 		return;
 
 	if ( CharMask == None )
@@ -1600,7 +1654,10 @@ simulated function DoDamageFX( Name boneName, int Damage, class<DamageType> Dama
 	if ( bDecapitated && !bPlayBrainSplash )
 	{
 		bPlayBrainSplash = true;
-		PostHitFX(HeadBone, DamageType, r, CanSever(HeadBone, Damage, DamageType));
+		if ( HeadLossKind(Damage, DamageType) == 'headtop' )
+			PostHitFX('headtop', DamageType, rotator(TraumaRay), CanSever(HeadBone, Damage, DamageType));
+		else
+			PostHitFX(HeadBone, DamageType, r, CanSever(HeadBone, Damage, DamageType));
 	}
 
 	// Only the dead lose limbs, and nothing is drawn on the bones of the living
@@ -1693,6 +1750,11 @@ function DeathGore( name HitBone, int Damage, class<DamageType> DamageType, Pawn
 	local bool bBlast;
 	local int i;
 
+	if ( DamageType == class'DamTypeGlory' )
+	{
+		GloryGore(DamageType);
+		return;
+	}
 	// frozen, it shatters whatever killed it
 	if ( bFrozen && !DamageType.default.bNeverSevers )
 	{
@@ -1837,7 +1899,8 @@ function SlashGore( class<DamageType> DamageType )
 	{
 		if ( bSlashDebug )
 			log("SLASHCUT" @ Name @ "head");
-		DoDamageFX(HeadBone, 1000, DamageType, Fly);
+		if ( !PlaneHeadTrauma(SlashSpot, SlashNormal, Fly, DamageType) )
+			DoDamageFX(HeadBone, 1000, DamageType, Fly);
 		bAny = true;
 	}
 	// the trunk: an upright cut through it cleaves it from the head down, a flat one cuts it in two
@@ -1875,15 +1938,13 @@ function SlashGore( class<DamageType> DamageType )
 		DoDamageFX(Graze, 1000, DamageType, Fly);
 }
 
-// Cleaved from the head down by an upright cut through the middle: the head off, and the body in two
+// Cleaved from the head down by an upright cut through the middle: in two along the cut (KFTrauma.Cleave; where that
+// cannot be drawn, the head off and the body in two across)
 function SplitCut( class<DamageType> DamageType )
 {
-	local rotator Fly;
-
-	Fly = SlashFlight(SlashFly);
-	if ( !bDecapitated )
-		DoDamageFX(HeadBone, 1000, DamageType, Fly);
-	DoDamageFX('Bip01 Spine1', 1000, DamageType, Fly);
+	bDecapitated = true;
+	bPlayBrainSplash = true;
+	PostHitFX('cleave', DamageType, rotator(SlashNormal), CanSever('Bip01 Spine1', 1000, DamageType));
 }
 
 // The part from Joint through Mid to End: off at Joint if the cut crosses the first stretch, at Mid if the second
@@ -2004,12 +2065,155 @@ simulated function BladeMark()
 	Spawn(class'KFBladeStreak',,, HitLoc + 20.0 * HitNorm, OrthoRotation(-HitNorm, Along, -HitNorm cross Along));
 }
 
+// (KFTrauma) A wound for every machine that draws the body: Spot, Dir and Up are in the world here
+simulated function PostWound( int BoneIndex, byte Kind, vector Spot, vector Dir, vector Up, float Size )
+{
+	local coords C;
+	local vector BX, BY, BZ;
+	local int i;
+
+	C = GetBoneCoords(class'KFTrauma'.default.WoundBones[BoneIndex]);
+	BX = Normal(C.XAxis);
+	BY = Normal(C.YAxis);
+	BZ = Normal(C.ZAxis);
+	i = WoundTick % ArrayCount(WoundNotes);
+	WoundNotes[i].Bone = BoneIndex;
+	WoundNotes[i].Kind = Kind;
+	WoundNotes[i].Size = Clamp(int(Size), 1, 255);
+	WoundNotes[i].Spot = class'KFCutPiece'.static.InBone(Spot - C.Origin, BX, BY, BZ);
+	WoundNotes[i].Dir = 100.0 * class'KFCutPiece'.static.InBone(Dir, BX, BY, BZ);
+	WoundNotes[i].Up = 100.0 * class'KFCutPiece'.static.InBone(Up, BX, BY, BZ);
+	WoundTick++;
+	// (this machine draws it too)
+	if ( Level.NetMode != NM_DedicatedServer )
+		ReadWounds();
+}
+
+// The wounds told of since last time, made on this machine
+simulated function ReadWounds()
+{
+	local KFWound W;
+	local int i, j;
+	local float Depth;
+
+	if ( WoundTick - SimWoundTick > ArrayCount(WoundNotes) || (WoundTick < SimWoundTick && WoundTick + 256 - SimWoundTick > ArrayCount(WoundNotes)) )
+		SimWoundTick = WoundTick - ArrayCount(WoundNotes);
+	for ( j=0; SimWoundTick != WoundTick && j < 16; j++ )
+	{
+		i = SimWoundTick % ArrayCount(WoundNotes);
+		SimWoundTick++;
+		if ( WoundNotes[i].Bone >= ArrayCount(class'KFTrauma'.default.WoundBones) )
+			continue;
+		// a hole right through (its size in tenths of a unit)
+		if ( WoundNotes[i].Kind == 4 )
+		{
+			class'KFHoleBody'.static.Make(self, class'KFTrauma'.default.WoundBones[WoundNotes[i].Bone], WoundNotes[i].Spot,
+				WoundNotes[i].Dir / 100.0, float(WoundNotes[i].Size) / 10.0);
+			continue;
+		}
+		Depth = class'KFTrauma'.default.WoundStandOff + 2.2 * class'KFTrauma'.default.WoundRadii[WoundNotes[i].Bone] * GibScale;
+		W = class'KFWound'.static.Make(self, class'KFTrauma'.default.WoundBones[WoundNotes[i].Bone], class'KFTrauma'.default.WoundJoints[WoundNotes[i].Bone],
+			WoundNotes[i].Spot, WoundNotes[i].Dir / 100.0, WoundNotes[i].Up / 100.0, WoundNotes[i].Kind, WoundNotes[i].Size, Depth);
+		if ( W == None )
+			continue;
+		Wounds[Wounds.Length] = W;
+		while ( Wounds.Length > MaxWounds )
+		{
+			if ( Wounds[0] != None )
+				Wounds[0].Destroy();
+			Wounds.Remove(0, 1);
+		}
+	}
+}
+
+// (KFTrauma) The server's word of a head split or its top taken off: every machine drawing the body cuts it
+function PostTrauma( name Kind, rotator Dir, class<DamageType> DamageType )
+{
+	bDecapitated = true;
+	bPlayBrainSplash = true;
+	PostHitFX(Kind, DamageType, Dir, CanSever(HeadBone, 1000, DamageType));
+}
+
+// What a head shot that takes the head off does to it: a heavy round now and then takes the top of the skull off
+function name HeadLossKind( int Damage, class<DamageType> DamageType )
+{
+	if ( class<KFWeaponDamageType>(DamageType) == None || !DamageType.default.bLocationalHit || IsPowerHit(DamageType)
+		|| class<DamTypeMelee>(DamageType) != None || Damage < class'KFTrauma'.default.HeadTopDamage || TraumaRay == vect(0,0,0)
+		|| FRand() >= class'KFTrauma'.default.HeadTopChance )
+		return HeadBone;
+	return 'headtop';
+}
+
+// A chopping blade's cut through the head: upright through its middle it splits it; across it above the middle it takes
+// the top off. False for a cut it leaves to the usual (the head off at the neck)
+function bool BladeHeadTrauma( class<DamageType> DamageType )
+{
+	local vector N;
+
+	if ( class<DamTypeMelee>(DamageType) == None || !class<DamTypeMelee>(DamageType).default.bChops )
+		return false;
+	N = BladeEdge cross BladeMotion;
+	if ( VSize(N) < 0.1 )
+		return false;
+	return PlaneHeadTrauma(BladeSpot, Normal(N), BladeFlight(), DamageType);
+}
+
+// A cut along the plane through Spot square to N: upright through the head's middle it splits it (the halves fall away
+// either side of the plane), flat through its upper half it takes the top off (flying on Fly's way). False otherwise.
+function bool PlaneHeadTrauma( vector Spot, vector N, rotator Fly, class<DamageType> DamageType )
+{
+	local coords C;
+	local vector Up, Mid, X, Y, Z;
+	local float R, Off, Lean, T;
+
+	if ( bDecapitated || !class'KFTrauma'.default.bTrauma )
+		return false;
+	C = GetBoneCoords(HeadBone);
+	Up = Normal(C.XAxis);
+	R = HeadRadius * HeadScale;
+	Mid = C.Origin + Up * (HeadHeight * HeadScale);
+	Off = (Mid - Spot) dot N;
+	Lean = Abs(N dot Up);
+	if ( Lean < 0.7 )
+	{
+		if ( Abs(Off) > class'KFTrauma'.default.SplitReach * R )
+			return false;
+		PostTrauma('headsplit', rotator(N), DamageType);
+		return true;
+	}
+	// where the plane crosses the head's own up line, above its middle
+	T = ((Spot - Mid) dot N) / (Up dot N);
+	if ( T < -0.15 * R || T > 0.75 * R )
+		return false;
+	// (a part's flight is the up axis of Fly)
+	GetAxes(Fly, X, Y, Z);
+	PostTrauma('headtop', rotator(Z), DamageType);
+	return true;
+}
+
+// (each machine that draws it) The head split, or its top taken off, as the server said: false where it cannot be drawn
+simulated function bool HeadTrauma( name Kind, rotator Dir, class<DamageType> DamageType )
+{
+	if ( Kind == 'headsplit' )
+		return class'KFTrauma'.static.SplitHead(self, Dir, DamageType);
+	return class'KFTrauma'.static.TopHead(self, Dir, DamageType);
+}
+
 // A blade takes the part its edge goes through, if it takes one at all; otherwise it only draws blood
 function BladeGore( int Damage, class<DamageType> DamageType )
 {
 	local name Cut;
 
 	Cut = BladeCut(class<DamTypeMelee>(DamageType));
+	if ( Cut == HeadBone && BladeHeadTrauma(DamageType) )
+		return;
+	if ( Cut == 'cleave' )
+	{
+		bDecapitated = true;
+		bPlayBrainSplash = true;
+		PostHitFX('cleave', DamageType, rotator(Normal(BladeEdge cross BladeMotion)), CanSever('Bip01 Spine1', 1000, DamageType));
+		return;
+	}
 	if ( Cut != 'None' )
 		DoDamageFX(Cut, 1000, DamageType, BladeFlight());
 	else
@@ -2027,6 +2231,7 @@ function name BladeCut( class<DamTypeMelee> DamageType )
 	local coords C;
 	local name Cut;
 	local int i;
+	local byte TrunkAcross;
 
 	if ( DamageType == None || DamageType.default.CutChance <= 0 || FRand() >= DamageType.default.CutChance )
 		return 'None';
@@ -2041,7 +2246,10 @@ function name BladeCut( class<DamTypeMelee> DamageType )
 	Best = 100000.0;
 	Cut = 'None';
 	if ( Severed[5] == 0 && EdgeMeets(GetBoneCoords('Bip01 Pelvis').Origin, GetBoneCoords('Bip01 Neck').Origin, N, 9.0 * GibScale, Reach, At, Across) )
+	{
 		Best = At;
+		TrunkAcross = Across;
+	}
 	// a head this same blow has burst is still there to be met
 	if ( Severed[4] == 0 && (!bDecapitated || DecapTime == Level.TimeSeconds) )
 	{
@@ -2062,6 +2270,15 @@ function name BladeCut( class<DamTypeMelee> DamageType )
 			Cut = LimbJoints[i];
 			BestAcross = Across;
 		}
+	}
+	// (KFTrauma) a chopping blade through the trunk, killing, goes on through it: across it, in two at the waist; down
+	// along it, often cleaving the body in two
+	if ( Cut == 'None' && Best < 100000.0 && DamageType.default.bChops && class'KFTrauma'.default.bTrauma )
+	{
+		if ( TrunkAcross != 0 )
+			return 'Bip01 Spine1';
+		if ( FRand() < class'KFTrauma'.default.CleaveChance )
+			return 'cleave';
 	}
 	if ( BestAcross == 0 )
 		return 'None';
@@ -2744,6 +2961,30 @@ simulated function ProcessHitFX()
 			return;
 		}
 
+		// (KFTrauma) a head split down the middle, the top of a skull taken off; where the cuts cannot be drawn the head
+		// comes off as before
+		if ( Bone == 'cleave' )
+		{
+			if ( HitFX[SimHitFxTicker].bSever && !class'KFTrauma'.static.Cleave(self, HitFX[SimHitFxTicker].rotDir, HitFX[SimHitFxTicker].damtype) )
+			{
+				if ( Severed[4] == 0 )
+					SeverHead(true, HitFX[SimHitFxTicker].rotDir, 0.3, HitFX[SimHitFxTicker].damtype);
+				Sever('Bip01 Spine1', HitFX[SimHitFxTicker].rotDir, 0.3, HitFX[SimHitFxTicker].damtype);
+			}
+			if ( bGibbed )
+			{
+				SimHitFxTicker = HitFxTicker;
+				return;
+			}
+			continue;
+		}
+		if ( Bone == 'headsplit' || Bone == 'headtop' )
+		{
+			if ( HitFX[SimHitFxTicker].bSever && Severed[4] == 0 && !HeadTrauma(Bone, HitFX[SimHitFxTicker].rotDir, HitFX[SimHitFxTicker].damtype) )
+				SeverHead(true, HitFX[SimHitFxTicker].rotDir, HitFX[SimHitFxTicker].damtype.default.GibPerterbation, HitFX[SimHitFxTicker].damtype);
+			continue;
+		}
+
 		boneCoords = GetBoneCoords( Bone );
 
 		if ( !Level.bDropDetail && !bSkeletized )
@@ -2905,6 +3146,15 @@ simulated function Sever( name Bone, rotator Dir, float Spread, optional class<D
 	}
 	C = GetBoneCoords(Bone);
 
+	// (KFTrauma) in two across the waist, the top half its own whole self, the cut faces raw
+	if ( Slot == 5 && class'KFTrauma'.static.CutWaist(self, Dir, DamageType) )
+	{
+		if ( !BladeGoreType(DamageType) )
+			Spawn(class'KFMod.BrainSplash',,, C.Origin, Rotation);
+		PlaySound(sound'PlayerSounds.NewGibs.NewGib3', SLOT_Misc, class'KFBloodBlast'.static.GoreVol(255),, class'KFBloodBlast'.static.GoreRadius(255, TransientSoundRadius));
+		class'KFBloodBlast'.static.Make(self, GetBoneCoords('Bip01 Spine2').Origin, 0.6 * BloodBlastSize(), 0.5 * vector(Dir));
+		return;
+	}
 	// (the Executioner's flying cut) the top half off whole
 	if ( Slot == 5 && class<DamTypeAxeSlash>(DamageType) != None && CutInTwo(Dir) )
 		bWhole = true;
@@ -3666,6 +3916,13 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	// (a re-packed weapon's hit may set off its special ammo, a moment after: KFAmmoMod)
 	if ( Role == ROLE_Authority && instigatedBy != None && Health > 0 && damageType != class'Burned' )
 		class'KFAmmoMod'.static.Hit(self, instigatedBy, hitlocation, damageType);
+	// (Endless) one staggered and glowing, struck by hand within reach, is finished: a glory kill
+	if ( bGloryReady && Health > 0 && KFHumanPawn(instigatedBy) != None && class<DamTypeMelee>(damageType) != None
+		&& damageType != class'DamTypeGlory' && VSize(instigatedBy.Location - Location) < GloryReach() )
+	{
+		GloryKill(instigatedBy);
+		return;
+	}
 	// (frozen, it is brittle)
 	if ( bFrozen && Health > 0 && damageType != class'DamTypeCryo' )
 		Damage = int(float(Damage) * FrozenDamageScale);
@@ -3785,6 +4042,106 @@ function TakeDamage(int Damage, Pawn instigatedBy, Vector hitlocation, Vector mo
 	}
 
 	Super.takeDamage(Damage, instigatedBy, hitLocation, momentum, damageType);
+	if ( Health > 0 && !bGloryReady && !bGloryDone )
+		MaybeGlory(instigatedBy);
+}
+
+// (KFBossBrain) A boss prototype's abilities, each tick on the server (ZombieKingFleshpound, ZombieAbomination)
+function BossThink( float DeltaTime );
+
+// ---- (Endless, Doom style) glory kills
+
+// The player at this machine is within reach of finishing it
+simulated function bool GloryNearLocal()
+{
+	local PlayerController PC;
+
+	PC = Level.GetLocalPlayerController();
+	return PC != None && PC.Pawn != None && VSize(PC.Pawn.Location - Location) < 110.0 + CollisionRadius;
+}
+
+function float GloryReach()
+{
+	if ( KFEndlessGameType(Level.Game) != None )
+		return KFEndlessGameType(Level.Game).GloryReach + CollisionRadius;
+	return 0;
+}
+
+// Knocked low enough by a player's hit, it staggers and glows, open to a glory kill for a few seconds
+function MaybeGlory( Pawn InstigatedBy )
+{
+	local KFEndlessGameType G;
+
+	G = KFEndlessGameType(Level.Game);
+	if ( G == None || !G.bGloryKills || bBoss || bDecapitated || bFrozen || KFHumanPawn(InstigatedBy) == None
+		|| float(Health) > G.GloryShare * HealthMax )
+		return;
+	bGloryReady = true;
+	GloryUntil = Level.TimeSeconds + G.GloryWindow;
+	BlastStagger(Location + vector(Rotation) * 100.0);
+}
+
+// Finished by hand (a blow, or the use key: KFPlayerController.ServerUse): pulled in to it, the one who did it is given
+// health, ammunition and armour (KFEndlessGameType.GloryReward, KFGloryBurst), and it comes apart (GloryGore)
+function GloryKill( Pawn Killer )
+{
+	local KFEndlessGameType G;
+	local vector Pull;
+
+	if ( !bGloryReady || Health <= 0 || Killer == None )
+		return;
+	bGloryReady = false;
+	bGloryDone = true;
+	GloryFinish = Rand(5);
+	GloryFrom = Killer.Location;
+	G = KFEndlessGameType(Level.Game);
+	if ( G != None )
+		G.GloryReward(Killer, self);
+	// lunged in to it
+	Pull = Location - Killer.Location;
+	Pull.Z = 0;
+	if ( VSize(Pull) > CollisionRadius + Killer.CollisionRadius + 20.0 )
+		Killer.Velocity = Normal(Pull) * FMin(900.0, 4.0 * (VSize(Pull) - CollisionRadius - Killer.CollisionRadius)) + vect(0,0,120);
+	PlaySound(Sound'KFPawnDamageSound.MeleeDamageSounds.axehitflesh', SLOT_Pain, 2.0,, 600.0, 0.8);
+	TakeDamage(Health + 1000, Killer, Location, Normal(Location - Killer.Location) * 30000.0, class'DamTypeGlory');
+}
+
+// How a glory kill tears it apart: split, cleaved, cut in two, the top of the skull off, or the arms torn off and the
+// head split
+function GloryGore( class<DamageType> DamageType )
+{
+	local vector Toward, Side, Away;
+
+	Toward = Location - GloryFrom;
+	Toward.Z = 0;
+	if ( VSize(Toward) < 1.0 )
+		Toward = vector(Rotation);
+	Toward = Normal(Toward);
+	Side = Normal(Toward cross vect(0,0,1));
+	Away = Normal(Toward + vect(0,0,1.2));
+	bDecapitated = true;
+	bPlayBrainSplash = true;
+	switch ( GloryFinish )
+	{
+		case 0:
+			PostHitFX('headsplit', DamageType, rotator(Side), true);
+			break;
+		case 1:
+			PostHitFX('cleave', DamageType, rotator(Side), true);
+			break;
+		case 2:
+			// (a part flies along the up axis of the rotation it is given)
+			PostHitFX('headtop', DamageType, rotator(Away), true);
+			DoDamageFX('Bip01 Spine1', 1000, DamageType, rotator(Away) - rot(16384,0,0));
+			break;
+		case 3:
+			PostHitFX('headtop', DamageType, rotator(Away), true);
+			break;
+		default:
+			DoDamageFX('Bip01 L UpperArm', 1000, DamageType, rotator(Normal(Away - Side)) - rot(16384,0,0));
+			DoDamageFX('Bip01 R UpperArm', 1000, DamageType, rotator(Normal(Away + Side)) - rot(16384,0,0));
+			PostHitFX('headsplit', DamageType, rotator(Side), true);
+	}
 }
 
 // Modified version of the original Pawn playhit. Set up because we want our blood puffs to be directional based
@@ -3923,6 +4280,9 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 	HitRay = vect(0,0,0);
 	if( InstigatedBy != None )
 		HitRay = Normal(HitLocation-(InstigatedBy.Location+(vect(0,0,1)*InstigatedBy.EyeHeight)));
+	TraumaRay = HitRay;
+	if ( TraumaRay == vect(0,0,0) )
+		TraumaRay = Normal(Momentum);
 
 	if( DamageType.default.bLocationalHit )
 		CalcHitLoc( HitLocation, HitRay, HitBone, HitBoneDist );
@@ -3993,6 +4353,11 @@ function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<Dama
 			}
 		}
 	}
+
+	// (KFTrauma) the hole it leaves
+	if ( !bFrozen && DamageType.default.bCausesBlood && DamageType.default.bLocationalHit && class<Burned>(DamageType) == None
+		&& class<DamTypeFlamethrower>(DamageType) == None && !class'GameInfo'.static.UseLowGore() )
+		class'KFTrauma'.static.NoteWound(self, HitLocation, TraumaRay, Damage, DamageType, InstigatedBy);
 
 	if ( Health <= 0 && !bDeathGoreDone )
 	{
@@ -4621,6 +4986,10 @@ simulated function Destroyed()
 
 	for ( i=0; i<ArrayCount(Stumps); i++ )
 		DropStump(i);
+	for ( i=0; i<Wounds.Length; i++ )
+		if ( Wounds[i] != None )
+			Wounds[i].Destroy();
+	Wounds.Length = 0;
 	RemoveFlamingEffects();
 	// (what smoke there is hangs a moment where the body was)
 	if ( CorpseSmoke != None )
@@ -4902,6 +5271,7 @@ defaultproperties
      KFHitRight="HitReactionR"
      HeadStubClass=Class'KFMod.GibHeadStump'
      GibScale=1.000000
+     MaxWounds=14
      LimbBlast=0.500000
      TorsoBlast=1.300000
      BodyBlast=2.500000

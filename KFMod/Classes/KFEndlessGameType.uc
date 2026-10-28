@@ -17,7 +17,8 @@ enum EEndlessWaveType
     EWT_Siren,
     EWT_Shade,
     EWT_Boss,
-    EWT_Holdout
+    EWT_Holdout,
+    EWT_Lockdown
 };
 var EEndlessWaveType CurrentWaveType;
 
@@ -93,6 +94,27 @@ var float InstaKillEndTime, DoublePointsEndTime;
 var bool bNuking;
 // The loot specimen: in some waves one specimen glows (KFLootGlow) and always drops a power-up where it dies
 var() float LootWaveChance;        // share of waves with one (never the Patriarch's)
+
+// Glory kills (Doom style, KFMonster.GloryKill): a specimen knocked below this share of its health staggers and glows for
+// a few seconds; a blow by hand or the use key within reach tears it apart and gives health, ammunition and armour
+var() bool bGloryKills;
+var() float GloryShare;            // ...of its health
+var() float GloryWindow;           // seconds it stays open
+var() float GloryReach;            // reach beyond its body
+var() int GloryHealth;             // health given
+var() int GloryArmour;             // armour given
+var() float GloryAmmoShare;        // share of each gun's most ammunition given
+var() float GloryLockdownScale;    // ...all of it this much more in a lockdown
+
+// Lockdowns (Doom style, KFLockdown): the players are shut in a ring of energy where they stand and fight stages of
+// specimens teleporting in round them
+var() float LockdownChance;        // share of waves from LockdownFrom on that are lockdowns
+var() int LockdownFrom;
+var KFLockdown Lockdown;
+
+// The bosses an Endless boss wave picks from
+var() array<string> BossPool;
+var string BossNow;
 var() float LootFromShare, LootToShare;   // it is picked once this share of the wave has come (of 80 at most)
 var() string LootMessage;
 var int LootAt;                    // specimens of the wave come before it is picked (0: none to pick)
@@ -261,6 +283,9 @@ function EEndlessWaveType GetWaveType(int Wave)
             return EWT_Shade;
     }
 
+    if (DisplayWave >= LockdownFrom && FRand() < LockdownChance)
+        return EWT_Lockdown;
+
     if (DisplayWave >= 3 && FRand() < HoldoutChance)
         return EWT_Holdout;
 
@@ -335,7 +360,16 @@ function SetupWave()
     // Boss wave: use the existing StartWaveBoss-style setup
     if (CurrentWaveType == EWT_Boss)
     {
-        Broadcast(Self, "--- BOSS WAVE: The Patriarch approaches! ---");
+        // (a boss from the pool: the Patriarch or one of the Killing Floor 2 style prototypes)
+        BossNow = EndGameBossClass;
+        if (BossPool.Length > 0)
+            BossNow = BossPool[Rand(BossPool.Length)];
+        if (InStr(BossNow, "KingFleshpound") >= 0)
+            Broadcast(Self, "--- BOSS WAVE: The King Fleshpound approaches! ---");
+        else if (InStr(BossNow, "Abomination") >= 0)
+            Broadcast(Self, "--- BOSS WAVE: The Abomination approaches! ---");
+        else
+            Broadcast(Self, "--- BOSS WAVE: The Patriarch approaches! ---");
         bHasSetViewYet = false;
 
         NewMaxMonsters = 1.0;
@@ -348,11 +382,30 @@ function SetupWave()
 
         // Set up the boss spawn squad
         NextSpawnSquad.Length = 1;
-        NextSpawnSquad[0] = class<Monster>(DynamicLoadObject(EndGameBossClass, class'Class'));
+        NextSpawnSquad[0] = class<Monster>(DynamicLoadObject(BossNow, class'Class'));
         if (NextSpawnSquad[0] == None)
             NextSpawnSquad[0] = FallbackMonster;
 
         bWaveBossInProgress = true;
+        return;
+    }
+
+    if (CurrentWaveType == EWT_Lockdown)
+    {
+        // the lockdown makes its own specimens; the wave ends when it is cleared (LockdownDone)
+        TotalMaxMonsters = 999;
+        MaxMonsters = 64;
+        KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonsters = 0;
+        KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn = false;
+        WaveEndTime = Level.TimeSeconds + 900.0;
+        NextSpawnSquad.Length = 0;
+        if (Lockdown != None)
+            Lockdown.Destroy();
+        Lockdown = Spawn(class'KFLockdown');
+        if (Lockdown != None)
+            Lockdown.Begin(self);
+        else
+            TotalMaxMonsters = 0;
         return;
     }
 
@@ -656,7 +709,7 @@ State MatchInProgress
                 HandleWaveMonsterPoolExhausted();
             }
             // Still monsters left to spawn (a river is fed from Tick)
-            else if (!RiverOn() && Level.TimeSeconds > NextMonsterTime
+            else if (CurrentWaveType != EWT_Lockdown && !RiverOn() && Level.TimeSeconds > NextMonsterTime
                      && (NumMonsters + NextSpawnSquad.Length <= MaxMonsters))
             {
                 WaveEndTime = Level.TimeSeconds + 160.0;
@@ -872,6 +925,60 @@ function SetupEndlessDoors()
     }
 }
 
+// (KFLockdown) The lockdown is cleared: the wave ends once the last of it is gone
+function LockdownDone(KFLockdown L)
+{
+    if (L == Lockdown)
+        Lockdown = None;
+    TotalMaxMonsters = 0;
+}
+
+// (KFMonster.GloryKill) What a glory kill gives: health, ammunition for every gun carried, armour; the drops fly to the
+// one who made it (KFGloryBurst)
+function GloryReward( Pawn Killer, KFMonster M )
+{
+	local KFGloryBurst B;
+	local Inventory Inv;
+	local KFWeapon W;
+	local float Scale;
+	local int Heal, Armour, Got, i;
+	local bool bAmmo;
+
+	Scale = 1.0;
+	if (CurrentWaveType == EWT_Lockdown)
+		Scale = GloryLockdownScale;
+	Heal = int(float(GloryHealth) * Scale);
+	Armour = int(float(GloryArmour) * Scale);
+	Killer.GiveHealth(Heal, Killer.HealthMax);
+	if (xPawn(Killer) != None && Killer.ShieldStrength < 100)
+		Killer.AddShieldStrength(Armour);
+	for (Inv = Killer.Inventory; Inv != None && i < 100; Inv = Inv.Inventory)
+	{
+		i++;
+		W = KFWeapon(Inv);
+		if (W == None || W.bMeleeWeapon || W.AmmoClass[0] == None)
+			continue;
+		Got = int(float(W.MaxAmmo(0)) * GloryAmmoShare * Scale);
+		if (Got > 0 && W.AmmoAmount(0) < W.MaxAmmo(0))
+		{
+			W.AddAmmo(Got, 0);
+			bAmmo = true;
+		}
+	}
+	B = Spawn(class'KFGloryBurst', Killer,, M.Location);
+	if (B != None)
+	{
+		B.Instigator = Killer;
+		B.Health = 3 + Rand(2);
+		if (bAmmo)
+			B.Ammo = 3;
+		if (Armour > 0)
+			B.Armour = 2;
+		if (Level.NetMode != NM_DedicatedServer)
+			B.SetTimer(0.02, false);
+	}
+}
+
 function bool WaveRunning()
 {
     return bEndlessWaveActive || bWaveBossInProgress;
@@ -896,6 +1003,8 @@ function bool ForceNextWave(string Kind)
         ForcedNextType = EWT_Boss;
     else if (Kind ~= "holdout")
         ForcedNextType = EWT_Holdout;
+    else if (Kind ~= "Lockdown")
+        ForcedNextType = EWT_Lockdown;
     else
         return false;
     bForceNextType = true;
@@ -1587,6 +1696,19 @@ function LootCheck()
 
 defaultproperties
 {
+     BossPool(0)="KFChar.ZombieBoss"
+     BossPool(1)="KFChar.ZombieKingFleshpound"
+     BossPool(2)="KFChar.ZombieAbomination"
+     LockdownChance=0.250000
+     LockdownFrom=3
+     bGloryKills=True
+     GloryShare=0.250000
+     GloryWindow=3.500000
+     GloryReach=95.000000
+     GloryHealth=20
+     GloryArmour=10
+     GloryAmmoShare=0.080000
+     GloryLockdownScale=1.500000
     bPowerUps=True
     PowerUpDropChance=0.025000
     MaxPowerUpsPerRound=3

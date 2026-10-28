@@ -564,7 +564,7 @@ exec function NextWave(string Kind)
     }
     if (!E.ForceNextWave(Kind))
     {
-        ClientMessage("NextWave normal, siren, shade, boss or holdout.");
+        ClientMessage("NextWave normal, siren, shade, boss, holdout or lockdown.");
         return;
     }
     ReportCheat("NextWave");
@@ -1306,7 +1306,7 @@ defaultproperties
      HelpLines(33)="Waves|PauseSpawns|spawning stops (again to go on)"
      HelpLines(34)="Waves|WaveInfo|the wave, specimens alive and to come, holdout settings"
      HelpLines(35)="Endless|Holdout|the next wave is a holdout (in 5 seconds between waves)"
-     HelpLines(36)="Endless|NextWave Kind|the next wave's kind: normal, siren, shade, boss or holdout"
+     HelpLines(36)="Endless|NextWave Kind|the next wave's kind: normal, siren, shade, boss (Patriarch, King Fleshpound or Abomination), holdout or lockdown"
      HelpLines(37)="Endless|HoldoutTime S|this holdout spawns for S more seconds; between waves, holdouts last S"
      HelpLines(38)="Endless|HoldoutHealth Share|holdout specimens' health, as a share of a normal one's (0.5)"
      HelpLines(39)="Endless|EndHoldout|the holdout stops spawning (kill the rest to end it)"
@@ -1323,5 +1323,8 @@ defaultproperties
      HelpLines(50)="Endless|LootZed|the specimen nearest your aim glows and carries a power-up"
      HelpLines(51)="Weapons|BFG|the BFG 9000 prototype, loaded"
      HelpLines(53)="Weapons|GoreCannon|the Gore Cannon: hold alt to vacuum up bodies and gibs, fire to throw them back"
+     HelpLines(54)="Endless|NextWave Lockdown|the next wave shuts you in where you stand: stages of specimens teleport in, glory kills pay more"
+     HelpLines(55)="Bosses|Summon KFChar.ZombieKingFleshpound|the King Fleshpound prototype: chest beam, ground pound, glass shield and Quarter Pounds"
+     HelpLines(56)="Bosses|Summon KFChar.ZombieAbomination|the Abomination prototype: flammable toxic belch, a brood out of its belly"
      HelpLines(52)="Weapons|VoidAxe|the Void Executioner: its cuts blink you to where they land, in a shock wave"
 }

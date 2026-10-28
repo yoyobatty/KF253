@@ -125,6 +125,12 @@ simulated function SpawnTwoShots()
 	LocalPlayer = Level.GetLocalPlayerController();
 	if ( LocalPlayer!=None && (VSize(Location-LocalPlayer.ViewTarget.Location)<ScreamRadius) && FastTrace(Location,LocalPlayer.ViewTarget.Location) )
 		LocalPlayer.ShakeView(RotMag, RotRate, RotTime, OffsetMag, OffsetRate, OffsetTime);
+	// the scream bends the air round her head as it goes out (KFWave), twice, the second wider
+	if ( Level.NetMode != NM_DedicatedServer )
+	{
+		class'KFScreenFX'.static.Wave(Level, GetBoneCoords(HeadBone).Origin, 1.2);
+		class'KFScreenFX'.static.Wave(Level, GetBoneCoords(HeadBone).Origin, 2.2);
+	}
 
 	if( Level.NetMode!=NM_Client )
 	{

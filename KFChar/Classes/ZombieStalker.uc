@@ -81,6 +81,9 @@ simulated function CloakStalker()
 		Skins[1] = Finalblend 'KFX.StalkerGlow';
 		Visibility = default.Visibility; // So bots know we're visible
 		bUnlit = true;
+		// (bent glass, glowing red: KFCloakView)
+		if ( bCloaked )
+			class'KFCloakView'.static.Take(self);
 		return;
 	}
 
@@ -105,6 +108,8 @@ simulated function CloakStalker()
 		Projectors.Remove(0, Projectors.Length);
 		bAcceptsProjectors = false;
 		SetOverlayMaterial(Material'KFX.FBDecloakShader', 0.25, true);
+		// (seen near, the cloak is bent glass: KFCloakView)
+		class'KFCloakView'.static.Take(self);
 	}
 }
 

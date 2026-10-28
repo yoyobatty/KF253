@@ -114,6 +114,8 @@ simulated function CloakBoss()
 		Skins[5] = Finalblend'KFX.StalkerGlow';
 		Skins[6] = Finalblend'KFX.StalkerGlow';
 		bUnlit = true;
+		if ( bCloaked )
+			class'KFCloakView'.static.Take(self);
 		return;
 	}
 
@@ -139,6 +141,8 @@ simulated function CloakBoss()
 	Skins[5] = Shader'BossCloakShader';
 	Skins[6] = Texture'KillingFloorLabTextures.LabCommon.voidtex';
 	HideStumps(true);
+	// (seen near, the cloak is bent glass: KFCloakView)
+	class'KFCloakView'.static.Take(self);
 
 	// Invisible - no shadow
 	if(PlayerShadow != none)

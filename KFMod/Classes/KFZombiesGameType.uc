@@ -642,6 +642,7 @@ State MatchInProgress
 
 defaultproperties
 {
+     bGloryKills=False
     WaveHealthClimb=0.030000
     WaveDamageClimb=0.030000
     DamageClimbWaves=0
