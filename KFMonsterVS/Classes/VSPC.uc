@@ -1,62 +1,75 @@
 Class VSPC extends KFPlayerController;
 
-var transient float NextPossessTimer;
-var transient string RedStr,GreenStr,BlueStr;
+// A specimen player (on the server)
+var class<KFMonster> LastSpecimen;	// what they last rose as (not given again straight away)
+var float NextSpawnTime;			// when they may rise again
+var float DeathTime;				// when their last specimen died
+var bool bHeavy;					// their specimen is the wave's heavy
+var float LastHurtTime;				// when their heavy last hurt a survivor
+var int HeavyCount;					// heavies they have had this half
 
-var transient bool bInitColors,bSeenTeamHint;
+// Rising (both machines: the player's HUD shows whether the spot will do)
+var float MinSpawnDist;				// no nearer a survivor than this
+var float SightDist;				// a survivor sees a spot this near if nothing is in the way
+var transient float NextRiseTry;
+var transient Pawn WarpTarget;
+
+var transient string RedStr, GreenStr, BlueStr;
+var transient bool bInitColors;
 
 replication
 {
-	reliable if( Role < ROLE_Authority )
-		ServerPossessZed;
+	reliable if( Role<ROLE_Authority )
+		ServerRise, ServerGhostWarp;
 	reliable if( Role==ROLE_Authority )
 		ClientDeathMessage;
 }
 
+// As a specimen: the AI takes it over and the player is a ghost again
 exec function Suicide()
 {
-	local float MinSuicideInterval;
-
-	if ( Level.NetMode == NM_Standalone )
-		MinSuicideInterval = 1;
-	else
-		MinSuicideInterval = 10;
-
-	if ( (Pawn != None) && (Level.TimeSeconds - Pawn.LastStartTime > MinSuicideInterval) )
+	if( KFMonster(Pawn)!=None && VSGame(Level.Game)!=None )
 	{
-		if( Monster(Pawn)!=None )
-		{
-			// Repossess the pawn instead.
-			UnPossessZed();
-		}
-		else Pawn.Suicide();
+		if( Pawn.Health>0 && Level.TimeSeconds-Pawn.LastStartTime>1 )
+			VSGame(Level.Game).ReleaseSpecimen(self);
+		return;
 	}
-}
-
-final function bool UnPossessZed()
-{
-	local Monster M;
-	local rotator R;
-
-	M = Monster(Pawn);
-	if( M==None || M.Health<=0 )
-		return false;
-	R.Yaw = M.Rotation.Yaw;
-	UnPossess();
-	ClientSetRotation(R); // Resets Roll/Pitch so crawlers don't screw up view.
-	M.Controller = Spawn(M.ControllerClass);
-	if( M.Controller!=None )
-		M.Controller.Possess(M);
-	else M.Suicide();
-	return true;
+	Super.Suicide();
 }
 
 function ServerChangeTeam( int N )
 {
-	bSeenTeamHint = true;
-	VSGame(Level.Game).PlayerSwapTeam(Self,N);
+	if( VSGame(Level.Game)!=None )
+		VSGame(Level.Game).SwitchSquad(Self);
 }
-function ServerPossessZed();
+function ServerRise();
+function ServerGhostWarp();
+
+// Why the specimen could not rise here (0: it can), and where it would: 2 no floor below, 3 a survivor can see the spot,
+// 4 too near a survivor, 5 no specimen to rise as (VSInfoMessage's numbers)
+simulated function byte SpawnProblem( class<KFMonster> M, out vector Spot )
+{
+	local vector HitL, HitN, Eye, Top;
+	local KFHumanPawn P;
+
+	if( M==None )
+		return 5;
+	if( Trace(HitL,HitN,Location-vect(0,0,3000),Location,false)==None || HitN.Z<0.7 )
+		return 2;
+	Spot = HitL + vect(0,0,1)*(M.Default.CollisionHeight+5);
+	Top = Spot + vect(0,0,0.8)*M.Default.CollisionHeight;
+	foreach DynamicActors(class'KFHumanPawn',P)
+	{
+		if( P.Health<=0 )
+			continue;
+		if( VSize(P.Location-Spot)<MinSpawnDist )
+			return 4;
+		Eye = P.Location + P.EyePosition();
+		if( VSize(Eye-Spot)<SightDist && (FastTrace(Spot,Eye) || FastTrace(Top,Eye)) )
+			return 3;
+	}
+	return 0;
+}
 
 simulated final function ClientDeathMessage( PlayerReplicationInfo Victim, Class<DamageType> DamType,
 	 optional PlayerReplicationInfo Killer, optional class<Monster> KillerPawn )
@@ -104,79 +117,124 @@ simulated final function ClientDeathMessage( PlayerReplicationInfo Victim, Class
 	ClientMessage(S,'DeathMessage');
 }
 
-state Spectating
+// A specimen player waiting to rise: free flight through the map (not through walls), unseen. Fire rises, Alt-Fire goes
+// to the next survivor
+state Ghost extends BaseSpectating
 {
-	function BeginState()
-	{
-		Super.BeginState();
-		if( VSGame(Level.Game)!=None && VSGame(Level.Game).ShouldGoHunt(Self) )
-			GoToState('PreySpec');
-	}
-}
+ignores SwitchWeapon, RestartLevel, ThrowWeapon, NotifyPhysicsVolumeChange, NotifyHeadVolumeChange;
 
-state PreySpec extends BaseSpectating
-{
-ignores SwitchWeapon, RestartLevel, ClientRestart, Suicide, ThrowWeapon, NotifyPhysicsVolumeChange, NotifyHeadVolumeChange;
-
-	function ServerPossessZed()
-	{
-		local KFMonster M;
-		local vector HL,HN;
-
-		if( NextPossessTimer>Level.TimeSeconds )
-			return;
-		NextPossessTimer = Level.TimeSeconds+0.4f;
-
-		foreach TraceActors(Class'KFMonster',M,HL,HN,Location+vector(Rotation)*1000.f,Location)
-		{
-			if( M!=None && M.Health>0 )
-			{
-				VSGame(Level.Game).PlayerPossess(Self,M);
-				return;
-			}
-		}
-		ClientMessage("Can't possess: You must aim at the specimen to possess.");
-	}
 	exec function Fire( optional float F )
 	{
-		if( NextPossessTimer<Level.TimeSeconds )
+		if( Level.TimeSeconds>=NextRiseTry )
 		{
-			ServerPossessZed();
-			NextPossessTimer = Level.TimeSeconds+0.5f;
+			NextRiseTry = Level.TimeSeconds + 0.4;
+			ServerRise();
 		}
 	}
 	exec function AltFire( optional float F )
 	{
+		if( Level.TimeSeconds>=NextRiseTry )
+		{
+			NextRiseTry = Level.TimeSeconds + 0.4;
+			ServerGhostWarp();
+		}
 	}
-
-	function Timer()
+	function ServerRise()
 	{
-		bFrozen = false;
+		if( VSGame(Level.Game)!=None )
+			VSGame(Level.Game).RiseSpecimen(self);
 	}
+	// (above and behind the next living survivor, where there is room)
+	function ServerGhostWarp()
+	{
+		local Controller C;
+		local Pawn P, First, Next;
+		local bool bPast;
+		local vector Spot;
+		local rotator R;
 
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			P = C.Pawn;
+			if( KFHumanPawn(P)==None || P.Health<=0 )
+				continue;
+			if( First==None )
+				First = P;
+			if( bPast && Next==None )
+				Next = P;
+			if( P==WarpTarget )
+				bPast = true;
+		}
+		if( Next==None )
+			Next = First;
+		if( Next==None )
+			return;
+		WarpTarget = Next;
+		R.Yaw = Next.Rotation.Yaw;
+		Spot = Next.Location - vector(R)*250 + vect(0,0,150);
+		if( !FastTrace(Spot,Next.Location) || !SetLocation(Spot) )
+		{
+			Spot = Next.Location + vect(0,0,120);
+			if( !SetLocation(Spot) )
+				return;
+		}
+		R = rotator(Next.Location-Location);
+		SetRotation(R);
+		ClientSetLocation(Location,R);
+	}
 	function BeginState()
 	{
-		if ( Pawn != None )
-		{
-			SetLocation(Pawn.Location);
-			UnPossess();
-		}
 		bCollideWorld = true;
 		CameraDist = Default.CameraDist;
+		bBehindView = false;
+		SetViewTarget(self);
 	}
-
 	function EndState()
 	{
 		PlayerReplicationInfo.bIsSpectator = false;
 		bCollideWorld = false;
 	}
-	function ProcessMove(float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot)
+	function ProcessMove( float DeltaTime, vector NewAccel, eDoubleClickDir DoubleClickMove, rotator DeltaRot )
 	{
 		bBehindView = false;
 		if( ViewTarget!=Self )
 			SetViewTarget(Self);
 		Acceleration = NewAccel;
+		if( bWantsSprint )
+			SpectateSpeed = default.SpectateSpeed * FlySpeedMulti;
+		else SpectateSpeed = default.SpectateSpeed;
 		MoveSmooth(SpectateSpeed * Normal(Acceleration) * DeltaTime);
+	}
+	function PlayerMove( float DeltaTime )
+	{
+		local vector X,Y,Z, NewAccel;
+
+		GetAxes(Rotation,X,Y,Z);
+		NewAccel = aForward*X + aStrafe*Y + aUp*vect(0,0,1);
+		if( VSize(NewAccel)<1.0 )
+			NewAccel = vect(0,0,0);
+		UpdateRotation(DeltaTime, 1);
+		if( Role<ROLE_Authority )
+			ReplicateMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+		else ProcessMove(DeltaTime, NewAccel, DCLICK_None, rot(0,0,0));
+	}
+}
+
+// (specimen code sends its controller into the AI's states; a player's specimen carries on under the player)
+state WaitForAnim
+{
+	function BeginState()
+	{
+		if( Pawn!=None )
+			GotoState(Pawn.LandMovementState);
+	}
+}
+state SpinAttack
+{
+	function BeginState()
+	{
+		if( Pawn!=None )
+			GotoState(Pawn.LandMovementState);
 	}
 }
 
@@ -195,11 +253,24 @@ state PlayerSpidering
 		Super.EndState();
 	}
 
+	// (the specimen gone, as walking does: on a client its death can come before the server's word of it)
+	function PlayerMove( float DeltaTime )
+	{
+		if( Pawn==None )
+		{
+			GotoState('Dead');
+			return;
+		}
+		Super.PlayerMove(DeltaTime);
+	}
+
 	function UpdateRotation(float DeltaTime, float maxPitch)
 	{
 		local rotator ViewRotation;
 		local vector MyFloor, CrossDir, FwdDir, OldFwdDir, OldX, RealFloor;
 
+		if( Pawn==None )
+			return;
 		if ( bInterpolating || Pawn.bInterpolating )
 		{
 			ViewShake(deltaTime);
@@ -283,4 +354,6 @@ state PlayerSpidering
 
 defaultproperties
 {
+     MinSpawnDist=600.000000
+     SightDist=4000.000000
 }

@@ -159,9 +159,13 @@ function StartCharging()
 	bShotAnim = true;
 	Velocity.X = 0;
 	Velocity.Y = 0;
-	Controller.GoToState('WaitForAnim');
-	KFMonsterController(Controller).bUseFreezeHack = True;
-    FleshpoundZombieController(Controller).SetPoundRageTimout(1.5);
+	// (a player's, in Versus, rages without the AI)
+	if( FleshpoundZombieController(Controller)!=None )
+	{
+		Controller.GoToState('WaitForAnim');
+		KFMonsterController(Controller).bUseFreezeHack = True;
+		FleshpoundZombieController(Controller).SetPoundRageTimout(1.5);
+	}
 	GoToState('BeginRaging');
 }
 
@@ -217,7 +221,8 @@ Ignores StartCharging;
 	{
 		bChargingPlayer = False;
 		bFrustrated = false;
-		FleshPoundZombieController(Controller).RageFrustrationTimer = 0;
+		if( FleshPoundZombieController(Controller)!=None )
+			FleshPoundZombieController(Controller).RageFrustrationTimer = 0;
 		if( Health>0 )
 		{
 			SetGroundSpeed(OriginalGroundSpeed);
@@ -424,7 +429,7 @@ simulated event SetAnimAction(name NewAction)
 			SetAnimAction(AnimAction);
 			return;
 		}
-		if( AnimAction=='PoundAttack3' && Controller!=None )
+		if( AnimAction=='PoundAttack3' && KFMonsterController(Controller)!=None )
 			Controller.GotoState('spinattack');
 		else if(NewAction == 'ZombieFeed')
 		{

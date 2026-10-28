@@ -439,7 +439,8 @@ function bool FindNewEnemy()
 	{
 		for ( PC=Level.ControllerList; PC!=None; PC=PC.NextController )
 		{
-			if ( PC.bIsPlayer && (PC.Pawn!=None) && PC.Pawn.Health>0
+			// (not a player's specimen in Versus)
+			if ( PC.bIsPlayer && (PC.Pawn!=None) && PC.Pawn.Health>0 && KFMonster(PC.Pawn)==None
 			 && (KFHumanPawnZombies(PC.Pawn)==None || !KFHumanPawnZombies(PC.Pawn).bIsDowned) )
 			{
 				NewDist = PreyDistance(PC.Pawn);
@@ -1779,6 +1780,8 @@ function bool SetEnemy( Pawn NewEnemy, optional bool bHateMonster )
 {
 	if( KFHumanPawnZombies(NewEnemy)!=None && KFHumanPawnZombies(NewEnemy).bIsDowned )
 		Return False; // Ignore downed players waiting on a revive.
+	if( !bHateMonster && KFMonster(NewEnemy)!=None )
+		Return False; // A player's specimen in Versus is one of us.
 	if( !bHateMonster && KFHumanPawnEnemy(NewEnemy)!=None && KFHumanPawnEnemy(NewEnemy).AttitudeToSpecimen<=ATTITUDE_Ignore )
 		Return False; // In other words, dont attack human pawns as long as they dont damage me or hates me.
 	if( KFM.Intelligence>=BRAINS_Mammal && Enemy!=None && NewEnemy!=None && NewEnemy!=Enemy && NewEnemy.Controller!=None && NewEnemy.Controller.bIsPlayer )

@@ -615,7 +615,8 @@ function float NumPlayersHealthModifer()
 
 	For( C=Level.ControllerList; C!=None; C=C.NextController )
 	{
-		if( C.bIsPlayer && C.Pawn!=None && C.Pawn.Health > 0 )
+		// (not a player's specimen in Versus)
+		if( C.bIsPlayer && C.Pawn!=None && C.Pawn.Health > 0 && KFMonster(C.Pawn)==None )
 		{
 			if(Bot(C)!=None)
 			{
@@ -936,7 +937,8 @@ simulated function Tick(float DeltaTime)
 		if(Level.TimeSeconds>(DecapTime + 2.0) && Controller!=none)
 		{
 			DECAP = false;
-			MonsterController(Controller).ExecuteWhatToDoNext();
+			if( MonsterController(Controller)!=None )
+				MonsterController(Controller).ExecuteWhatToDoNext();
 		}
 	}
 	if( bGloryReady && Role == ROLE_Authority && Level.TimeSeconds > GloryUntil )
@@ -1541,8 +1543,8 @@ function bool FlipOver()
 	Acceleration = vect(0, 0, 0);
 	Velocity.X = 0;
 	Velocity.Y = 0;
-	// (one knocked over as it dies has no controller any more)
-	if( Controller!=None )
+	// (one knocked over as it dies has no controller any more; a player's, in Versus, is not an AI's)
+	if( KFMonsterController(Controller)!=None )
 	{
 		Controller.GoToState('WaitForAnim');
 		KFMonsterController(Controller).bUseFreezeHack = True;
@@ -3948,7 +3950,7 @@ function RemoveHead()
 
 	//TODO - do we need to inform the controller that we can't move owing to lack of head,
 	//	   or is that handled elsewhere
-	if ( Controller != none )
+	if ( MonsterController(Controller) != none )
 	{
 		MonsterController(Controller).Accuracy = -5;  // More chance of missing. (he's headless now, after all) :-D
 	}

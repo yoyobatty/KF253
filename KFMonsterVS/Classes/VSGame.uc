@@ -1,102 +1,267 @@
+// Versus, as in Left 4 Dead 2's: two teams of players take a half each as the survivors, through the waves, while the
+// other team plays specimens. A specimen player is given a specimen to be, rises as it wherever the survivors cannot see
+// it, and after dying rises again as another a few seconds later; from the second wave one of them gets each wave's
+// heavy. A team scores in its survivors' half (WavePoints a wave cleared, a share of it for the wave the team fell in,
+// and SurvivorPoints for each survivor standing at a wave's end); after the second half the higher score wins. The AI's
+// waves come as ever, and bots make up the survivors.
 class VSGame extends KFGameType;
 
-var bool bHasPlayerMonsters;
-var bool bRespawnOnBoss;
+var() config float SpecimenSpawnDelay;			// seconds a specimen player waits to rise again after dying
 
-var config bool bFullVSMode;
-var config array<name> PossessablePawns;
-var config float PlayersVSZedsRatio;
-var config int MonsterKillTime;
+var array< class<KFMonster> > SpecimenClasses;	// what specimen players rise as (each taken by one player at a time, if it can be)
+var array< class<KFMonster> > HeavyClasses;
+var float HeavyPatience;						// seconds a player's heavy may go without hurting a survivor before the AI takes it
+var int HalfTimeLength;							// seconds of the break between the halves
+var int WavePoints;
+var int SurvivorPoints;							// half for standing at the wave's end, half by health
 
-var transient float NextTraderMsg,NextYellTime;
-var int KillPLMonstersTimer;
+var VSGRI VGRI;
+var byte Half, SurvivorSquad;
+var int SurvivorSlots;			// survivors each half fields, players and bots (counted as the first wave begins)
+var int WaveTotal, WaveKills;	// the AI specimens of this wave, and how many have been killed
+var float HeavyShare;			// the share of the wave killed when the heavy is handed out (0: none this wave)
+var bool bHalfTime;
+var int HalfTimeLeft;
 
-function RestartPlayer( Controller aPlayer )
+var localized string HalfTimeText, SecondHalfText, WaveScoreText, FellText, JoinedText;
+
+function PostBeginPlay()
 {
-	if( aPlayer.PlayerReplicationInfo.Team==Teams[1] )
-	{
-		aPlayer.GoToState('PreySpec');
-		SyncClientState(PlayerController(aPlayer),'PreySpec');
-	}
-	else Super.RestartPlayer(aPlayer);
+	Super.PostBeginPlay();
+	GameReplicationInfo.bNoTeamChanges = false;
+	VGRI = VSGRI(GameReplicationInfo);
+	Half = 1;
 }
+
+// ============================================================================
+// Teams: each player is on a versus team (VSPRI.VSTeam); the team playing the survivors this half is Teams[0], the other
+// Teams[1]. Bots are always survivors.
+
+final function byte RoleTeam( byte S )
+{
+	if( S==SurvivorSquad )
+		return 0;
+	return 1;
+}
+final function int SquadSize( byte S, optional Controller Skip )
+{
+	local Controller C;
+	local int n;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( C!=Skip && PlayerController(C)!=None && VSPRI(C.PlayerReplicationInfo)!=None && !C.PlayerReplicationInfo.bOnlySpectator
+		 && VSPRI(C.PlayerReplicationInfo).VSTeam==S )
+			n++;
+	return n;
+}
+final function byte PickSquad( Controller Other )
+{
+	local int A, B;
+
+	A = SquadSize(0,Other);
+	B = SquadSize(1,Other);
+	if( A<B )
+		return 0;
+	if( B<A )
+		return 1;
+	return SurvivorSquad;
+}
+// Human players on the survivors' side
+final function int SurvivorPlayers()
+{
+	local Controller C;
+	local int n;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( PlayerController(C)!=None && C.PlayerReplicationInfo!=None && !C.PlayerReplicationInfo.bOnlySpectator
+		 && C.PlayerReplicationInfo.Team==Teams[0] )
+			n++;
+	return n;
+}
+final function SetTeam( Controller C, byte T )
+{
+	if( C.PlayerReplicationInfo.Team==Teams[T] )
+		return;
+	if( C.PlayerReplicationInfo.Team!=None )
+		C.PlayerReplicationInfo.Team.RemoveFromTeam(C);
+	Teams[T].AddToTeam(C);
+}
+
+function bool ChangeTeam( Controller Other, int N, bool bNewTeam )
+{
+	local VSPRI P;
+
+	P = VSPRI(Other.PlayerReplicationInfo);
+	if( PlayerController(Other)==None || P==None || P.bOnlySpectator )
+		return Super.ChangeTeam(Other,N,bNewTeam);
+	if( P.VSTeam>1 )
+		P.VSTeam = PickSquad(Other);
+	SetTeam(Other,RoleTeam(P.VSTeam));
+	return true;
+}
+
+// The escape menu's Switch Team (VSPC.ServerChangeTeam)
+function SwitchSquad( VSPC P )
+{
+	local VSPRI R;
+	local byte S;
+
+	R = VSPRI(P.PlayerReplicationInfo);
+	if( R==None || R.bOnlySpectator || bGameEnded )
+		return;
+	if( R.VSTeam>1 )
+		S = PickSquad(P);
+	else S = 1-R.VSTeam;
+	if( Level.NetMode!=NM_Standalone && R.VSTeam<=1 && SquadSize(S)>=SquadSize(R.VSTeam) )
+	{
+		P.ReceiveLocalizedMessage(class'VSInfoMessage',9);
+		return;
+	}
+	if( P.Pawn!=None )
+	{
+		if( KFMonster(P.Pawn)!=None )
+			ReleaseSpecimen(P);
+		else P.Pawn.PlayerChangedTeam();
+	}
+	R.VSTeam = S;
+	SetTeam(P,RoleTeam(S));
+	R.bOutOfLives = false;
+	R.NumLives = 0;
+	Broadcast(Self,R.PlayerName@JoinedText@VGRI.SquadName(S)@"("$VGRI.RoleOf(S)$").");
+	if( !GameReplicationInfo.bMatchHasBegun )
+		return;
+	if( RoleTeam(S)==1 )
+	{
+		P.NextSpawnTime = Level.TimeSeconds;
+		SendToGhost(P);
+	}
+	else if( !bHalfTime && !bWaveInProgress && !bWaveBossInProgress )
+	{
+		P.GotoState('PlayerWaiting');
+		SyncClientState(P,'PlayerWaiting');
+		RestartPlayer(P);
+	}
+	else
+	{
+		R.bOutOfLives = true;
+		P.GotoState('Spectating');
+		SyncClientState(P,'Spectating');
+	}
+}
+
 final function SyncClientState( PlayerController P, name NewState )
 {
 	if( P!=None && Viewport(P.Player)==None )
 		P.ClientGotoState(NewState,'');
 }
-final function bool CanTakeMoreSpecimen()
-{
-	local float Ratio;
 
-	if( Level.NetMode==NM_StandAlone )
-		return true;
-	if( Teams[0].Size<=1 )
-		Ratio = 99999;
-	else Ratio = (float(Teams[1].Size)/float(Teams[0].Size));
-	return (Ratio<PlayersVSZedsRatio);
-}
-final function PlayerSwapTeam( VSPC P, byte N )
-{
-	if( !bFullVSMode || N>1 || P.PlayerReplicationInfo.Team==Teams[N] || P.PlayerReplicationInfo.bOnlySpectator )
-		return;
-	if( N==1 && !CanTakeMoreSpecimen() )
-	{
-		P.ClientMessage("Can't switch team: Too many specimen players already!");
-		return;
-	}
-	if( P.Pawn!=None && !P.UnPossessZed() )
-		P.Pawn.PlayerChangedTeam();
-	P.PlayerReplicationInfo.Team.RemoveFromTeam(P);
-	P.PlayerReplicationInfo.Team = Teams[N];
-	P.PlayerReplicationInfo.Team.AddToTeam(P);
-	Broadcast(Self,P.PlayerReplicationInfo.PlayerName@"joined the"@Eval(N==0,"humans","specimen")$"!");
-	if( (P.IsInState('Spectating') || P.IsInState('PlayerWaiting')) && ShouldGoHunt(P) )
-	{
-		P.GoToState('PreySpec');
-		SyncClientState(P,'PreySpec');
-	}
-	else if( P.IsInState('PreySpec') && !ShouldGoHunt(P) )
-	{
-		P.GoToState('Spectating');
-		SyncClientState(P,'Spectating');
-	}
-}
-final function bool ShouldGoHunt( VSPC P )
-{
-	if( bFullVSMode )
-		return (P.PlayerReplicationInfo.Team==Teams[1]);
-	return true;
-}
-final function PlayerPossess( VSPC P, KFMonster M )
-{
-	local byte i;
-	local bool bRes;
+// ============================================================================
+// Specimen players: a ghost (VSPC state Ghost) until they rise; a specimen of their own (an Awesome class) after
 
-	if( bFullVSMode && P.PlayerReplicationInfo.Team!=Teams[1] )
+function RestartPlayer( Controller aPlayer )
+{
+	if( VSPC(aPlayer)!=None && aPlayer.PlayerReplicationInfo.Team==Teams[1] )
 	{
-		P.ClientMessage("Can't possess: Bad player team.");
+		SendToGhost(VSPC(aPlayer));
 		return;
 	}
-	if( MonsterController(M.Controller)==None )
+	if( bHalfTime )
+		return;
+	Super.RestartPlayer(aPlayer);
+}
+
+final function SendToGhost( VSPC P )
+{
+	if( P.Pawn!=None || P.PlayerReplicationInfo.bOnlySpectator || bGameEnded )
+		return;
+	P.PlayerReplicationInfo.bOutOfLives = false;
+	P.PlayerReplicationInfo.NumLives = 0;
+	if( VSPRI(P.PlayerReplicationInfo).SpawnClass==None )
+		GiveSpecimen(P);
+	if( !P.IsInState('Ghost') )
 	{
-		P.ClientMessage("Can't possess: Already controlled by a player.");
+		P.GotoState('Ghost');
+		SyncClientState(P,'Ghost');
+	}
+}
+
+// The specimen this player rises as next: one nobody else on the team is or will be, and not the one they just were
+final function GiveSpecimen( VSPC P )
+{
+	local array< class<KFMonster> > Free;
+	local int i;
+
+	for( i=0; i<SpecimenClasses.Length; i++ )
+		if( SpecimenClasses[i]!=P.LastSpecimen && !SpecimenTaken(SpecimenClasses[i],P) )
+			Free[Free.Length] = SpecimenClasses[i];
+	if( Free.Length==0 )
+		for( i=0; i<SpecimenClasses.Length; i++ )
+			if( SpecimenClasses[i]!=P.LastSpecimen )
+				Free[Free.Length] = SpecimenClasses[i];
+	VSPRI(P.PlayerReplicationInfo).SpawnClass = Free[Rand(Free.Length)];
+}
+final function bool SpecimenTaken( class<KFMonster> M, Controller Skip )
+{
+	local Controller C;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( C!=Skip && VSPC(C)!=None && ((C.Pawn!=None && C.Pawn.Class==M) || VSPRI(C.PlayerReplicationInfo).SpawnClass==M) )
+			return true;
+	return false;
+}
+final function bool IsHeavy( class<Pawn> M )
+{
+	local int i;
+
+	for( i=0; i<HeavyClasses.Length; i++ )
+		if( M==HeavyClasses[i] )
+			return true;
+	return false;
+}
+
+// A ghost's Fire (VSPC.ServerRise): its specimen rises there, if no survivor can see the spot
+function RiseSpecimen( VSPC P )
+{
+	local VSPRI R;
+	local vector Spot;
+	local rotator Facing;
+	local byte Problem;
+	local KFMonster M;
+	local int i, OldPlayers;
+
+	R = VSPRI(P.PlayerReplicationInfo);
+	if( R==None || P.Pawn!=None || R.SpawnClass==None || R.Team!=Teams[1] || Level.TimeSeconds<P.NextSpawnTime )
+		return;
+	if( bHalfTime || bGameEnded || (!bWaveInProgress && !bWaveBossInProgress) )
+	{
+		P.ReceiveLocalizedMessage(class'VSInfoMessage',6);
 		return;
 	}
-	for( i=0; i<PossessablePawns.Length; ++i )
-		if( M.IsA(PossessablePawns[i]) )
-		{
-			bRes = true;
-			break;
-		}
-	if( !bRes )
+	Problem = P.SpawnProblem(R.SpawnClass,Spot);
+	if( Problem!=0 )
 	{
-		P.ClientMessage("Can't possess"@GetNameOf(M));
+		P.ReceiveLocalizedMessage(class'VSInfoMessage',Problem);
 		return;
 	}
-	if( bWaveInProgress && KillPLMonstersTimer<=0 )
+	Facing.Yaw = P.Rotation.Yaw;
+	// (its health and blows are worked out for the survivors in play, not counting the specimen players)
+	OldPlayers = NumPlayers;
+	NumPlayers = SurvivorPlayers();
+	M = Spawn(R.SpawnClass,,,Spot,Facing);
+	NumPlayers = OldPlayers;
+	if( M!=None )
+		for( i=0; i<ShopList.Length; i++ )
+			if( ShopList[i]!=None && ShopList[i].Encompasses(M) )
+			{
+				if( M.Controller!=None )
+					M.Controller.Destroy();
+				M.Destroy();
+				M = None;
+				break;
+			}
+	if( M==None )
 	{
-		P.ClientMessage("Can't possess: Player control monster time is up!");
+		P.ReceiveLocalizedMessage(class'VSInfoMessage',5);
 		return;
 	}
 	if( M.Controller!=None )
@@ -104,845 +269,669 @@ final function PlayerPossess( VSPC P, KFMonster M )
 		M.Controller.Pawn = None;
 		M.Controller.Destroy();
 	}
-	if( P.PlayerReplicationInfo.Team!=Teams[1] )
-	{
-		P.PlayerReplicationInfo.Team.RemoveFromTeam(P);
-		P.PlayerReplicationInfo.Team = Teams[1];
-		P.PlayerReplicationInfo.Team.AddToTeam(P);
-	}
-	if( bFullVSMode )
-		P.PlayerReplicationInfo.bOutOfLives = false;
-	P.ClientSetRotation(M.Rotation);
 	P.Possess(M);
-	//P.bIsPlayer = false; // Stupid hack to prevent other zeds from attacking me!
+	P.ClientSetRotation(Facing);
+	P.LastSpecimen = R.SpawnClass;
+	R.SpawnClass = None;
+	P.bHeavy = IsHeavy(M.Class);
+	if( P.bHeavy )
+	{
+		P.LastHurtTime = Level.TimeSeconds;
+		R.Patience = 100;
+	}
 }
 
-// Stub
-static function Texture GetRandomTeamSymbol(int base)
+// The AI takes the player's specimen over and the player is a ghost again (Suicide as a specimen, the heavy's patience
+// run out, a change of team)
+final function ReleaseSpecimen( VSPC P )
 {
-	return Texture'Engine.DefaultTexture';
+	local KFMonster M;
+	local rotator R;
+
+	M = KFMonster(P.Pawn);
+	if( M==None )
+		return;
+	R.Yaw = M.Rotation.Yaw;
+	P.UnPossess();
+	P.ClientSetRotation(R);
+	P.bHeavy = false;
+	P.NextSpawnTime = Level.TimeSeconds + SpecimenSpawnDelay;
+	if( M.Health>0 )
+	{
+		M.Controller = Spawn(M.ControllerClass);
+		if( M.Controller!=None )
+			M.Controller.Possess(M);
+		else M.Suicide();
+	}
+	SendToGhost(P);
 }
 
-event PreBeginPlay()
-{
-	Super.PreBeginPlay();
-
-	KFGameReplicationInfo(GameReplicationInfo).bNoBots = bNoBots;
-	KFGameReplicationInfo(GameReplicationInfo).PendingBots = 0;
-	KFGameReplicationInfo(GameReplicationInfo).GameDiff = GameDifficulty;
-	KFGameReplicationInfo(GameReplicationInfo).bEnemyHealthBars = bEnemyHealthBars;
-
-	Teams[1] = GetBlueTeam(0);
-	Teams[1].TeamIndex = 1;
-	Teams[1].AI = Spawn(TeamAIType[1]);
-	Teams[1].AI.Team = Teams[1];
-	Teams[0].AI.EnemyTeam = Teams[1];
-	Teams[1].AI.EnemyTeam = Teams[0];
-	Teams[1].AI.SetObjectiveLists();
-
-	if( bFullVSMode )
-		ScoreBoardType = string(Class'VSTeamScoreBoard');
-}
-
-function PostBeginPlay()
-{
-	Super.PostBeginPlay();
-	GameReplicationInfo.bNoTeamChanges = !bFullVSMode;
-}
-
-final function SetGameSpeedX( float Speed )
-{
-	Level.TimeDilation = Speed*1.1f;
-	Level.NetUpdateTime = Level.TimeSeconds-1.f;
-}
-
-final function EndZEDTime()
-{
-}
-// Overriden to handle ZEDTime zombie death slomo system
-event Tick(float DeltaTime)
-{
-}
-
-
-// Force stop all remaining zeds when the boss dies
-function DoBossDeath()
+// Every second: dead specimen players back to ghosts, the wait before they may rise, the heavy's patience, and the
+// player's controller back in its movement state if specimen code sent it to an AI one
+final function SpecimenTimer()
 {
 	local Controller C;
-	local Controller nextC;
-	local int num;
+	local VSPC P;
+	local VSPRI R;
 
-	num = NumMonsters;
-
-	c = Level.ControllerList;
-
-	// turn off all the other zeds so they don't attack the player
-	while (c != none && num > 0)
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
 	{
-		nextC = c.NextController;
-		if (KFMonsterController(C)!=None)
+		P = VSPC(C);
+		if( P==None || P.PlayerReplicationInfo.Team!=Teams[1] || P.PlayerReplicationInfo.bOnlySpectator )
+			continue;
+		R = VSPRI(P.PlayerReplicationInfo);
+		if( P.Pawn==None )
 		{
-			C.GotoState('GameEnded');
-			--num;
+			if( !P.IsInState('Ghost') && Level.TimeSeconds>P.DeathTime+2 )
+				SendToGhost(P);
+			R.SpawnWait = Max(0,int(P.NextSpawnTime-Level.TimeSeconds+0.99));
 		}
-		c = nextC;
-	}
-}
-
-final function class<KFMonster> GetReplacement( class<KFMonster> M )
-{
-	if( Class<ZombieClot>(M)!=None )
-		return class'AwesomeClot';
-	if( Class<ZombieBloat>(M)!=None )
-		return class'AwesomeBloat';
-	if( Class<ZombieShade>(M)!=None )
-		return class'AwesomeShade';
-	if( Class<ZombieCrawler>(M)!=None )
-		return class'AwesomeCrawler';
-	if( Class<ZombieFleshPound>(M)!=None )
-		return class'AwesomeFleshPound';
-	if( Class<ZombieGorefast>(M)!=None )
-		return class'AwesomeGoreFast';
-	if( Class<ZombieScrake>(M)!=None )
-		return class'AwesomeScrake';
-	if( Class<ZombieSiren>(M)!=None )
-		return class'AwesomeSiren';
-	if( Class<ZombieStalker>(M)!=None )
-		return class'AwesomeStalker';
-	if( Class<ZombieWretch>(M)!=None )
-		return class'AwesomeWretch';
-	return M;
-}
-
-function LoadUpMonsterList()
-{
-	local int i,j,q,c,n;
-	local Class<KFMonster> MC;
-	local string S,ID;
-	local bool bInitSq;
-	local array<IMClassList> InitMList;
-
-	//Log("Loading up monster classes...",'Init');
-	for( i=0; i<MonsterClasses.Length; i++ )
-	{
-		if( MonsterClasses[i].MClassName=="" || MonsterClasses[i].MID=="" )
-			Continue;
-		MC = Class<KFMonster>(DynamicLoadObject(MonsterClasses[i].MClassName,Class'Class'));
-		if( MC==None )
-			Continue;
-		InitMList.Length = j+1;
-		InitMList[j].MClass = GetReplacement(MC);
-		InitMList[j].ID = MonsterClasses[i].MID;
-		j++;
-	}
-	//Log("Got"@j@"monsters. Loading up monster squads...",'Init');
-	for( i=0; i<MonsterSquad.Length; i++ )
-	{
-		S = MonsterSquad[i];
-		if( S=="" )
-			Continue;
-		bInitSq = False;
-		n = 0;
-		While( S!="" )
+		else if( KFMonster(P.Pawn)!=None && P.Pawn.Health>0 )
 		{
-			q = int(Left(S,1));
-			ID = Mid(S,1,1);
-			S = Mid(S,2);
-			MC = None;
-			for( j=0; j<InitMList.Length; j++ )
+			if( P.bHeavy )
 			{
-				if( InitMList[j].ID~=ID )
+				R.Patience = Clamp(100*(1.0-(Level.TimeSeconds-P.LastHurtTime)/HeavyPatience),0,100);
+				if( R.Patience==0 )
 				{
-					MC = Class<KFMonster>(InitMList[j].MClass);
-					Break;
+					P.ReceiveLocalizedMessage(class'VSInfoMessage',8);
+					ReleaseSpecimen(P);
+					continue;
 				}
 			}
-			if( MC==None )
-				Continue;
-			if( !bInitSq )
-			{
-				InitSquads.Length = c+1;
-				bInitSq = True;
-			}
-			while( (q--)>0 )
-			{
-				InitSquads[c].MSquad.Length = n+1;
-				InitSquads[c].MSquad[n] = MC;
-				n++;
-			}
+			if( !P.IsInState('PlayerWalking') && !P.IsInState('PlayerSpidering') && !P.IsInState('PlayerSwimming')
+			 && !P.IsInState('PlayerClimbing') && !P.IsInState('PlayerFlying') )
+				P.GotoState(P.Pawn.LandMovementState);
 		}
-		if( bInitSq )
-			c++;
 	}
-	//Log("Got"@c@"monster squads.",'Init');
-	if( FallbackMonster==class'EliteKrall' && InitMList.Length>0 )
-		FallbackMonster = GetReplacement(Class<KFMonster>(InitMList[0].MClass));
+	GiveHeavy();
 }
 
-
-function ScoreKill(Controller Killer, Controller Other)
+// From the second wave, once a share of the wave is dead, one specimen player gets the heavy as what they rise as next
+// (a ghost first, and whoever has had it least)
+final function GiveHeavy()
 {
-	local PlayerReplicationInfo OtherPRI;
-	local float KillScore;
+	local Controller C;
+	local VSPC P, Best;
+	local int Score, BestScore;
+
+	if( HeavyShare<=0 || !bWaveInProgress || WaveTotal<=0 || WaveKills<WaveTotal*HeavyShare )
+		return;
+	HeavyShare = 0;
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		P = VSPC(C);
+		if( P==None || P.PlayerReplicationInfo.Team!=Teams[1] || P.PlayerReplicationInfo.bOnlySpectator )
+			continue;
+		Score = Rand(10) - P.HeavyCount*100;
+		if( P.Pawn==None )
+			Score += 1000;
+		if( Best==None || Score>BestScore )
+		{
+			Best = P;
+			BestScore = Score;
+		}
+	}
+	if( Best==None )
+		return;
+	Best.HeavyCount++;
+	VSPRI(Best.PlayerReplicationInfo).SpawnClass = HeavyClasses[Rand(HeavyClasses.Length)];
+	if( Best.Pawn==None )
+		Best.NextSpawnTime = Level.TimeSeconds;
+	Best.ReceiveLocalizedMessage(class'VSInfoMessage',7,,,VSPRI(Best.PlayerReplicationInfo).SpawnClass);
+}
+
+// What specimen players do to the survivors: their damage, and the heavy's patience
+function int ReduceDamage( int Damage, pawn injured, pawn instigatedBy, vector HitLocation, out vector Momentum, class<DamageType> DamageType )
+{
+	local VSPC P;
+
+	Damage = Super.ReduceDamage(Damage,injured,instigatedBy,HitLocation,Momentum,DamageType);
+	if( Damage>0 && instigatedBy!=None && KFMonster(instigatedBy)!=None && KFHumanPawn(injured)!=None && injured.Health>0 )
+	{
+		P = VSPC(instigatedBy.Controller);
+		if( P!=None )
+		{
+			VSPRI(P.PlayerReplicationInfo).SpecimenDamage += Min(Damage,injured.Health);
+			P.LastHurtTime = Level.TimeSeconds;
+		}
+	}
+	return Damage;
+}
+
+function Killed( Controller Killer, Controller Killed, Pawn KilledPawn, class<DamageType> DamageType )
+{
+	local VSPC P;
+
+	P = VSPC(Killed);
+	if( P!=None && KFMonster(KilledPawn)==None )
+		P = None;
+	if( KFMonster(KilledPawn)!=None && KFMonsterController(Killed)!=None && (bWaveInProgress || bWaveBossInProgress) )
+		WaveKills++;
+	Super.Killed(Killer,Killed,KilledPawn,DamageType);
+	if( P!=None )
+	{
+		// (not one of the wave's: the count of specimens left and the kills stay as they were)
+		ZombiesKilled--;
+		NumMonsters++;
+		KFGameReplicationInfo(GameReplicationInfo).MaxMonsters = TotalMaxMonsters+NumMonsters;
+		P.NextSpawnTime = Level.TimeSeconds + SpecimenSpawnDelay;
+		P.DeathTime = Level.TimeSeconds;
+		P.bHeavy = false;
+		// (the dying specimen destroys any controller it still has, which would throw the player out)
+		P.PawnDied(KilledPawn);
+	}
+}
+
+function ScoreKill( Controller Killer, Controller Other )
+{
+	local PlayerReplicationInfo OtherPRI, KillerPRI;
+	local int Cash;
 
 	OtherPRI = Other.PlayerReplicationInfo;
-	if ( OtherPRI != None )
+	if( Killer!=None )
+		KillerPRI = Killer.PlayerReplicationInfo;
+
+	// a specimen player's specimen: its killer is paid as for the AI's
+	if( OtherPRI!=None && OtherPRI.Team==Teams[1] )
 	{
-		if( OtherPRI.Team==Teams[0] )
+		if( GameRulesModifiers!=None )
+			GameRulesModifiers.ScoreKill(Killer,Other);
+		if( PlayerController(Other)!=None && Killer!=None && Killer!=Other )
 		{
-			OtherPRI.NumLives++;
-			OtherPRI.Score -= (OtherPRI.Score * (GameDifficulty * 0.05));	// you Lose 35% of your current cash on suicidal, 15% on normal.
-			OtherPRI.Team.Score -= (OtherPRI.Score * (GameDifficulty * 0.05));
-
-			if (OtherPRI.Score < 0 )
-				OtherPRI.Score = 0;
-			if (OtherPRI.Team.Score < 0 )
-				OtherPRI.Team.Score = 0;
-
-			OtherPRI.Team.NetUpdateTime = Level.TimeSeconds - 1;
-			OtherPRI.bOutOfLives = true;
-			if( Killer!=None && Killer.PlayerReplicationInfo!=None && Killer.bIsPlayer )
-			{
-				if( Killer.PlayerReplicationInfo.Team!=OtherPRI.Team )
-					BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI,Killer.PlayerReplicationInfo,Killer.Pawn.Class);
-				else BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI,Killer.PlayerReplicationInfo);
-			}
-			else if( Killer==None || Monster(Killer.Pawn)==None )
-				BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI);
-			else BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI,,Killer.Pawn.Class);
-			CheckScore(None);
+			if( KillerPRI!=None )
+				PlayerController(Other).ReceiveLocalizedMessage(class'VSKilledMessage',,KillerPRI);
+			else if( Killer.Pawn!=None )
+				PlayerController(Other).ReceiveLocalizedMessage(class'VSKilledMessage',,,,Killer.Pawn.Class);
 		}
-		else if( OtherPRI.Team==Teams[1] )
+		if( KillerPRI!=None && KillerPRI.Team==Teams[0] && LastKilledMonsterClass!=None )
 		{
-			if( bFullVSMode )
-				OtherPRI.bOutOfLives = true;
-			if( Killer!=None && Other!=Killer && PlayerController(Other)!=None )
-			{
-				if( Killer.PlayerReplicationInfo!=None )
-					PlayerController(Other).ReceiveLocalizedMessage(class'VSKilledMessage',,Killer.PlayerReplicationInfo);
-				else PlayerController(Other).ReceiveLocalizedMessage(class'VSKilledMessage',,,,Killer.Pawn.Class);
-			}
+			Cash = KillCash(LastKilledMonsterClass);
+			KillerPRI.Kills++;
+			KillerPRI.Score += Cash;
+			KillerPRI.Team.Score += Cash;
+			KillerPRI.NetUpdateTime = Level.TimeSeconds - 1;
+			KillerPRI.Team.NetUpdateTime = Level.TimeSeconds - 1;
+			if( KFPlayerReplicationInfo(KillerPRI)!=None )
+				KFPlayerReplicationInfo(KillerPRI).ThreeSecondScore += Cash;
 		}
-	}
-
-	if ( GameRulesModifiers != None )
-		GameRulesModifiers.ScoreKill(Killer, Other);
-
-	if( (killer == Other) || (killer == None) )
-	{
-		if ( Other.PlayerReplicationInfo != None )
-		{
-			Other.PlayerReplicationInfo.Score -= 1;
-			Other.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-			ScoreEvent(Other.PlayerReplicationInfo,-1,"self_frag");
-		}
-	}
-	else if ( Other.bIsPlayer && OtherPRI!=None && OtherPRI.Team==Teams[0] && !Killer.bIsPlayer )
-	{
-		// Specimen killed a player, score for specimen!
-		Teams[1].Score+=1;
-		Teams[1].NetUpdateTime = Level.TimeSeconds - 1;
 		return;
 	}
 
-	if ( Killer==None || !Killer.bIsPlayer || (Killer==Other) || MonsterController(Killer)!=None )
+	// a survivor killed by a specimen player: the survivor's loss as for any death, the kill to the player
+	if( OtherPRI!=None && OtherPRI.Team==Teams[0] && KillerPRI!=None && KillerPRI.Team==Teams[1] )
+	{
+		if( GameRulesModifiers!=None )
+			GameRulesModifiers.ScoreKill(Killer,Other);
+		OtherPRI.NumLives++;
+		OtherPRI.Score -= (OtherPRI.Score * (GameDifficulty * 0.05));
+		OtherPRI.Team.Score -= (OtherPRI.Score * (GameDifficulty * 0.05));
+		if( OtherPRI.Score<0 )
+			OtherPRI.Score = 0;
+		if( OtherPRI.Team.Score<0 )
+			OtherPRI.Team.Score = 0;
+		OtherPRI.Team.NetUpdateTime = Level.TimeSeconds - 1;
+		OtherPRI.bOutOfLives = true;
+		if( Killer.Pawn!=None )
+			BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI,KillerPRI,Killer.Pawn.Class);
+		else BroadcastLocalizedMessage(class'VSInvasionMessage',1,OtherPRI,KillerPRI);
+		KillerPRI.Kills++;
+		KillerPRI.NetUpdateTime = Level.TimeSeconds - 1;
+		CheckScore(None);
 		return;
-
-	if ( Other.bIsPlayer && OtherPRI!=None && OtherPRI.Team==Teams[0] )
-	{
-		if( OtherPRI!=None && Killer.PlayerReplicationInfo.Team!=OtherPRI.Team )
-		{
-			Killer.PlayerReplicationInfo.Kills++;
-			Killer.PlayerReplicationInfo.Score += 50;
-			Killer.PlayerReplicationInfo.Team.Score+=1;
-			Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-			Killer.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
-		}
-		else
-		{
-			Killer.PlayerReplicationInfo.Score -= 5;
-			Killer.PlayerReplicationInfo.Team.Score -= 2;
-			Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-			Killer.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
-			ScoreEvent(Killer.PlayerReplicationInfo, -5, "team_frag");
-		}
 	}
-	else if( Killer.PlayerReplicationInfo!=None )
-	{
-		if( Monster(Other.Pawn)!=None )
-			KillScore = Monster(Other.Pawn).ScoringValue;
-		else if( LastKilledMonsterClass!=None )
-			KillScore = LastKilledMonsterClass.Default.ScoringValue;
-		else KillScore = 1;
-
-		// Scale killscore by difficulty
-		if ( GameDifficulty >= 7.0 ) // Suicidal
-			KillScore *= 0.65;
-		else if ( GameDifficulty >= 4.0 ) // Hard
-			KillScore *= 0.85;
-		else if ( GameDifficulty >= 2.0 ) // Normal
-			KillScore *= 1.0;
-		else // Beginner
-			KillScore *= 2.0;
-
-		if( Killer.PlayerReplicationInfo.Team==Teams[1] ) // Was in-team kill.
-		{
-			//Killer.PlayerReplicationInfo.Kills--;
-			Killer.PlayerReplicationInfo.Score -= KillScore;
-			Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-			return;
-		}
-		KillScore = Max(1,int(KillScore));
-		Killer.PlayerReplicationInfo.Kills++;
-		Killer.PlayerReplicationInfo.Score += KillScore;
-		Killer.PlayerReplicationInfo.Team.Score += KillScore;
-		Killer.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-		Killer.PlayerReplicationInfo.Team.NetUpdateTime = Level.TimeSeconds - 1;
-		TeamScoreEvent(Killer.PlayerReplicationInfo.Team.TeamIndex, 1, "tdm_frag");
-		if( KFPlayerReplicationInfo(Killer.PlayerReplicationInfo)!=None )
-			KFPlayerReplicationInfo(Killer.PlayerReplicationInfo).ThreeSecondScore+=KillScore;
-	}
-
-	if (Killer.PlayerReplicationInfo !=none && Killer.PlayerReplicationInfo.Score < 0)
-		Killer.PlayerReplicationInfo.Score = 0;
+	Super.ScoreKill(Killer,Other);
 }
 
+// The survivors are out when none of them has a life left (specimen players always have)
+function bool CheckMaxLives( PlayerReplicationInfo Scorer )
+{
+	local Controller C;
+	local PlayerController Living;
+	local int AliveCount;
+
+	if( MaxLives<=0 || bHalfTime )
+		return false;
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.PlayerReplicationInfo!=None && C.bIsPlayer && !C.PlayerReplicationInfo.bOutOfLives
+		 && !C.PlayerReplicationInfo.bOnlySpectator && C.PlayerReplicationInfo.Team==Teams[0] )
+		{
+			AliveCount++;
+			if( Living==None )
+				Living = PlayerController(C);
+		}
+	}
+	if( AliveCount==0 )
+	{
+		EndGame(Scorer,"LastMan");
+		return true;
+	}
+	if( AliveCount==1 && Living!=None )
+		Living.ReceiveLocalizedMessage(Class'KFLastManStandingMsg');
+	return false;
+}
+
+// ============================================================================
+// Scoring and the halves
+
+final function AddScore( int Points )
+{
+	VGRI.SquadScore[SurvivorSquad] += Points;
+	VGRI.NetUpdateTime = Level.TimeSeconds - 1;
+}
+
+// A wave cleared: its points, and the bonus for the survivors standing
+final function ScoreWave()
+{
+	local Controller C;
+	local float Bonus;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team==Teams[0] && KFHumanPawn(C.Pawn)!=None && C.Pawn.Health>0 )
+			Bonus += SurvivorPoints*0.5 + SurvivorPoints*0.5*FMin(float(C.Pawn.Health)/C.Pawn.HealthMax,1.0);
+	AddScore(WavePoints + int(Bonus));
+	VGRI.SquadWaves[SurvivorSquad]++;
+	Announce(VGRI.SquadName(SurvivorSquad)@WaveScoreText@WavePoints@"+"@int(Bonus)$".");
+}
+
+// The survivors fell during a wave: the share of it they killed (of the boss's health, on the boss's wave)
+final function ScoreFall()
+{
+	local Controller C;
+	local float Share;
+
+	if( bWaveBossInProgress )
+	{
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+			if( KFMonsterController(C)!=None && C.Pawn!=None && Monster(C.Pawn).bBoss )
+				Share = FMax(Share,1.0-float(C.Pawn.Health)/C.Pawn.HealthMax);
+	}
+	else if( bWaveInProgress && WaveTotal>0 )
+		Share = FMin(float(WaveKills)/WaveTotal,1.0);
+	AddScore(int(WavePoints*Share));
+	Announce(VGRI.SquadName(SurvivorSquad)@FellText@int(WavePoints*Share)$".");
+}
+
+final function Announce( string S )
+{
+	local Controller C;
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( PlayerController(C)!=None )
+			PlayerController(C).ClientMessage(S,'CriticalEvent');
+}
+
+// The end of the first half starts the break; the end of the second ends the match
+function EndGame( PlayerReplicationInfo Winner, string Reason )
+{
+	if( bHalfTime || bGameEnded )
+		return;
+	if( Reason~="LastMan" || Reason~="TimeLimit" || Reason~="NULL" )
+	{
+		if( bWaveInProgress || bWaveBossInProgress )
+			ScoreFall();
+		if( Half==1 )
+		{
+			StartHalfTime();
+			return;
+		}
+	}
+	if( VGRI.SquadScore[0]>VGRI.SquadScore[1] )
+		VGRI.WinnerSquad = 0;
+	else if( VGRI.SquadScore[1]>VGRI.SquadScore[0] )
+		VGRI.WinnerSquad = 1;
+	else VGRI.WinnerSquad = 2;
+	Super.EndGame(Winner,Reason);
+}
+
+function bool CheckEndGame( PlayerReplicationInfo Winner, string Reason )
+{
+	local Controller P;
+
+	EndTime = Level.TimeSeconds + EndTimeDelay;
+	if( VGRI.WinnerSquad<2 )
+		GameReplicationInfo.Winner = Teams[RoleTeam(VGRI.WinnerSquad)];
+	else GameReplicationInfo.Winner = None;
+	KFGameReplicationInfo(GameReplicationInfo).EndGameType = 2;
+	for( P=Level.ControllerList; P!=None; P=P.NextController )
+	{
+		if( PlayerController(P)!=None )
+		{
+			PlayerController(P).ClientSetBehindView(true);
+			PlayerController(P).ClientGameEnded();
+		}
+		P.GameHasEnded();
+	}
+	if( CurrentGameProfile!=None )
+		CurrentGameProfile.bWonMatch = false;
+	return true;
+}
+
+final function StartHalfTime()
+{
+	local Controller C;
+	local KFMonster M;
+	local Projectile Proj;
+	local Pickup Item;
+
+	bHalfTime = true;
+	HalfTimeLeft = HalfTimeLength;
+	VGRI.HalfTimeLeft = HalfTimeLeft;
+	bWaveInProgress = false;
+	bWaveBossInProgress = false;
+	KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = false;
+
+	foreach DynamicActors(class'KFMonster',M)
+	{
+		if( PlayerController(M.Controller)!=None )
+			M.Controller.UnPossess();
+		else if( M.Controller!=None )
+			M.Controller.Destroy();
+		M.Destroy();
+	}
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.Pawn!=None )
+			C.Pawn.Destroy();
+		if( PlayerController(C)!=None && !C.PlayerReplicationInfo.bOnlySpectator )
+		{
+			C.GotoState('Spectating');
+			SyncClientState(PlayerController(C),'Spectating');
+		}
+	}
+	foreach DynamicActors(class'Projectile',Proj)
+		Proj.Destroy();
+	foreach DynamicActors(class'Pickup',Item)
+		if( Item.bDropped )
+			Item.Destroy();
+	StartGameMusic(False);
+	Announce(HalfTimeText@VGRI.SquadName(SurvivorSquad)@VGRI.SquadScore[SurvivorSquad]$".");
+}
+
+// The second half: the teams change sides and the waves start over
+final function StartSecondHalf()
+{
+	local Controller C, NextC;
+	local VSPRI R;
+	local KFDoorMover Door;
+	local KFTraderDoor TDoor;
+	local int Bots;
+
+	Half = 2;
+	VGRI.Half = 2;
+	SurvivorSquad = 1-SurvivorSquad;
+	VGRI.SurvivorSquad = SurvivorSquad;
+
+	WaveNum = Max(0,InitialWave-1);
+	InvasionGameReplicationInfo(GameReplicationInfo).WaveNumber = WaveNum;
+	WaveCountDown = Max(InitialCountDownValue,1);
+	KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
+	KFGameReplicationInfo(GameReplicationInfo).MaxMonstersOn = false;
+	TotalMaxMonsters = 0;
+	NumMonsters = 0;
+	NextSpawnSquad.Length = 0;
+	WaveTimeElapsed = 0;
+	WaveTotal = 0;
+	WaveKills = 0;
+	HeavyShare = 0;
+	bHasSetViewYet = false;
+	ViewingBoss = None;
+	MusicPlaying = false;
+	CalmMusicPlaying = false;
+	Teams[0].Score = 0;
+	Teams[1].Score = 0;
+
+	// (the trader's doors stand open before the first wave, as when the map began)
+	if( !bTradingDoorsOpen )
+	{
+		foreach DynamicActors(class'KFTraderDoor',TDoor)
+			TDoor.TriggerEvent(TDoor.Tag,TDoor,None);
+		bTradingDoorsOpen = true;
+	}
+	foreach DynamicActors(class'KFDoorMover',Door)
+		Door.RespawnDoor();
+
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		R = VSPRI(C.PlayerReplicationInfo);
+		if( C.PlayerReplicationInfo==None || C.PlayerReplicationInfo.bOnlySpectator )
+			continue;
+		C.PlayerReplicationInfo.Score = StartingCash;
+		C.PlayerReplicationInfo.bOutOfLives = false;
+		C.PlayerReplicationInfo.NumLives = 0;
+		C.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
+		if( VSPC(C)!=None && R!=None && R.VSTeam<=1 )
+		{
+			SetTeam(C,RoleTeam(R.VSTeam));
+			R.SpawnClass = None;
+			VSPC(C).NextSpawnTime = 0;
+			VSPC(C).HeavyCount = 0;
+		}
+		else if( Bot(C)!=None )
+			Bots++;
+	}
+
+	// (the bots make up the survivors to the first half's number)
+	for( C=Level.ControllerList; C!=None; C=NextC )
+	{
+		NextC = C.NextController;
+		if( Bot(C)!=None && Bots>Max(0,SurvivorSlots-SurvivorPlayers()) )
+		{
+			C.Destroy();
+			Bots--;
+		}
+	}
+	while( Bots<SurvivorSlots-SurvivorPlayers() && AddBot() )
+		Bots++;
+
+	bHalfTime = false;
+	VGRI.HalfTimeLeft = 0;
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+	{
+		if( C.PlayerReplicationInfo==None || C.PlayerReplicationInfo.bOnlySpectator || C.Pawn!=None )
+			continue;
+		if( PlayerController(C)!=None && C.PlayerReplicationInfo.Team==Teams[0] )
+		{
+			C.GotoState('PlayerWaiting');
+			SyncClientState(PlayerController(C),'PlayerWaiting');
+		}
+		RestartPlayer(C);
+	}
+	Announce(SecondHalfText@VGRI.SquadName(SurvivorSquad)@VGRI.RoleOf(SurvivorSquad)$".");
+}
+
+function SetupWave()
+{
+	local int OldPlayers;
+
+	OldPlayers = NumPlayers;
+	NumPlayers = SurvivorPlayers();
+	Super.SetupWave();
+	NumPlayers = OldPlayers;
+	WaveTotal = TotalMaxMonsters;
+	WaveKills = 0;
+	if( SurvivorSlots==0 )
+		SurvivorSlots = Max(Teams[0].Size,MinPlayers);
+	if( WaveNum>=1 && HeavyClasses.Length>0 )
+		HeavyShare = 0.3 + 0.4*FRand();
+	else HeavyShare = 0;
+}
+function bool AddSquad()
+{
+	local int OldPlayers;
+	local bool bRes;
+
+	OldPlayers = NumPlayers;
+	NumPlayers = SurvivorPlayers();
+	bRes = Super.AddSquad();
+	NumPlayers = OldPlayers;
+	return bRes;
+}
+function bool AddBoss()
+{
+	local int OldPlayers;
+	local bool bRes;
+
+	OldPlayers = NumPlayers;
+	NumPlayers = SurvivorPlayers();
+	bRes = Super.AddBoss();
+	NumPlayers = OldPlayers;
+	return bRes;
+}
+
+State MatchInProgress
+{
+	// (specimens are the AI's alone; living survivors keep the match going)
+	function bool UpdateMonsterCount()
+	{
+		local Controller C;
+		local int i, j;
+
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+		{
+			if( C.Pawn!=None && C.Pawn.Health>0 )
+			{
+				if( KFMonsterController(C)!=None )
+					i++;
+				else if( KFMonster(C.Pawn)==None )
+					j++;
+			}
+		}
+		NumMonsters = i;
+		return (j>0);
+	}
+
+	function Timer()
+	{
+		if( bHalfTime )
+		{
+			Global.Timer();
+			ElapsedTime++;
+			GameReplicationInfo.ElapsedTime = ElapsedTime;
+			HalfTimeLeft--;
+			VGRI.HalfTimeLeft = Max(HalfTimeLeft,0);
+			if( HalfTimeLeft<=0 )
+				StartSecondHalf();
+			return;
+		}
+		Super.Timer();
+		if( !bHalfTime && !bGameEnded )
+			SpecimenTimer();
+	}
+
+	function StartWaveBoss()
+	{
+		Super.StartWaveBoss();
+		WaveTotal = 0;
+		WaveKills = 0;
+		HeavyShare = 0;
+	}
+
+	function float CalcNextSquadSpawnTime()
+	{
+		local float Res;
+		local int OldPlayers;
+
+		OldPlayers = NumPlayers;
+		NumPlayers = SurvivorPlayers();
+		Res = Super.CalcNextSquadSpawnTime();
+		NumPlayers = OldPlayers;
+		return Res;
+	}
+
+	// (the wave's points first, while the dead are still dead; then the player specimens go and the ghosts wait)
+	function DoWaveEnd()
+	{
+		local Controller C;
+
+		if( !bHalfTime && !bGameEnded )
+			ScoreWave();
+		for( C=Level.ControllerList; C!=None; C=C.NextController )
+			if( VSPC(C)!=None && KFMonster(C.Pawn)!=None && C.Pawn.Health>0 )
+				C.Pawn.KilledBy(C.Pawn);
+		Super.DoWaveEnd();
+	}
+}
+
+state MatchOver
+{
+	function BeginState()
+	{
+		Super.BeginState();
+	}
+}
+
+// Only the survivors share the cash left over at a wave's end
 function bool RewardSurvivingPlayers()
 {
 	local Controller C;
-	local int moneyPerPlayer,div;
+	local int MoneyPerPlayer, Div;
 	local TeamInfo T;
 
 	T = Teams[0];
-	for ( C = Level.ControllerList; C != none; C = C.NextController )
-	{
-		if ( C.Pawn != none && C.PlayerReplicationInfo != none && C.PlayerReplicationInfo.Team==T )
-			div++;
-	}
-
-	if ( T == none || T.Score <= 0 )
-	{
+	if( T==None || T.Score<=0 )
 		return false;
-	}
-
-	moneyPerPlayer = int(T.Score / float(div));
-
-	for ( C = Level.ControllerList; C != none; C = C.NextController )
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
+		if( C.Pawn!=None && C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team==T )
+			Div++;
+	if( Div==0 )
+		return false;
+	MoneyPerPlayer = int(T.Score / float(Div));
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
 	{
-		if ( C.Pawn != none && C.PlayerReplicationInfo != none && C.PlayerReplicationInfo.Team==T )
+		if( C.Pawn!=None && C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team==T )
 		{
-			if ( div == 1 )
+			if( Div==1 )
 			{
 				C.PlayerReplicationInfo.Score += T.Score;
 				T.Score = 0;
 			}
 			else
 			{
-				C.PlayerReplicationInfo.Score += moneyPerPlayer;
-				T.Score-=moneyPerPlayer;
-				div--;
+				C.PlayerReplicationInfo.Score += MoneyPerPlayer;
+				T.Score -= MoneyPerPlayer;
+				Div--;
 			}
-
 			C.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds - 1;
-
-			if( T.Score <= 0 )
+			if( T.Score<=0 )
 			{
 				T.Score = 0;
-				Break;
-			}
-		}
-	}
-
-	T.NetUpdateTime = Level.TimeSeconds - 1;
-
-	return true;
-}
-
-final function HandleMonsterKill()
-{
-	local Controller C;
-
-	if( KillPLMonstersTimer<=0 )
-	{
-		for( C=Level.ControllerList; C!=None; C=C.nextController )
-		{
-			if( Monster(C.Pawn)!=None && C.Pawn.Health>0 && PlayerController(C)!=None )
-			{
-				C.Pawn.Suicide();
 				break;
 			}
 		}
 	}
-	else if( KillPLMonstersTimer>2 )
-	{
-		for( C=Level.ControllerList; C!=None; C=C.nextController )
-		{
-			if( Monster(C.Pawn)!=None && C.Pawn.Health>0 && PlayerController(C)!=None )
-				PlayerController(C).ReceiveLocalizedMessage(class'VSTimeMessage',(KillPLMonstersTimer-2));
-		}
-	}
+	T.NetUpdateTime = Level.TimeSeconds - 1;
+	return true;
 }
 
-State MatchInProgress
+// The survivors' team size: bots make up the survivors to this many
+function bool NeedPlayers()
 {
-	function bool UpdateMonsterCount()
-	{
-		local Controller C;
-		local int i,j;
-
-		bHasPlayerMonsters = false;
-		For( C=Level.ControllerList; C!=None; C=C.NextController )
-		{
-			if( C.Pawn!=None && C.Pawn.Health>0 )
-			{
-				if( Monster(C.Pawn)!=None )
-				{
-					if( !bHasPlayerMonsters && PlayerController(C)!=None )
-						bHasPlayerMonsters = true;
-					i++;
-				}
-				else j++;
-			}
-		}
-		NumMonsters = i;
-		Return (j>0);
-	}
-
-	function Timer()
-	{
-		local Controller C;
-		local bool bOneMessage;
-		local Bot B;
-
-		Global.Timer();
-
-		if ( !bFinalStartup )
-		{
-			bFinalStartup = true;
-			PlayStartupMessage();
-		}
-		if ( NeedPlayers() && AddBot() && (RemainingBots > 0) )
-			RemainingBots--;
-		ElapsedTime++;
-		GameReplicationInfo.ElapsedTime = ElapsedTime;
-		if( !UpdateMonsterCount() )
-		{
-			EndGame(None,"TimeLimit");
-			Return;
-		}
-
-		if( bUpdateViewTargs )
-			UpdateViews();
-
-		if (!bNoBots && !bBotsAdded)
-		{
-			if(KFGameReplicationInfo(GameReplicationInfo) != none)
-
-			if((NumPlayers + NumBots) < MaxPlayers && KFGameReplicationInfo(GameReplicationInfo).PendingBots > 0 )
-			{
-				AddBots(1);
-				KFGameReplicationInfo(GameReplicationInfo).PendingBots --;
-			}
-
-			if (KFGameReplicationInfo(GameReplicationInfo).PendingBots == 0)
-			{
-				bBotsAdded = true;
-				return;
-			}
-		}
-
-		if( bWaveBossInProgress )
-		{
-			if( TraderProblemLevel<4 )
-			{
-				if( BootShopPlayers() )
-					TraderProblemLevel = 0;
-				else TraderProblemLevel++;
-			}
-			if( !bHasSetViewYet && TotalMaxMonsters<=0 && NumMonsters>0 )
-			{
-				bHasSetViewYet = True;
-				for ( C = Level.ControllerList; C != None; C = C.NextController )
-					if ( C.Pawn!=None && KFMonster(C.Pawn)!=None && KFMonster(C.Pawn).MakeGrandEntry() )
-					{
-						ViewingBoss = KFMonster(C.Pawn);
-						Break;
-					}
-				if( ViewingBoss!=None )
-				{
-					ViewingBoss.bAlwaysRelevant = True;
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-					{
-						if( PlayerController(C)!=None )
-						{
-							PlayerController(C).SetViewTarget(ViewingBoss);
-							PlayerController(C).ClientSetViewTarget(ViewingBoss);
-							PlayerController(C).bBehindView = True;
-							PlayerController(C).ClientSetBehindView(True);
-							PlayerController(C).ClientSetMusic(BossBattleSong,MTRAN_FastFade);
-						}
-						if ( C.PlayerReplicationInfo!=None && bRespawnOnBoss )
-						{
-							C.PlayerReplicationInfo.bOutOfLives = false;
-							C.PlayerReplicationInfo.NumLives = 0;
-							if ( (C.Pawn == None) && !C.PlayerReplicationInfo.bOnlySpectator && PlayerController(C)!=None )
-								C.GotoState('PlayerWaiting');
-						}
-					}
-				}
-			}
-			else if( ViewingBoss!=None && !ViewingBoss.bShotAnim )
-			{
-				ViewingBoss = None;
-				for ( C = Level.ControllerList; C != None; C = C.NextController )
-					if( PlayerController(C)!=None )
-					{
-						if( C.Pawn==None && !C.PlayerReplicationInfo.bOnlySpectator && bRespawnOnBoss )
-							C.ServerReStartPlayer();
-						if( C.Pawn!=None )
-						{
-							PlayerController(C).SetViewTarget(C.Pawn);
-							PlayerController(C).ClientSetViewTarget(C.Pawn);
-						}
-						else
-						{
-							PlayerController(C).SetViewTarget(C);
-							PlayerController(C).ClientSetViewTarget(C);
-						}
-						PlayerController(C).bBehindView = False;
-						PlayerController(C).ClientSetBehindView(False);
-					}
-			}
-			if( TotalMaxMonsters<=0 || (Level.TimeSeconds>WaveEndTime) )
-			{
-				// if everyone's spawned and they're all dead
-				if ( NumMonsters <= 0 )
-					DoWaveEnd();
-			}
-			else AddBoss();
-		}
-		else if(bWaveInProgress)
-		{
-			WaveTimeElapsed += 1.0;
-
-			if( TraderProblemLevel<4 )
-			{
-				if( BootShopPlayers() )
-					TraderProblemLevel = 0;
-				else TraderProblemLevel++;
-			}
-			if(!MusicPlaying)
-				StartGameMusic(True);
-
-			if( TotalMaxMonsters<=0 )
-			{
-				if( KillPLMonstersTimer>0 )
-					--KillPLMonstersTimer;
-				if( bHasPlayerMonsters )
-					HandleMonsterKill();
-				if ( NumMonsters <= 5 /*|| Level.TimeSeconds>WaveEndTime*/ )
-				{
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-						if ( KFMonsterController(C)!=None && !C.Pawn.PlayerCanSeeMe() )
-						{
-							C.Pawn.KilledBy( C.Pawn );
-							Break;
-						}
-				}
-				// if everyone's spawned and they're all dead
-				if ( NumMonsters <= 0 )
-				{
-					DoWaveEnd();
-				}
-			} // all monsters spawned
-			else if ( (Level.TimeSeconds > NextMonsterTime) && (NumMonsters+NextSpawnSquad.Length <= MaxMonsters) )
-			{
-				WaveEndTime = Level.TimeSeconds+160;
-				AddSquad();
-
-				if(nextSpawnSquad.length>0)
-					NextMonsterTime = Level.TimeSeconds + 0.2;
-				else NextMonsterTime = Level.TimeSeconds + CalcNextSquadSpawnTime();
-  			}
-		}
-		else if ( NumMonsters <= 0 )
-		{
-			if ( WaveNum == FinalWave && !bUseEndGameBoss )
-			{
-
-				EndGame(None,"TimeLimit");
-				return;
-			}
-			else if( WaveNum == (FinalWave + 1) && bUseEndGameBoss )
-			{
-
-				EndGame(None,"TimeLimit");
-				return;
-			}
-
-			WaveCountDown--;
-			if ( !CalmMusicPlaying )
-			{
-				StartGameMusic(False);
-			}
-
-			KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
-			if ( WaveCountDown == 5 )
-			{
-				KFGameReplicationInfo(Level.Game.GameReplicationInfo).MaxMonstersOn=false;
-				InvasionGameReplicationInfo(GameReplicationInfo).WaveNumber = WaveNum;
-
-				if( bFullVSMode )
-				{
-					for ( C = Level.ControllerList; C != None; C = C.NextController )
-					{
-						if ( VSPC(C)!=None && !VSPC(C).bSeenTeamHint )
-						{
-							VSPC(C).bSeenTeamHint = true;
-							VSPC(C).ReceiveLocalizedMessage(class'VSInfoMessage',1);
-						}
-					}
-				}
-			}
-			else if ( (WaveCountDown > 0) && (WaveCountDown < 5) )
-			{
-				if( WaveNum == FinalWave && bUseEndGameBoss )
-				    BroadcastLocalizedMessage(class'KFMod.WaitingMessage', 3);
-				else BroadcastLocalizedMessage(class'KFMod.WaitingMessage', 1);
-			}
-			else if ( WaveCountDown <= 1 )
-			{
-				bWaveInProgress = true;
-				KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = true;
-
-				if( WaveNum == FinalWave && bUseEndGameBoss )
-				{
-				    StartWaveBoss();
-				}
-				else
-				{
-					SetupWave();
-
-					for ( C = Level.ControllerList; C != none; C = C.NextController )
-					{
-						if ( PlayerController(C) != none )
-						{
-							PlayerController(C).LastPlaySpeech = 0;
-						}
-
-						if ( Bot(C) != none )
-						{
-							B = Bot(C);
-							InvasionBot(B).bDamagedMessage = false;
-							B.bInitLifeMessage = false;
-
-							if ( !bOneMessage && (FRand() < 0.65) )
-							{
-								bOneMessage = true;
-
-								if ( (B.Squad.SquadLeader != None) && B.Squad.CloseToLeader(C.Pawn) )
-								{
-									B.SendMessage(B.Squad.SquadLeader.PlayerReplicationInfo, 'OTHER', B.GetMessageIndex('INPOSITION'), 20, 'TEAM');
-									B.bInitLifeMessage = false;
-								}
-							}
-						}
-					}
-			    }
-		    }
-		}
-	}
-
-
-	function float CalcNextSquadSpawnTime()
-	{
-		local float Res;
-		local int OldCount;
-
-		OldCount = NumPlayers;
-		NumPlayers = Teams[0].Size;
-		Res = Super.CalcNextSquadSpawnTime();
-		NumPlayers = OldCount;
-		return Res;
-	}
-
-	function DoWaveEnd()
-	{
-		local Controller C;
-		local KFDoorMover KFDM;
-		local PlayerController Survivor;
-		local int SurvivorCount;
-
-        // Only reset this at the end of wave 0. That way the sine wave that scales
-        // the intensity up/down will be somewhat random per wave
-        if( WaveNum < 1 )
-        {
-            WaveTimeElapsed = 0;
-        }
-
-		if ( !rewardFlag )
-			RewardSurvivingPlayers();
-
-
-		bWaveInProgress = false;
-		bWaveBossInProgress = false;
-		KFGameReplicationInfo(GameReplicationInfo).bWaveInProgress = false;
-
-		WaveCountDown = Max(InitialCountDownValue,1);
-		KFGameReplicationInfo(GameReplicationInfo).TimeToNextWave = WaveCountDown;
-		WaveNum++;
-
-		for ( C = Level.ControllerList; C != none; C = C.NextController )
-		{
-			if ( C.PlayerReplicationInfo != none )
-			{
-				if( C.PlayerReplicationInfo.Team!=Teams[0] && !bFullVSMode )
-				{
-					C.PlayerReplicationInfo.Team.RemoveFromTeam(C);
-					C.PlayerReplicationInfo.Team = Teams[0];
-					C.PlayerReplicationInfo.Team.AddToTeam(C);
-				}
-				C.PlayerReplicationInfo.bOutOfLives = false;
-				C.PlayerReplicationInfo.NumLives = 0;
-
-				if ( C.Pawn != none )
-				{
-					if ( PlayerController(C)!=none && C.PlayerReplicationInfo.Team==Teams[0] )
-					{
-						Survivor = PlayerController(C);
-						SurvivorCount++;
-					}
-				}
-				else if ( !C.PlayerReplicationInfo.bOnlySpectator && C.PlayerReplicationInfo.Team==Teams[0] )
-				{
-					C.PlayerReplicationInfo.Score = Max(MinRespawnCash,int(C.PlayerReplicationInfo.Score));
-
-					if( PlayerController(C) != none )
-					{
-						PlayerController(C).GotoState('PlayerWaiting');
-						PlayerController(C).SetViewTarget(C);
-						PlayerController(C).ClientSetBehindView(false);
-						PlayerController(C).bBehindView = False;
-						PlayerController(C).ClientSetViewTarget(C.Pawn);
-					}
-
-					C.ServerReStartPlayer();
-				}
-
-			}
-		}
-
-		bUpdateViewTargs = True;
-
-		//respawn doors
-		foreach DynamicActors(class'KFDoorMover', KFDM)
-			KFDM.RespawnDoor();
-	}
+	if( SurvivorSlots==0 )
+		return Super.NeedPlayers();
+	return (Teams[0].Size<SurvivorSlots);
 }
-state MatchOver
+function bool TooManyBots( Controller botToRemove )
 {
-	function BeginState()
-	{
-		local Controller C;
-
-		Super.BeginState();
-		if( bFullVSMode )
-			return;
-		for( C=Level.ControllerList; C!=None; C=C.nextController )
-		{
-			if( C.PlayerReplicationInfo!=None && C.PlayerReplicationInfo.Team==Teams[1] ) // Fix teams so it doesn't show incorrectly winner.
-			{
-				C.PlayerReplicationInfo.Team = Teams[0];
-				C.PlayerReplicationInfo.NetUpdateTime = Level.TimeSeconds-1;
-			}
-		}
-	}
+	if( SurvivorSlots==0 )
+		return Super.TooManyBots(botToRemove);
+	return (Teams[0].Size>SurvivorSlots);
 }
 
-function SetupWave()
-{
-	local int OldNP,OldNB;
-
-	KillPLMonstersTimer = MonsterKillTime+3;
-	OldNP = NumPlayers;
-	OldNB = NumBots;
-	NumPlayers = Teams[0].Size;
-	NumBots = 0;
-	Super.SetupWave();
-	NumPlayers = OldNP;
-	NumBots = OldNB;
-}
-
-function SendPlayer( PlayerController aPlayer, string URL )
-{
-	if( bGameEnded || aPlayer==None || aPlayer.PlayerReplicationInfo==None )
-		Return;
-	Broadcast(Self,aPlayer.PlayerReplicationInfo.PlayerName@"has ended the level.");
-	if( Left(URL,4)~="NULL" )
-	{
-		WaveNum = FinalWave+1;
-		EndGame(None,"TimeLimit");
-		Return;
-	}
-	Level.ServerTravel(URL,False);
-	bGameEnded = True;
-}
-
-function NotifySpree(Controller Other, int num)
+function NotifySpree( Controller Other, int num )
 {
 	if( Other.PlayerReplicationInfo!=None && Other.PlayerReplicationInfo.Team==Teams[1] )
 		Super.NotifySpree(Other,num);
 }
-function EndSpree(Controller Killer, Controller Other)
+function EndSpree( Controller Killer, Controller Other )
 {
 	if( Other.PlayerReplicationInfo!=None && Other.PlayerReplicationInfo.Team==Teams[1] )
 		Super.EndSpree(Killer,Other);
 }
 
-function bool NeedPlayers()
+function BroadcastDeathMessage( Controller Killer, Controller Other, class<DamageType> damageType )
 {
-	if( !bFullVSMode )
-		return Super.NeedPlayers();
-	if ( Level.NetMode == NM_Standalone )
-		return ( RemainingBots > 0 );
-	if ( bMustJoinBeforeStart )
-		return false;
-	return (Teams[0].Size < MinPlayers);
-}
-function bool TooManyBots(Controller botToRemove)
-{
-	if( !bFullVSMode )
-		return Super.TooManyBots(botToRemove);
-	if ( bPlayerBecameActive )
-	{
-		bPlayerBecameActive = false;
-		return true;
-	}
-	return ( (Level.NetMode != NM_Standalone) && (Teams[0].Size > MinPlayers) );
-}
-
-static function FillPlayInfo(PlayInfo PlayInfo)
-{
-	Super.FillPlayInfo(PlayInfo);
-
-	PlayInfo.AddSetting(default.ServerGroup,"bFullVSMode","Full VS mode",1,1,"Check");
-	PlayInfo.AddSetting(default.ServerGroup,"MinPlayers","Num Bots",0,1,"Text","6;1:32");
-	PlayInfo.AddSetting(default.ServerGroup,"PlayersVSZedsRatio","Players V Zeds ratio",0,1,"Text","6;0.00:5.00");
-}
-static event string GetDescriptionText(string PropName)
-{
-	switch (PropName)
-	{
-		case "bFullVSMode":		return "Full versius mode, have 2 differnet player teams.";
-		case "MinPlayers":		return "Number of bots that should fill out empty player slots.";
-		case "PlayersVSZedsRatio":	return "The ratio allowed between specimen and player teams.";
-	}
-	return Super.GetDescriptionText(PropName);
-}
-
-function BroadcastDeathMessage(Controller Killer, Controller Other, class<DamageType> damageType)
-{
-	local PlayerReplicationInfo K,V;
+	local PlayerReplicationInfo K, V;
 	local class<Monster> M;
 	local Controller C;
 
@@ -955,33 +944,63 @@ function BroadcastDeathMessage(Controller Killer, Controller Other, class<Damage
 			M = class<Monster>(Killer.Pawn.Class);
 	}
 	V = Other.PlayerReplicationInfo;
-
-	for( C=Level.ControllerList; C!=None; C=C.nextController )
+	for( C=Level.ControllerList; C!=None; C=C.NextController )
 		if( C.bIsPlayer && VSPC(C)!=None )
 			VSPC(C).ClientDeathMessage(V,damageType,K,M);
 }
 
+// Stub
+static function Texture GetRandomTeamSymbol( int base )
+{
+	return Texture'Engine.DefaultTexture';
+}
+
+static function FillPlayInfo( PlayInfo PlayInfo )
+{
+	Super.FillPlayInfo(PlayInfo);
+	PlayInfo.AddSetting(default.ServerGroup,"SpecimenSpawnDelay","Specimen rise delay",0,1,"Text","6;0.0:60.0");
+}
+static event string GetDescriptionText( string PropName )
+{
+	switch( PropName )
+	{
+		case "MinPlayers":			return "How many survivors each half fields: bots make up any not taken by players.";
+		case "SpecimenSpawnDelay":	return "Seconds a specimen player waits to rise again after dying.";
+	}
+	return Super.GetDescriptionText(PropName);
+}
+
 defaultproperties
 {
-     bFullVSMode=True
-     PossessablePawns(0)="AwesomeBloat"
-     PossessablePawns(1)="AwesomeClot"
-     PossessablePawns(2)="AwesomeCrawler"
-     PossessablePawns(3)="AwesomeFleshPound"
-     PossessablePawns(4)="AwesomeGoreFast"
-     PossessablePawns(5)="AwesomeHusk"
-     PossessablePawns(6)="AwesomeScrake"
-     PossessablePawns(7)="AwesomeSiren"
-     PossessablePawns(8)="AwesomeStalker"
-     PlayersVSZedsRatio=1.000000
-     MonsterKillTime=90
+     SpecimenSpawnDelay=8.000000
+     SpecimenClasses(0)=Class'KFMonsterVS.AwesomeClot'
+     SpecimenClasses(1)=Class'KFMonsterVS.AwesomeCrawler'
+     SpecimenClasses(2)=Class'KFMonsterVS.AwesomeStalker'
+     SpecimenClasses(3)=Class'KFMonsterVS.AwesomeGoreFast'
+     SpecimenClasses(4)=Class'KFMonsterVS.AwesomeBloat'
+     SpecimenClasses(5)=Class'KFMonsterVS.AwesomeSiren'
+     SpecimenClasses(6)=Class'KFMonsterVS.AwesomeShade'
+     SpecimenClasses(7)=Class'KFMonsterVS.AwesomeWretch'
+     HeavyClasses(0)=Class'KFMonsterVS.AwesomeFleshPound'
+     HeavyClasses(1)=Class'KFMonsterVS.AwesomeScrake'
+     HeavyPatience=20.000000
+     HalfTimeLength=12
+     WavePoints=100
+     SurvivorPoints=50
+     HalfTimeText="Half time."
+     SecondHalfText="Second half: now playing the survivors,"
+     WaveScoreText="clear the wave:"
+     FellText="fall. Points for the wave's kills:"
+     JoinedText="joined"
      bNoBots=False
-     EndGameBossClass="KFMonsterVS.AwesomePat"
      bFirstBlood=True
      LoginMenuClass="KFMonsterVS.VSLoginMenu"
      HUDType="KFMonsterVS.VSHUD"
+     ScoreBoardType="KFMonsterVS.VSTeamScoreBoard"
      MutatorClass="KFMonsterVS.VSBaseMut"
      PlayerControllerClass=Class'KFMonsterVS.VSPC'
      PlayerControllerClassName="KFMonsterVS.VSPC"
+     GameReplicationInfoClass=Class'KFMonsterVS.VSGRI'
      GameName="Team VS KF"
+     Description="Versus: two teams of players take turns. One plays the survivors through the waves while the other rises as specimens to stop them, then they change sides. The team that scores more as survivors wins."
 }

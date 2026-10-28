@@ -1,168 +1,136 @@
-//=============================================================================
-// AwesomeWretch.
-//=============================================================================
+// A player's Wretch. Fire or Alt-Fire: claw
 class AwesomeWretch extends ZombieWretch;
 
-var bool bClientFire,bLimitMovement,bClientAllowAnim;
-var int MeleeDamage;
+var byte HeldFire[2];	// fire buttons held (the server's copy is what the player sent)
+var byte MoveLock;		// how much of the player's movement the action playing holds (VSZed.ActionLock)
+var bool bServerAnim;	// an animation the server sent, on the player's own machine
+var byte PressedFire;	// a press during another action (mode + 1), done once that action ends if soon enough
+var float PressTime;
 
 replication
 {
-        reliable if( Role<ROLE_Authority )
-                ServerStartFire,ServerStopFire;
-        reliable if( Role==ROLE_Authority )
-                ClientPlayAnim;
+	reliable if( Role<ROLE_Authority )
+		ServerFire;
+	reliable if( Role==ROLE_Authority )
+		ClientAnim;
 }
 
-function bool FlipOver()
-{
-        if( Physics==PHYS_Falling )
-                SetPhysics(PHYS_Walking);
-        bShotAnim = true;
-        SetAnimAction('KnockDown');
-        Acceleration = vect(0, 0, 0);
-        if( KFMonsterController(Controller)!=None )
-        {
-                Controller.GoToState('WaitForAnim');
-                KFMonsterController(Controller).bUseFreezeHack = True;
-        }
-        Return True;
-}
-function HandleBumpGlass()
-{
-        if( PlayerController(Controller)==None )
-                Super.HandleBumpGlass();
-}
-simulated function PostNetReceive();
-function Setup(xUtil.PlayerRecord rec, optional bool bLoadNow);
-
-simulated final function ClientPlayAnim( name N )
-{
-        if( Level.NetMode!=NM_Client )
-                return;
-        bClientAllowAnim = true;
-        SetAnimAction(N);
-        bClientAllowAnim = false;
-}
-simulated function SetAnimAction(name NewAction)
-{
-        if( Level.NetMode==NM_Client && !bClientAllowAnim && Level.GetLocalPlayerController()==Controller )
-                return;
-        if( PlayerController(Controller)!=None && Class'AwesomeBloat'.Static.IsMeleeAnim(NewAction,Self) )
-                bLimitMovement = true;
-        Super.SetAnimAction(NewAction);
-        if( Level.NetMode!=NM_Client && PlayerController(Controller)!=None && NetConnection(PlayerController(Controller).Player)!=None )
-                ClientPlayAnim(AnimAction);
-}
 simulated function Fire( optional float F )
 {
-        bClientFire = true;
-        ServerStartFire();
+	HeldFire[0] = 1;
+	ServerFire(0,true);
 }
 simulated function AltFire( optional float F )
 {
-        bClientFire = true;
-        ServerStartFire();
+	HeldFire[1] = 1;
+	ServerFire(1,true);
 }
-function SetAttackAnim()
+function ServerFire( byte Mode, bool bHeld )
 {
-        if( bClientFire )
-                SetAnimAction('ClawGore');
-        else return;
-        bShotAnim = true;
+	HeldFire[Mode] = byte(bHeld);
+	if( !bHeld )
+		return;
+	PressedFire = Mode+1;
+	PressTime = Level.TimeSeconds;
+	if( !bShotAnim )
+		TryAttack();
 }
-function ServerStartFire()
+// The button held, or pressed a moment ago
+function bool Wants( byte Mode )
 {
-        bClientFire = true;
-
-        if( !bShotAnim )
-                SetAttackAnim();
+	return HeldFire[Mode]!=0 || (PressedFire==Mode+1 && Level.TimeSeconds-PressTime<0.5);
 }
-simulated function AnimEnd(int Channel)
+function TryAttack()
 {
-        if( ExpectingChannel==Channel )
-                bLimitMovement = false;
-        Super.AnimEnd(Channel);
-        if( Level.NetMode!=NM_Client && PlayerController(Controller)!=None && !bShotAnim )
-                SetAttackAnim();
+	PlayerAttack();
+	if( bShotAnim )
+		PressedFire = 0;
 }
-function ServerStopFire()
+function PlayerAttack()
 {
-        bClientFire = false;
-}
-simulated function Tick( float Delta )
-{
-        Super.Tick(Delta);
-        if( bClientFire && Health>=0 && PlayerController(Controller)!=None && Viewport(PlayerController(Controller).Player)!=None && Controller.bFire==0 && Controller.bAltFire==0 )
-        {
-                bClientFire = false;
-                ServerStopFire();
-        }
+	if( !Wants(0) && !Wants(1) )
+		return;
+	SetAnimAction('Claw');
+	bShotAnim = true;
 }
 
-simulated function RawInput(float DeltaTime,
-                                                        float aBaseX, float aBaseY, float aBaseZ, float aMouseX, float aMouseY,
-                                                        float aForward, float aTurn, float aStrafe, float aUp, float aLookUp)
+simulated function ClientAnim( name N )
 {
-        Class'AwesomeBloat'.Static.LockJumping(bLimitMovement,PlayerController(Controller));
+	if( Level.NetMode!=NM_Client )
+		return;
+	bServerAnim = true;
+	SetAnimAction(N);
+	bServerAnim = false;
 }
+simulated function SetAnimAction( name NewAction )
+{
+	local byte Lock;
+
+	if( !class'VSZed'.static.AllowAnim(self,bServerAnim) )
+		return;
+	Lock = class'VSZed'.static.ActionLock(self,NewAction);
+	if( Lock>0 || !IsFlinchAnim(NewAction) )
+		MoveLock = Lock;
+	Super.SetAnimAction(NewAction);
+	if( class'VSZed'.static.SendAnim(self) )
+		ClientAnim(AnimAction);
+}
+simulated function AnimEnd( int Channel )
+{
+	if( Channel==ExpectingChannel )
+		MoveLock = 0;
+	Super.AnimEnd(Channel);
+	if( Role==ROLE_Authority && PlayerController(Controller)!=None && !bShotAnim )
+		TryAttack();
+}
+simulated function Tick( float DeltaTime )
+{
+	Super.Tick(DeltaTime);
+	if( class'VSZed'.static.IsMine(self) )
+	{
+		if( HeldFire[0]!=0 && Controller.bFire==0 )
+		{
+			HeldFire[0] = 0;
+			ServerFire(0,false);
+		}
+		if( HeldFire[1]!=0 && Controller.bAltFire==0 )
+		{
+			HeldFire[1] = 0;
+			ServerFire(1,false);
+		}
+	}
+}
+simulated function RawInput( float DeltaTime, float aBaseX, float aBaseY, float aBaseZ, float aMouseX, float aMouseY,
+	float aForward, float aTurn, float aStrafe, float aUp, float aLookUp )
+{
+	class'VSZed'.static.LockInput(PlayerController(Controller),MoveLock);
+}
+
 function ClawDamageTarget()
 {
-        local Actor A;
-
-        if( Level.NetMode==NM_Client )
-                return;
-        if( PlayerController(Controller)==None )
-                Super.ClawDamageTarget();
-
-        A = Class'AwesomeBloat'.Static.GetBestMeleeTarget(Self);
-        if( A==None )
-                return;
-        Controller.Target = A;
-
-        if ( MeleeDamageTarget(MeleeDamage, (damageForce * Normal(A.Location - Location))) )
-                PlayZombieAttackHitSound();
+	if( Role<ROLE_Authority )
+		return;
+	if( PlayerController(Controller)!=None )
+		Controller.Target = class'VSZed'.static.MeleeTarget(self);
+	Super.ClawDamageTarget();
+}
+simulated function HandleBumpGlass()
+{
+	if( PlayerController(Controller)==None )
+		Super.HandleBumpGlass();
 }
 function bool DoJump( bool bUpdating )
 {
-        return Class'AwesomeBloat'.Static.StaticJump(Self,bUpdating);
+	if( PlayerController(Controller)==None )
+		return Super.DoJump(bUpdating);
+	return class'VSZed'.static.Jump(self);
 }
-simulated function bool SpecialCalcView(out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
+simulated function bool SpecialCalcView( out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation )
 {
-        return Class'AwesomeBloat'.Static.CalcHeadView(Self,CameraLocation,CameraRotation);
-}
-function RemoveHead()
-{
-        Super.RemoveHead();
-        SetHeadScale(0.f);
-}
-
-State ZombieDying
-{
-        simulated function BeginState()
-        {
-                if ( bTearOff && (Level.NetMode == NM_DedicatedServer) || class'GameInfo'.static.UseLowGore() )
-                        LifeSpan = 1.0;
-                else
-                        SetTimer(2.0, false);
-
-                SetPhysics(PHYS_Falling);
-                if ( Controller != None )
-                {
-                        if( PlayerController(Controller)!=None )
-                                Controller.bIsPlayer = true;
-                        if ( !Controller.bIsPlayer )
-                                Controller.Destroy();
-                        else Controller.PawnDied(self);
-                }
-        }
+	return class'VSZed'.static.HeadView(self,CameraLocation,CameraRotation);
 }
 
 defaultproperties
 {
-     MeleeDamage=3
      bSpecialCalcView=True
-     HeadScale=1.000000
-     ControllerClass=Class'KFMonsterVS.ControllerAIBase'
-     bNetNotify=False
 }

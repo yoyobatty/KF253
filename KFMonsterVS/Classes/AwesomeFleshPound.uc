@@ -1,228 +1,212 @@
-class AwesomeFleshPound extends ZombieFleshpound;
+// A player's Fleshpound (a heavy). Fire: pound. Alt-Fire, once hurt enough: rage (he rages on his own too, as ever)
+class AwesomeFleshPound extends ZombieFleshPound;
 
-var int RageLevel;
-var int MeleeDamage;
-var byte ClientFire[2];
-var bool bLimitMovement,bFreezeMovement,bClientAllowAnim;
+var byte HeldFire[2];	// fire buttons held (the server's copy is what the player sent)
+var byte MoveLock;		// how much of the player's movement the action playing holds (VSZed.ActionLock)
+var bool bServerAnim;	// an animation the server sent, on the player's own machine
+var byte PressedFire;	// a press during another action (mode + 1), done once that action ends if soon enough
+var float PressTime;
+var byte Charge;		// the rage meter, 0 to 100 (for the player's HUD)
+var int RageLevel;		// damage taken since the last rage
+var bool bSpinning;		// his spin under way (the AI's controller hurts all about him as he spins; a player's he does it himself)
+var float NextSpinHit;
 
 replication
 {
 	reliable if( Role<ROLE_Authority )
-		ServerStartFire,ServerStopFire;
+		ServerFire;
 	reliable if( Role==ROLE_Authority )
-		ClientPlayAnim;
-	reliable if( bNetOwner && Role==ROLE_Authority )
-		RageLevel;
+		ClientAnim;
+	reliable if( Role==ROLE_Authority && bNetOwner )
+		Charge;
 }
 
-function HandleBumpGlass()
+simulated function Fire( optional float F )
+{
+	HeldFire[0] = 1;
+	ServerFire(0,true);
+}
+simulated function AltFire( optional float F )
+{
+	HeldFire[1] = 1;
+	ServerFire(1,true);
+}
+function ServerFire( byte Mode, bool bHeld )
+{
+	HeldFire[Mode] = byte(bHeld);
+	if( !bHeld )
+		return;
+	PressedFire = Mode+1;
+	PressTime = Level.TimeSeconds;
+	if( !bShotAnim )
+		TryAttack();
+}
+// The button held, or pressed a moment ago
+function bool Wants( byte Mode )
+{
+	return HeldFire[Mode]!=0 || (PressedFire==Mode+1 && Level.TimeSeconds-PressTime<0.5);
+}
+function TryAttack()
+{
+	PlayerAttack();
+	if( bShotAnim )
+		PressedFire = 0;
+}
+function PlayerAttack()
+{
+	if( Wants(0) )
+	{
+		SetAnimAction('Claw');
+		bShotAnim = true;
+		bSpinning = (AnimAction=='PoundAttack3');
+		NextSpinHit = Level.TimeSeconds + 0.1;
+	}
+	else if( Wants(1) && !bDecapitated && RageLevel>=RageDamageThreshold && !bChargingPlayer )
+		StartCharging();
+}
+
+simulated function ClientAnim( name N )
+{
+	if( Level.NetMode!=NM_Client )
+		return;
+	bServerAnim = true;
+	SetAnimAction(N);
+	bServerAnim = false;
+}
+simulated function SetAnimAction( name NewAction )
+{
+	local byte Lock;
+
+	if( !class'VSZed'.static.AllowAnim(self,bServerAnim) )
+		return;
+	Lock = LockFor(NewAction);
+	if( Lock>0 || !IsFlinchAnim(NewAction) )
+		MoveLock = Lock;
+	Super.SetAnimAction(NewAction);
+	if( class'VSZed'.static.SendAnim(self) )
+		ClientAnim(AnimAction);
+}
+simulated function byte LockFor( name N )
+{
+	if( N=='PoundRage' )
+		return 2;
+	return class'VSZed'.static.ActionLock(self,N);
+}
+simulated function AnimEnd( int Channel )
+{
+	if( Channel==ExpectingChannel )
+		MoveLock = 0;
+	Super.AnimEnd(Channel);
+	if( Role==ROLE_Authority && PlayerController(Controller)!=None && !bShotAnim )
+		TryAttack();
+}
+simulated function Tick( float DeltaTime )
+{
+	Super.Tick(DeltaTime);
+	if( class'VSZed'.static.IsMine(self) )
+	{
+		if( HeldFire[0]!=0 && Controller.bFire==0 )
+		{
+			HeldFire[0] = 0;
+			ServerFire(0,false);
+		}
+		if( HeldFire[1]!=0 && Controller.bAltFire==0 )
+		{
+			HeldFire[1] = 0;
+			ServerFire(1,false);
+		}
+	}
+	if( Role==ROLE_Authority && PlayerController(Controller)!=None )
+		Charge = ChargeNow();
+	if( bSpinning && Role==ROLE_Authority )
+		SpinTick();
+}
+simulated function RawInput( float DeltaTime, float aBaseX, float aBaseY, float aBaseZ, float aMouseX, float aMouseY,
+	float aForward, float aTurn, float aStrafe, float aUp, float aLookUp )
+{
+	class'VSZed'.static.LockInput(PlayerController(Controller),MoveLock);
+}
+simulated function DrawHUD( Canvas C )
+{
+	class'VSZed'.static.DrawCharge(C,Charge/100.0,"Alt-Fire when full: rage");
+}
+
+function ClawDamageTarget()
+{
+	if( Role<ROLE_Authority )
+		return;
+	if( PlayerController(Controller)!=None )
+		Controller.Target = class'VSZed'.static.MeleeTarget(self);
+	Super.ClawDamageTarget();
+}
+simulated function HandleBumpGlass()
 {
 	if( PlayerController(Controller)==None )
 		Super.HandleBumpGlass();
 }
-function Setup(xUtil.PlayerRecord rec, optional bool bLoadNow);
-
-simulated final function ClientPlayAnim( name N )
+function bool DoJump( bool bUpdating )
 {
-	if( Level.NetMode!=NM_Client )
-		return;
-	bClientAllowAnim = true;
-	SetAnimAction(N);
-	bClientAllowAnim = false;
+	if( PlayerController(Controller)==None )
+		return Super.DoJump(bUpdating);
+	return class'VSZed'.static.Jump(self);
 }
-simulated function SetAnimAction(name NewAction)
+simulated function bool SpecialCalcView( out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation )
 {
-	if( Level.NetMode==NM_Client && !bClientAllowAnim && Level.GetLocalPlayerController()==Controller )
-		return;
-	if( PlayerController(Controller)!=None && Class'AwesomeBloat'.Static.IsMeleeAnim(NewAction,Self) )
-		bLimitMovement = true;
-	else bFreezeMovement = (NewAction=='PoundRage');
-	Super.SetAnimAction(NewAction);
-	if( Level.NetMode!=NM_Client && PlayerController(Controller)!=None && NetConnection(PlayerController(Controller).Player)!=None )
-		ClientPlayAnim(AnimAction);
+	return class'VSZed'.static.HeadView(self,CameraLocation,CameraRotation);
 }
-function PlayHit(float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> damageType, vector Momentum)
-{
-	RageLevel+=Damage;
-	Super.PlayHit(Damage,InstigatedBy,HitLocation,damageType,Momentum);
-}
-simulated function Fire( optional float F )
-{
-	ClientFire[0] = 1;
-	ServerStartFire(0);
-}
-simulated function AltFire( optional float F )
-{
-	ClientFire[1] = 1;
-	ServerStartFire(1);
-}
-function SetAttackAnim()
-{
-	if( ClientFire[0]==1 )
-		SetAnimAction('Claw');
-	else if( ClientFire[1]==1 && !bDecapitated && RageLevel>RageDamageThreshold && !IsInState('RageCharging') )
-	{
-		GotoState('RageCharging');
-		SetAnimAction('PoundRage');
-	}
-	else return;
-	bShotAnim = true;
-}
-function ServerStartFire( byte Mode )
-{
-	ClientFire[Mode] = 1;
-
-	if( !bShotAnim )
-		SetAttackAnim();
-}
-simulated function AnimEnd(int Channel)
-{
-	if( ExpectingChannel==Channel )
-	{
-		bLimitMovement = false;
-		bFreezeMovement = false;
-	}
-	Super.AnimEnd(Channel);
-	if( Level.NetMode!=NM_Client && PlayerController(Controller)!=None && !bShotAnim )
-		SetAttackAnim();
-}
-function ServerStopFire( byte Mode )
-{
-	ClientFire[Mode] = 0;
-}
-simulated function Tick( float Delta )
-{
-	Super(KFMonster).Tick(Delta);
-	if( Health>=0 && PlayerController(Controller)!=None && Viewport(PlayerController(Controller).Player)!=None )
-	{
-		if( ClientFire[0]!=0 && Controller.bFire==0 )
-		{
-			ClientFire[0] = 0;
-			ServerStopFire(0);
-		}
-		else if( ClientFire[1]!=0 && Controller.bAltFire==0 )
-		{
-			ClientFire[1] = 0;
-			ServerStopFire(1);
-		}
-	}
-	if( Role==ROLE_Authority && bShotAnim && Controller.Target!=None && PlayerController(Controller)==None )
-		Acceleration = AccelRate * Normal(Controller.Target.Location - Location);
-}
-
-simulated function RawInput(float DeltaTime,
-							float aBaseX, float aBaseY, float aBaseZ, float aMouseX, float aMouseY,
-							float aForward, float aTurn, float aStrafe, float aUp, float aLookUp)
-{
-	Class'AwesomeBloat'.Static.LockMovement(bLimitMovement,bFreezeMovement,PlayerController(Controller));
-}
-function ClawDamageTarget()
+// (as FleshpoundZombieController.SpinAttack does for the AI's)
+function SpinTick()
 {
 	local Actor A;
 
-	if( Level.NetMode==NM_Client )
+	if( !bShotAnim || PlayerController(Controller)==None )
+	{
+		bSpinning = false;
 		return;
-	if( PlayerController(Controller)==None )
-		Super.ClawDamageTarget();
-
-	A = Class'AwesomeBloat'.Static.GetBestMeleeTarget(Self);
-	if( A==None )
+	}
+	if( Level.TimeSeconds<NextSpinHit )
 		return;
-	Controller.Target = A;
-
-	if ( MeleeDamageTarget(MeleeDamage, (damageForce * Normal(A.Location - Location))) )
-		PlayZombieAttackHitSound();
+	NextSpinHit = Level.TimeSeconds + 0.1;
+	foreach CollidingActors(class'Actor',A,MeleeRange*1.5+CollisionRadius,Location)
+		if( A!=Self && KFMonster(A)==None )
+			SpinDamage(A);
 }
-function bool DoJump( bool bUpdating )
+function byte ChargeNow()
 {
-	return Class'AwesomeBloat'.Static.StaticJump(Self,bUpdating);
+	if( bChargingPlayer )
+		return 100;
+	return byte(100*FClamp(float(RageLevel)/RageDamageThreshold,0,1));
 }
-simulated function bool SpecialCalcView(out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
+function PlayHit( float Damage, Pawn InstigatedBy, vector HitLocation, class<DamageType> damageType, vector Momentum )
 {
-	return Class'AwesomeBloat'.Static.CalcHeadView(Self,CameraLocation,CameraRotation);
+	RageLevel += Damage;
+	Super.PlayHit(Damage,InstigatedBy,HitLocation,damageType,Momentum);
 }
-function RemoveHead()
-{
-	Super.RemoveHead();
-	SetHeadScale(0.f);
-}
-
 function StartCharging()
 {
-	if( PlayerController(Controller)==None )
-		Super.StartCharging();
+	RageLevel = 0;
+	Super.StartCharging();
 }
 
-simulated function DrawHUD(Canvas Canvas)
+State RageCharging
 {
-	if( bDecapitated )
-		Class'AwesomeBloat'.Static.DrawChargeBar(Canvas,0);
-	else Class'AwesomeBloat'.Static.DrawChargeBar(Canvas,float(RageLevel)/float(RageDamageThreshold));
-}
-
-State ZombieDying
-{
-	simulated function BeginState()
+	// (the rage ends on a hit as the AI's does: it counts a blow on its enemy)
+	function bool MeleeDamageTarget( int hitdamage, vector pushdir )
 	{
-		if ( bTearOff && (Level.NetMode == NM_DedicatedServer) || class'GameInfo'.static.UseLowGore() )
-			LifeSpan = 1.0;
-		else
-			SetTimer(2.0, false);
+		local bool bHit;
 
-		SetPhysics(PHYS_Falling);
-		if ( Controller != None )
-		{
-			if( PlayerController(Controller)!=None )
-				Controller.bIsPlayer = true;
-			if ( !Controller.bIsPlayer )
-				Controller.Destroy();
-			else Controller.PawnDied(self);
-		}
- 	}
-}
-
-state RageCharging
-{
-	function EndState()
-	{
-		RageLevel = 0;
-		Super.EndState();
-	}
-
-	function Tick( float Delta )
-	{
-		if( !bShotAnim )
-		{
-			GroundSpeed = OriginalGroundSpeed * 2.3;//2.0;
-			if( !bFrustrated && Level.TimeSeconds>RageStartTime )
-				GoToState('');
-		}
-
-		// Keep the flesh pound moving toward its target when attacking
-		if( bShotAnim && Controller.Target!=None && PlayerController(Controller)==None )
-			Acceleration = AccelRate * Normal(Controller.Target.Location - Location);
-
-		global.Tick(Delta);
-	}
-
-	// If fleshie hits his target on a charge, then he should settle down for abit.
-	function bool MeleeDamageTarget(int hitdamage, vector pushdir)
-	{
-		local bool RetVal,bWasEnemy;
-
-		bWasEnemy = (PlayerController(Controller)!=None || Controller.Target==Controller.Enemy);
-		RetVal = Global.MeleeDamageTarget(hitdamage*1.75, pushdir*3);
-		if( RetVal && bWasEnemy )
-			GoToState('');
-		return RetVal;
+		if( PlayerController(Controller)==None )
+			return Super.MeleeDamageTarget(hitdamage,pushdir);
+		Controller.Enemy = Pawn(Controller.Target);
+		bHit = Super.MeleeDamageTarget(hitdamage,pushdir);
+		if( Controller!=None )
+			Controller.Enemy = None;
+		return bHit;
 	}
 }
 
 defaultproperties
 {
-     MeleeDamage=25
      bSpecialHUD=True
      bSpecialCalcView=True
-     HeadScale=1.000000
-     ControllerClass=Class'KFMonsterVS.ControllerFP'
 }

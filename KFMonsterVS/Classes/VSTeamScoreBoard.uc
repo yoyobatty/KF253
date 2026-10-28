@@ -1,14 +1,13 @@
 class VSTeamScoreBoard extends KFScoreBoard;
 
-var localized string TeamNames[2];
-var localized string HealthyString, InjuredString, CriticalString;
+var localized string HealthyString, InjuredString, CriticalString, HalfString, DamageText;
 
 function DrawTitle(Canvas Canvas, float HeaderOffsetY, float PlayerAreaY, float PlayerBoxSizeY)
 {
 	local string TitleString, ScoreInfoString, RestartString;
 	local float TitleXL, ScoreInfoXL, YL, TitleY, TitleYL;
 
-	TitleString = SkillLevel[Clamp(InvasionGameReplicationInfo(GRI).BaseDifficulty, 0, 7)] @ "|" @ WaveString @ (InvasionGameReplicationInfo(GRI).WaveNumber + 1) @ "|" @ Level.Title;
+	TitleString = SkillLevel[Clamp(InvasionGameReplicationInfo(GRI).BaseDifficulty, 0, 7)] @ "|" @ HalfString @ VSGRI(GRI).Half @ "|" @ WaveString @ (InvasionGameReplicationInfo(GRI).WaveNumber + 1) @ "|" @ Level.Title;
 
 	Canvas.Font = HUDClass.static.GetMediumFontFor(Canvas);
 
@@ -58,6 +57,8 @@ simulated final function DrawTeamScores( byte Team, Canvas Canvas, float XOfs )
 	local float XL,YL, MaxScaling;
 	local float deathsXL, KillsXL, netXL,HealthXL, MaxNamePos, KillWidthX, HealthWidthX;
 	local bool bNameFontReduction,bSameTeam;
+	local VSGRI G;
+	local byte Squad;
 
 	OwnerPRI = KFPlayerController(Owner).PlayerReplicationInfo;
 	bSameTeam = (OwnerPRI.bOnlySpectator || (OwnerPRI.Team!=None && OwnerPRI.Team.TeamIndex==Team));
@@ -129,10 +130,15 @@ simulated final function DrawTeamScores( byte Team, Canvas Canvas, float XOfs )
 	// Draw headers
 	TitleYPos = HeaderOffsetY - 1.1 * YL;
 	Canvas.DrawColor = HUDClass.default.WhiteColor;
-	if( GRI!=None && GRI.Teams[Team]!=None )
+	// (this column's versus team: the survivors are Teams[0] this half)
+	G = VSGRI(GRI);
+	if( G!=None )
 	{
+		if( Team==0 )
+			Squad = G.SurvivorSquad;
+		else Squad = 1-G.SurvivorSquad;
 		Canvas.SetPos(BoxXPos+0.1f*BoxWidth, TitleYPos-1.25f*YL);
-		Canvas.DrawText(TeamNames[Team]@int(GRI.Teams[Team].Score),true);
+		Canvas.DrawText(G.SquadName(Squad)@"-"@G.RoleOf(Squad)$":"@G.SquadScore[Squad],true);
 	}
 
 	Canvas.StrLen(HealthText, HealthXL, YL);
@@ -146,8 +152,17 @@ simulated final function DrawTeamScores( byte Team, Canvas Canvas, float XOfs )
 	Canvas.SetPos(KillsXPos - 0.5 * KillsXL, TitleYPos);
 	Canvas.DrawText(KillsText,true);
 
-	Canvas.SetPos(HealthXPos - 0.5 * HealthXL, TitleYPos);
-	Canvas.DrawText(HealthText,true);
+	if( Team==0 )
+	{
+		Canvas.SetPos(HealthXPos - 0.5 * HealthXL, TitleYPos);
+		Canvas.DrawText(HealthText,true);
+	}
+	else
+	{
+		Canvas.StrLen(DamageText, HealthXL, YL);
+		Canvas.SetPos(HealthXPos - 0.5 * HealthXL, TitleYPos);
+		Canvas.DrawText(DamageText,true);
+	}
 
 	// draw player names
 	MaxNamePos = 0.9 * (KillsXPos - NameXPos);
@@ -215,8 +230,16 @@ simulated final function DrawTeamScores( byte Team, Canvas Canvas, float XOfs )
 		Canvas.SetPos(KillsXPos - 0.5 * KillWidthX, (PlayerBoxSizeY + BoxSpaceY) * i + BoxTextOffsetY);
 		Canvas.DrawText(KFPlayerReplicationInfo(PRIArray[i]).RepKills, true);
 
-		// draw deaths
-		if( Team==0 && PRIArray[i].bOutOfLives )
+		// draw deaths (a specimen player's damage to the survivors)
+		if( Team!=0 )
+		{
+			if( VSPRI(PRIArray[i])!=None )
+			{
+				Canvas.SetPos(HealthXpos - HealthWidthX, (PlayerBoxSizeY + BoxSpaceY) * i + BoxTextOffsetY);
+				Canvas.DrawText(VSPRI(PRIArray[i]).SpecimenDamage, true);
+			}
+		}
+		else if( PRIArray[i].bOutOfLives )
 		{
 			Canvas.DrawColor = HUDClass.default.RedColor;
 			Canvas.SetPos(HealthXpos - HealthWidthX, (PlayerBoxSizeY + BoxSpaceY) * i + BoxTextOffsetY);
@@ -263,6 +286,9 @@ simulated event UpdateScoreBoard(Canvas Canvas)
 
 defaultproperties
 {
-     TeamNames(0)="PLAYERS SCORE:"
-     TeamNames(1)="MONSTERS KILLS:"
+     HealthyString="Healthy"
+     InjuredString="Injured"
+     CriticalString="Critical"
+     HalfString="Half"
+     DamageText="DAMAGE"
 }

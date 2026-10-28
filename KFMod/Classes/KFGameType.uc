@@ -739,10 +739,7 @@ function ScoreKill(Controller Killer, Controller Other)
 		KillScore = 1;
 	else if(Killer.PlayerReplicationInfo !=none)
 	{
-		KillScore = (LastKilledMonsterClass.Default.ScoringValue * 5 + Rand(LastKilledMonsterClass.Default.ScoringValue * 2));
-		KillScore*=Clamp((GameDifficulty-1)/5.f+1,0.5,3);
-		KillScore*=KillCashScale();
-		KillScore = Max(1,int(KillScore));
+		KillScore = KillCash(LastKilledMonsterClass);
 		Killer.PlayerReplicationInfo.Kills++;
 		Killer.PlayerReplicationInfo.Score += KillScore;
 		Killer.PlayerReplicationInfo.Team.Score += KillScore;
@@ -757,6 +754,17 @@ function ScoreKill(Controller Killer, Controller Other)
 }
 
 function SetupWaveBot(Inventory BotsInv);
+
+// The cash a kill of this specimen pays
+function int KillCash( class<Monster> M )
+{
+	local float Cash;
+
+	Cash = (M.Default.ScoringValue * 5 + Rand(M.Default.ScoringValue * 2));
+	Cash*=Clamp((GameDifficulty-1)/5.f+1,0.5,3);
+	Cash*=KillCashScale();
+	return Max(1,int(Cash));
+}
 
 // What a kill's cash is multiplied by just now (Endless: Double Dosh)
 function float KillCashScale()
