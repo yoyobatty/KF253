@@ -224,12 +224,15 @@ exec function UpgradeAll()
 
 exec function Backup()
 {
-    local KFSoldierFriendly Soldier;
-
     if (!areCheatsEnabled()) return;
 
-    Soldier = Spawn(class'KFmod.KFSoldierFriendly');
-    Soldier.PlayerReplicationInfo.Team.TeamIndex = PlayerReplicationInfo.Team.TeamIndex;
+    // (a team bot made as the lobby makes one: the friendly soldier spawned bare had no team or squad, and its
+    // mind tripped over that every moment)
+    if ( KFGameType(Level.Game) == None || !KFGameType(Level.Game).AddBot() )
+    {
+        ClientMessage("No backup could come (bots are off).");
+        return;
+    }
 
     ReportCheat("Backup");
     ClientMessage("Reinforcements are here!");

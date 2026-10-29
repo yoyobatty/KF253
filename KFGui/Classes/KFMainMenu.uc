@@ -81,7 +81,8 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
         b_MultiPlayer.SetFocus(none);
     }*/
 
-    i_BkChar.Image = CharShots[rand(CharShots.Length)];
+    if ( CharShots.Length > 0 )
+        i_BkChar.Image = CharShots[rand(CharShots.Length)];
 }
 
 
@@ -350,7 +351,8 @@ function MainReopened()
 {
     if ( !PlayerOwner().Level.IsPendingConnection() )
     {
-        i_BkChar.Image = CharShots[rand(CharShots.Length)];
+        if ( CharShots.Length > 0 )
+            i_BkChar.Image = CharShots[rand(CharShots.Length)];
         Opened(none);
         Timer();
     }

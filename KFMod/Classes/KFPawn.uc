@@ -1082,8 +1082,11 @@ simulated function HandleNadeThrowAnim()
 simulated function ThrowGrenadeFinished()
 {
  	SecondaryItem = none;
-	KFWeapon(Weapon).ClientGrenadeState = GN_BringUp;
-  	Weapon.BringUp();
+	// (another player's pawn, on this machine, holds no weapon here: the throw's timeout ends it all the same)
+	if( KFWeapon(Weapon) != None )
+		KFWeapon(Weapon).ClientGrenadeState = GN_BringUp;
+	if( Weapon != None )
+  		Weapon.BringUp();
   	bThrowingNade = false;
 }
 

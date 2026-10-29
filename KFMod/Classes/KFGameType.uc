@@ -2362,7 +2362,7 @@ function RestartPlayer( Controller aPlayer )
 		KFHumanPawn(aPlayer.Pawn).CheckCarryWeight();
 
     // Disable pawn collision during trader time
-    if (bTradingDoorsOpen && aPlayer.bIsPlayer)
+    if (bTradingDoorsOpen && aPlayer.bIsPlayer && aPlayer.Pawn != None)
     {
         aPlayer.Pawn.bBlockActors = false;
     }

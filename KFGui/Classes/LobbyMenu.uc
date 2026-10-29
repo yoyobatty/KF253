@@ -26,6 +26,12 @@ var int ActivateTimeoutTime; // When was the lobby timeout turned on?
 var bool bTimeoutTimeLogged;  // Was it already logged once?
 var bool bTimedOut; // Have we timed out out successfully?
 
+// (no tabs and no header here: UT2K4MainPage's own would hook them up and warn)
+function InitComponent(GUIController MyController, GUIComponent MyOwner)
+{
+	Super(UT2K4GUIPage).InitComponent(MyController, MyOwner);
+}
+
 function CheckBotButtonAccess()
 {
 	if(KFGameReplicationInfo(PlayerOwner().GameReplicationInfo) == none)

@@ -291,13 +291,16 @@ function ServerSpawnLight()
 			FlashLight = Spawn(FlashLightClass,Instigator);
 			Flashlight.SetRelativeLocation(vect(-80,0,0));
 			PlaySound(sound'KFWeaponSound.HuntingCrack',SLOT_Misc,100);
-			PlayAnim(ModeSwitchAnim,FireMode[0].FireAnimRate,FireMode[0].TweenTime);
+			// (only the 9mm has a light-switch animation)
+			if( HasAnim(ModeSwitchAnim) )
+				PlayAnim(ModeSwitchAnim,FireMode[0].FireAnimRate,FireMode[0].TweenTime);
 			FlashLight.bHasLight=!FlashLight.bHasLight;
 		}
 		else if( FlashLight != None )
 		{
 			FlashLight.bHasLight=!FlashLight.bHasLight;
-			PlayAnim(ModeSwitchAnim,FireMode[0].FireAnimRate,FireMode[0].TweenTime);
+			if( HasAnim(ModeSwitchAnim) )
+				PlayAnim(ModeSwitchAnim,FireMode[0].FireAnimRate,FireMode[0].TweenTime);
 			PlaySound(sound'KFWeaponSound.HuntingCrack',SLOT_Misc,100);
 		}
 	}

@@ -88,9 +88,11 @@ function SetText(string NewText, optional bool bListItemsOnly)
 function SetSoldierToAdd()
 {
       if(KFGameReplicationInfo(PlayerOwner().GameReplicationInfo) != none)
+      {
        KFPlayerController(PlayerOwner()).ServerSetTempBotName(SoldierNameToAdd);
        Log("adding temp bot name...   :"$SoldierNameToAdd);
        Log("Was the Temp set on the server successfully? "$KFGameReplicationInfo(PlayerOwner().GameReplicationInfo).TempBotName == SoldierNameToAdd);
+      }
 }
 
 defaultproperties

@@ -380,6 +380,13 @@ function SpinDamage(actor Target)
 
 simulated event SetAnimAction(name NewAction)
 {
+	// (a blast's stumble: KFMonster plays it, as the hit reaction from that side; played here as an animation of its
+	// own name it was not found, and he stood a second in his idle pose)
+	if ( IsStaggerAction(NewAction) )
+	{
+		Super.SetAnimAction(NewAction);
+		return;
+	}
 	if (!bWaitForAnim)
 	{
 		AnimAction = NewAction;
@@ -453,6 +460,20 @@ simulated event SetAnimAction(name NewAction)
 		}
 	}
 }
+// His blast stumble is the flinch from that side, not the knock-down his mesh has: nothing lays him out (FlipOver), and
+// an upgraded Deagle staggers on every hit
+simulated function name StaggerAnim( name Action )
+{
+	switch( Action )
+	{
+		case 'BlastStaggerF':	return KFHitFront;
+		case 'BlastStaggerB':	return KFHitBack;
+		case 'BlastStaggerL':	return KFHitLeft;
+		case 'BlastStaggerR':	return KFHitRight;
+	}
+	return '';
+}
+
 simulated function int DoAnimAction( name AnimName )
 {
 	if( AnimName=='PoundAttack1' || AnimName=='PoundAttack2' || AnimName=='FPRageAttack' || AnimName=='ZombieFireGun' )

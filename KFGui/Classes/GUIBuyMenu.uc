@@ -48,7 +48,9 @@ var array < GUIBuyable > AllBuyableItems;
 function InitComponent( GUIController MyController, GUIComponent MyOwner )
 {
 	local int i;
-	Super.InitComponent( MyController, MyOwner );
+	// (UT2K4MainPage's own would hook up a header this page has not)
+	Super(UT2K4GUIPage).InitComponent( MyController, MyOwner );
+	c_Tabs.MyFooter = t_Footer;
 
 	ItemBG.ManageComponent(ItemsBox);
 	InvBG.ManageComponent(InvBox);

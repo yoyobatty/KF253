@@ -1607,7 +1607,8 @@ function rotator AdjustAim(FireProperties FiredAmmunition, vector projStart, int
 //  but none of them should occur in KF. This simplifies matters ;)
 simulated function ShowLoginMenu()
 {
-	if( (Pawn != none && Pawn.Health > 0) || (Pawn.PlayerReplicationInfo != none && Pawn.PlayerReplicationInfo.bReadyToPlay) )
+	// (no pawn yet, as on joining: the lobby)
+	if( Pawn != none && (Pawn.Health > 0 || (Pawn.PlayerReplicationInfo != none && Pawn.PlayerReplicationInfo.bReadyToPlay)) )
 		return;
 	ClientReplaceMenu("KFGUI.LobbyMenu");
 }
