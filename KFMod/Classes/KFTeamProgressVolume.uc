@@ -42,7 +42,9 @@ simulated function PostBeginPlay()
 		PS = PlayerStart(N);
 		if( PS!=None && PS.PhysicsVolume==Self )
 		{
-			PS.bEnabled = False;
+			// (story mode switches on the starts of the volume the team gathers in; the wave game never would)
+			if( KFSPGameType(Level.Game)!=None )
+				PS.bEnabled = False;
 			PSList.Length = i+1;
 			PSList[i] = PS;
 			i++;
