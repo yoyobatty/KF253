@@ -10,6 +10,7 @@ const LIBLIST_CATS=3;
 var string BuyListHeaders[BUYLIST_CATS];
 var float WarpStart, WarpApplied, WarpedFOV;	// the Void Executioner's blink widening the view (StartWarp)
 var() float WarpKick, WarpRise, WarpFall;
+var() vector MaxShakeMove;						// how far a hit's or a blast's shake may move the camera (X forward)
 var float WarpKickNow;							// (this blink's: StartWarp)		// ...how many degrees, how soon, and back over how long
 var string LibraryListHeaders[LIBLIST_CATS];
 
@@ -677,12 +678,32 @@ function ShakeView(vector shRotMag, vector shRotRate, float shRotTime,
 {
 	if (bGodMode)
 		return;
+	if (!bGunShaking)
+		LimitShakeMove(shOffsetMag, shOffsetRate);
 	// (as the engine tests it: a part is replaced only by a bigger shake)
 	if (VSize(shRotMag) > VSize(ShakeRotMax))
 		bGunShakeRot = bGunShaking;
 	if (VSize(shOffsetMag) > VSize(ShakeOffsetMax))
 		bGunShakeOffset = bGunShaking;
 	Super.ShakeView(shRotMag, shRotRate, shRotTime, shOffsetMag, shOffsetRate, shOffsetTime);
+}
+
+// A camera that swings forward and aside at arm's length from a specimen goes past it, and the specimen leaves the view.
+// Each swing is cut down in proportion, so that the shake lasts as long.
+function LimitShakeMove(out vector Mag, out vector Rate)
+{
+	local vector Was;
+
+	Was = Mag;
+	Mag.X = FMin(Mag.X, MaxShakeMove.X);
+	Mag.Y = FClamp(Mag.Y, -MaxShakeMove.Y, MaxShakeMove.Y);
+	Mag.Z = FClamp(Mag.Z, -MaxShakeMove.Z, MaxShakeMove.Z);
+	if (Was.X != 0)
+		Rate.X *= Mag.X / Was.X;
+	if (Was.Y != 0)
+		Rate.Y *= Mag.Y / Was.Y;
+	if (Was.Z != 0)
+		Rate.Z *= Mag.Z / Was.Z;
 }
 
 function WeaponShakeView(vector shRotMag, vector shRotRate, float shRotTime,
@@ -2445,6 +2466,7 @@ defaultproperties
      WarpKick=30.000000
      WarpRise=0.070000
      WarpFall=0.500000
+     MaxShakeMove=(X=5.000000,Y=12.000000,Z=12.000000)
 	bGunShakeEngineTurn=True
 	CashThrowAmount=50
 	UseSendInterval=0.100000

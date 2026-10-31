@@ -27,7 +27,7 @@ function Fill( GUIBuyMenu M, GUIBuyable b )
 
 	Lines.Length = 0;
 	Heading = "";
-	if ( M == None || BuyableWeapon(b) == None || BuyableUpgrade(b) != None || BuyableWeapon(b).bVariant )
+	if ( M == None || BuyableWeapon(b) == None || BuyableUpgrade(b) != None || class'KFTraderUpgrades'.static.IsVariant(class<Weapon>(b.relatedInventory)) )
 		return;
 	W = M.OwnedGun(b);
 	if ( W != None && W.bUpgraded )

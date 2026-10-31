@@ -228,6 +228,11 @@ simulated function Prep(KFFrameTap T, PlayerController P, Canvas C)
 				Want[Want.Length] = SoftLay[i];
 			Soft[i].Revision++;
 		}
+		// (made now, from the last whole frame: a giblet lit from them would have them made as it is drawn, halfway through
+		// the level, from a frame with no actors in it yet, and the blur then showed the world with every specimen gone)
+		C.SetPos(0, 0);
+		C.DrawTile(SoftSeen[2], 1, 1, 0, 0, 1, 1);
+		C.DrawActor(None, false, false);
 	}
 	// (less colour is a veil over all of it)
 	if (VividNow < 100)

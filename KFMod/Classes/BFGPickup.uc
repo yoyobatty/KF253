@@ -8,7 +8,7 @@ defaultproperties
 {
      Weight=13.000000
      cost=5000
-     AmmoCost=450
+     AmmoCost=350
      BuyClipSize=1
      PowerValue=100
      SpeedValue=10
